@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.2.2
+
+### Patch Changes
+
+- c513d19: Fix auth session bugs in VSCode extension
+
 ## 0.2.1
 
 ### Patch Changes
