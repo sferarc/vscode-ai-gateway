@@ -20,7 +20,7 @@ A VS Code extension that provides [Vercel AI Gateway](https://vercel.com/docs/ai
 
 For detailed documentation including authentication options, usage guides, and troubleshooting, visit:
 
-**[https://docs.sferadev.com/docs/packages/vscode-extension-vercel-ai](https://docs.sferadev.com/docs/packages/vscode-extension-vercel-ai)**
+**[https://sferadev.com/docs/packages/vscode-extension-vercel-ai](https://sferadev.com/docs/packages/vscode-extension-vercel-ai)**
 
 ## License
 
