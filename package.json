@@ -1,0 +1,79 @@
+{
+	"name": "vscode-extension-vercel-ai",
+	"private": true,
+	"displayName": "Vercel AI Gateway",
+	"description": "VS Code extension that provides Vercel AI models via the Language Model API",
+	"version": "0.2.0",
+	"publisher": "SferaDev",
+	"license": "MIT",
+	"icon": "images/icon.png",
+	"type": "module",
+	"engines": {
+		"vscode": "^1.104.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"keywords": [
+		"ai",
+		"vercel",
+		"chat",
+		"gpt",
+		"claude",
+		"gemini",
+		"llm",
+		"tools"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/SferaDev/SferaDev",
+		"directory": "apps/vscode-extension"
+	},
+	"homepage": "https://github.com/SferaDev/SferaDev/tree/main/apps/vscode-extension#readme",
+	"bugs": {
+		"url": "https://github.com/SferaDev/SferaDev/issues"
+	},
+	"main": "./out/extension.js",
+	"activationEvents": [
+		"onLanguageModelChatProvider:vercelAiGateway"
+	],
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "vercelAiGateway",
+				"displayName": "Vercel AI Gateway"
+			}
+		],
+		"commands": [
+			{
+				"command": "vercelAiGateway.manage",
+				"title": "Manage Authentication",
+				"category": "Vercel AI Gateway"
+			}
+		]
+	},
+	"scripts": {
+		"build": "NODE_ENV=production bunchee ./src/extension.ts --format cjs --no-external",
+		"dev": "bunchee ./src/extension.ts --format cjs --watch",
+		"compile": "tsc -p ./",
+		"tsc": "tsc --noEmit",
+		"clean": "rm -rf out",
+		"prepackage": "pnpm run build",
+		"package": "vsce package --no-dependencies",
+		"release": "pnpm run package && vsce publish --no-dependencies"
+	},
+	"devDependencies": {
+		"@sferadev/tsconfig": "workspace:*",
+		"@types/json-schema": "catalog:",
+		"@types/node": "catalog:",
+		"@types/vscode": "catalog:",
+		"@vscode/vsce": "catalog:",
+		"bunchee": "catalog:",
+		"typescript": "catalog:"
+	},
+	"dependencies": {
+		"@ai-sdk/gateway": "catalog:",
+		"ai": "catalog:"
+	}
+}
