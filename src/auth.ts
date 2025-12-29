@@ -67,10 +67,22 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		_options?: AuthenticationProviderSessionOptions,
 	): Promise<AuthenticationSession[]> {
 		const sessions = await this.getSessionsData();
-		const { refreshedSessions, needsUpdate } = await this.refreshSessionTokens(sessions);
+		const { refreshedSessions, needsUpdate, changedSessions } =
+			await this.refreshSessionTokens(sessions);
 
 		if (needsUpdate) {
 			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(refreshedSessions));
+
+			// Fire session change event for refreshed tokens
+			if (changedSessions.length > 0) {
+				const changedAuthSessions: AuthenticationSession[] = changedSessions.map((session) => ({
+					id: session.id,
+					accessToken: session.accessToken,
+					account: session.account,
+					scopes: [...session.scopes],
+				}));
+				this._sessionChangeEmitter.fire({ added: [], removed: [], changed: changedAuthSessions });
+			}
 		}
 
 		// Sort sessions so the active session comes first
@@ -88,10 +100,13 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		return this.convertToAuthSessions(sortedSessions);
 	}
 
-	private async refreshSessionTokens(
-		sessions: SessionData[],
-	): Promise<{ refreshedSessions: SessionData[]; needsUpdate: boolean }> {
+	private async refreshSessionTokens(sessions: SessionData[]): Promise<{
+		refreshedSessions: SessionData[];
+		needsUpdate: boolean;
+		changedSessions: SessionData[];
+	}> {
 		const refreshedSessions: SessionData[] = [];
+		const changedSessions: SessionData[] = [];
 		let needsUpdate = false;
 
 		for (const session of sessions) {
@@ -100,6 +115,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 					const refreshedSession = await this.refreshOidcSession(session);
 					if (refreshedSession.accessToken !== session.accessToken) {
 						needsUpdate = true;
+						changedSessions.push(refreshedSession);
 					}
 					refreshedSessions.push(refreshedSession);
 				} catch (error) {
@@ -111,7 +127,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			}
 		}
 
-		return { refreshedSessions, needsUpdate };
+		return { refreshedSessions, needsUpdate, changedSessions };
 	}
 
 	private async refreshOidcSession(session: SessionData): Promise<SessionData> {
@@ -436,14 +452,53 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		}
 
 		const activeSessionId = await this.getActiveSessionId();
+		let activeSession: SessionData | undefined;
+
 		if (activeSessionId) {
-			const activeSession = sessions.find((s) => s.id === activeSessionId);
-			if (activeSession) {
+			activeSession = sessions.find((s) => s.id === activeSessionId);
+		}
+
+		// Fall back to first session if active session not found
+		if (!activeSession) {
+			activeSession = sessions[0];
+		}
+
+		// Refresh OIDC token if needed
+		if (activeSession.method === "oidc" && activeSession.oidcData) {
+			try {
+				const refreshedSession = await this.refreshOidcSession(activeSession);
+				if (refreshedSession.accessToken !== activeSession.accessToken) {
+					// Update the stored session with refreshed token
+					await this.updateStoredSession(refreshedSession);
+				}
+				return refreshedSession;
+			} catch (error) {
+				console.error("Failed to refresh OIDC token in getActiveSession:", error);
+				// Return the original session if refresh fails
 				return activeSession;
 			}
 		}
 
-		return sessions[0];
+		return activeSession;
+	}
+
+	private async updateStoredSession(updatedSession: SessionData): Promise<void> {
+		const sessions = await this.getSessionsData();
+		const index = sessions.findIndex((s) => s.id === updatedSession.id);
+
+		if (index !== -1) {
+			sessions[index] = updatedSession;
+			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
+
+			// Fire session change event to notify VS Code of the token update
+			const authSession: AuthenticationSession = {
+				id: updatedSession.id,
+				accessToken: updatedSession.accessToken,
+				account: updatedSession.account,
+				scopes: [...updatedSession.scopes],
+			};
+			this._sessionChangeEmitter.fire({ added: [], removed: [], changed: [authSession] });
+		}
 	}
 
 	private async getActiveSessionId(): Promise<string | null> {

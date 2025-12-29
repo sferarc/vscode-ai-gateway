@@ -9,7 +9,7 @@ interface VercelTokenResponse {
 }
 
 interface TokenPayload {
-	exp: number;
+	exp?: number;
 }
 
 interface StoredOidcToken {
@@ -110,6 +110,9 @@ function isExpired(expiresAt: number): boolean {
 	return expiresAt < Date.now() + TOKEN_REFRESH_MARGIN;
 }
 
+// Default token expiration: 1 hour from now
+const DEFAULT_TOKEN_EXPIRATION_MS = 60 * 60 * 1000;
+
 function createStoredToken(
 	tokenResponse: VercelTokenResponse,
 	projectId: string,
@@ -118,9 +121,20 @@ function createStoredToken(
 	teamName?: string,
 ): StoredOidcToken {
 	const payload = getTokenPayload(tokenResponse.token);
+
+	// Handle missing or invalid expiration field
+	let expiresAt: number;
+	if (typeof payload.exp === "number" && !Number.isNaN(payload.exp)) {
+		expiresAt = payload.exp * 1000;
+	} else {
+		// Default to 1 hour from now if exp is missing or invalid
+		console.warn("JWT token missing or invalid exp field, using default expiration");
+		expiresAt = Date.now() + DEFAULT_TOKEN_EXPIRATION_MS;
+	}
+
 	return {
 		token: tokenResponse.token,
-		expiresAt: payload.exp * 1000,
+		expiresAt,
 		projectId,
 		projectName,
 		teamId,
@@ -181,18 +195,41 @@ async function selectTeam(authToken: string): Promise<Team | null> {
 
 		const data = (await response.json()) as TeamsResponse;
 
-		const options = data.teams.map((team) => ({
-			label: team.name || team.slug,
-			description: `Team: ${team.slug}`,
-			value: { id: team.id, name: team.name, slug: team.slug },
-		}));
+		// Always include "Personal Account" option at the top
+		const options: Array<{
+			label: string;
+			description: string;
+			value: Team | null;
+		}> = [
+			{
+				label: "Personal Account",
+				description: "Use your personal Vercel account",
+				value: null,
+			},
+		];
+
+		// Add team options
+		for (const team of data.teams) {
+			options.push({
+				label: team.name || team.slug,
+				description: `Team: ${team.slug}`,
+				value: { id: team.id, name: team.name, slug: team.slug },
+			});
+		}
 
 		const selected = await vscode.window.showQuickPick(options, {
 			placeHolder: "Select a team or personal account",
 		});
 
-		return selected?.value || null;
+		if (!selected) {
+			throw new VercelOidcTokenError("Team selection cancelled");
+		}
+
+		return selected.value;
 	} catch (error) {
+		if (error instanceof VercelOidcTokenError) {
+			throw error;
+		}
 		throw new VercelOidcTokenError(
 			`Failed to load teams: ${error instanceof Error ? error.message : "Unknown error"}`,
 		);

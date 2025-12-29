@@ -58,6 +58,8 @@
 		"dev": "bunchee ./src/extension.ts --format cjs --watch",
 		"compile": "tsc -p ./",
 		"tsc": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"clean": "rm -rf out",
 		"prepackage": "pnpm run build",
 		"package": "vsce package --no-dependencies",
@@ -70,7 +72,8 @@
 		"@types/vscode": "1.104.0",
 		"@vscode/vsce": "catalog:",
 		"bunchee": "catalog:",
-		"typescript": "catalog:"
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	},
 	"dependencies": {
 		"@ai-sdk/gateway": "catalog:",
