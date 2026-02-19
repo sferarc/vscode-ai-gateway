@@ -9,7 +9,7 @@
 	"icon": "images/icon.png",
 	"type": "module",
 	"engines": {
-		"vscode": "^1.107.0"
+		"vscode": "^1.108.0"
 	},
 	"categories": [
 		"AI",
@@ -51,7 +51,24 @@
 				"title": "Manage Authentication",
 				"category": "Vercel AI Gateway"
 			}
-		]
+		],
+		"configuration": {
+			"title": "Vercel AI Gateway",
+			"properties": {
+				"vercelAiGateway.endpoint": {
+					"type": "string",
+					"default": "https://ai-gateway.vercel.sh",
+					"description": "AI Gateway endpoint URL. Change for self-hosted or regional deployments."
+				},
+				"vercelAiGateway.timeout": {
+					"type": "number",
+					"default": 30000,
+					"description": "Request timeout in milliseconds.",
+					"minimum": 5000,
+					"maximum": 300000
+				}
+			}
+		}
 	},
 	"scripts": {
 		"build": "NODE_ENV=production bunchee ./src/extension.ts --format cjs --no-external",
