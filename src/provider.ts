@@ -37,8 +37,18 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	private modelsClient = new ModelsClient();
 	private readonly modelInfoChangeEmitter = new vscode.EventEmitter<void>();
 	readonly onDidChangeLanguageModelChatInformation = this.modelInfoChangeEmitter.event;
+	private readonly sessionChangeSubscription: vscode.Disposable;
+
+	constructor() {
+		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
+			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
+			this.modelsClient.invalidateCache();
+			this.modelInfoChangeEmitter.fire();
+		});
+	}
 
 	dispose(): void {
+		this.sessionChangeSubscription.dispose();
 		this.modelInfoChangeEmitter.dispose();
 	}
 

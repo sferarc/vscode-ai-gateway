@@ -53,6 +53,10 @@ export class ModelsClient {
 	private modelsCache?: ModelsCache;
 	private inflightFetch?: Promise<LanguageModelChatInformation[]>;
 
+	invalidateCache(): void {
+		this.modelsCache = undefined;
+	}
+
 	async getModels(apiKey: string): Promise<LanguageModelChatInformation[]> {
 		if (this.isModelsCacheFresh() && this.modelsCache) {
 			return this.modelsCache.models;

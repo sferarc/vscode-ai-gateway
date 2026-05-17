@@ -64,7 +64,7 @@ const hoisted = vi.hoisted(() => {
 
 vi.mock("vscode", () => ({
 	EventEmitter: hoisted.MockEventEmitter,
-	authentication: { getSession: vi.fn() },
+	authentication: { getSession: vi.fn(), onDidChangeSessions: vi.fn(() => ({ dispose: vi.fn() })) },
 	window: {
 		showErrorMessage: vi.fn(),
 		createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
@@ -78,18 +78,53 @@ vi.mock("vscode", () => ({
 	LanguageModelChatToolMode: { Auto: "auto", Required: "required" },
 }));
 
-vi.mock("./auth", () => ({ VERCEL_AI_AUTH_PROVIDER_ID: "vercelAiAuth" }));
+vi.mock("./auth", () => ({ VERCEL_AI_AUTH_PROVIDER_ID: "vercelAiGateway" }));
 vi.mock("@ai-sdk/gateway", () => ({ createGatewayProvider: vi.fn(() => () => ({})) }));
 vi.mock("ai", () => ({ jsonSchema: vi.fn((schema) => schema), streamText: vi.fn() }));
 vi.mock("./models", () => ({
 	ModelsClient: class {
 		getModels = vi.fn();
+		invalidateCache = vi.fn();
 	},
 }));
 
 function createProvider() {
 	return new VercelAIChatModelProvider();
 }
+
+describe("session change refresh", () => {
+	it("invalidates cache and fires model info change when our auth provider's sessions change", async () => {
+		const vscode = await import("vscode");
+		const onDidChangeSessions = vscode.authentication.onDidChangeSessions as unknown as ReturnType<
+			typeof vi.fn
+		>;
+		onDidChangeSessions.mockClear();
+
+		const provider = createProvider();
+		const fireSpy = vi.spyOn(
+			(provider as unknown as { modelInfoChangeEmitter: { fire: () => void } })
+				.modelInfoChangeEmitter,
+			"fire",
+		);
+		const invalidateSpy = vi.spyOn(
+			(provider as unknown as { modelsClient: { invalidateCache: () => void } }).modelsClient,
+			"invalidateCache",
+		);
+
+		const handler = onDidChangeSessions.mock.calls.at(-1)?.[0] as (event: {
+			provider: { id: string };
+		}) => void;
+		expect(handler).toBeTypeOf("function");
+
+		handler({ provider: { id: "vercelAiGateway" } });
+		expect(invalidateSpy).toHaveBeenCalledTimes(1);
+		expect(fireSpy).toHaveBeenCalledTimes(1);
+
+		handler({ provider: { id: "github" } });
+		expect(invalidateSpy).toHaveBeenCalledTimes(1);
+		expect(fireSpy).toHaveBeenCalledTimes(1);
+	});
+});
 
 describe("isValidMimeType", () => {
 	it("accepts valid MIME types", () => {
