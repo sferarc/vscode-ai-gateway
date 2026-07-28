@@ -31,7 +31,10 @@ vi.mock("./vercel-auth", () => ({
 
 import type { ExtensionContext } from "vscode";
 import { VercelAIAuthenticationProvider } from "./auth";
-import { refreshOidcToken } from "./vercel-auth";
+import { checkVercelCliAvailable, refreshOidcToken } from "./vercel-auth";
+
+const SESSIONS_KEY = "vercelAiGateway.sessions";
+const ACTIVE_KEY = "vercelAiGateway.activeSession";
 
 function createMockContext(): ExtensionContext {
 	const secrets = new Map<string, string>();
@@ -162,5 +165,185 @@ describe("VercelAIAuthenticationProvider", () => {
 		await ctx.secrets.store("vercelAiGateway.sessions", "invalid{");
 		const sessions = await provider.getSessions();
 		expect(sessions).toEqual([]);
+	});
+
+	describe("active session tracking", () => {
+		it("promotes another session when the active one is removed", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1"), createSession("s2")]),
+			);
+			await ctx.globalState.update(ACTIVE_KEY, "s1");
+
+			await provider.removeSession("s1");
+
+			expect(ctx.globalState.get(ACTIVE_KEY)).toBe("s2");
+		});
+
+		it("clears the active session when the last one is removed", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			await ctx.globalState.update(ACTIVE_KEY, "s1");
+
+			await provider.removeSession("s1");
+
+			expect(ctx.globalState.get(ACTIVE_KEY) ?? null).toBeNull();
+		});
+
+		it("ignores removal of an unknown session id", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			hoisted.mockEventEmitterFire.mockClear();
+
+			await provider.removeSession("does-not-exist");
+
+			expect(hoisted.mockEventEmitterFire).not.toHaveBeenCalled();
+			expect(JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]")).toHaveLength(1);
+		});
+
+		it("returns the active session first", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1"), createSession("s2"), createSession("s3")]),
+			);
+			await ctx.globalState.update(ACTIVE_KEY, "s3");
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions[0].id).toBe("s3");
+		});
+
+		it("persists a refreshed OIDC token so later reads see it", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1", "oidc", Date.now() + 60 * 1000)]),
+			);
+			vi.mocked(refreshOidcToken).mockResolvedValueOnce({
+				token: "fresh",
+				expiresAt: Date.now() + 3600000,
+				projectId: "p1",
+				projectName: "P",
+				teamId: "t1",
+				teamName: "T",
+			});
+
+			await provider.getSessions();
+
+			const stored = JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]");
+			expect(stored[0].accessToken).toBe("fresh");
+		});
+
+		it("keeps other sessions when one OIDC refresh fails", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1", "oidc", Date.now() + 60 * 1000), createSession("s2")]),
+			);
+			vi.mocked(refreshOidcToken).mockRejectedValueOnce(new Error("boom"));
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions.map((s) => s.id).sort()).toEqual(["s1", "s2"]);
+		});
+	});
+
+	describe("manageAuthentication", () => {
+		it("creates a session directly when none exist", async () => {
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "API Key",
+				value: "api-key",
+			} as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("First").mockResolvedValueOnce("vck_first");
+
+			await provider.manageAuthentication();
+
+			expect(JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]")).toHaveLength(1);
+		});
+
+		it("switches the active session", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1"), createSession("s2")]),
+			);
+			await ctx.globalState.update(ACTIVE_KEY, "s1");
+
+			hoisted.mockShowQuickPick
+				.mockResolvedValueOnce({ label: "Switch active session", value: "switch" } as never)
+				.mockResolvedValueOnce({ label: "s2", value: "s2" } as never);
+
+			await provider.manageAuthentication();
+
+			expect(ctx.globalState.get(ACTIVE_KEY)).toBe("s2");
+		});
+
+		it("removes the chosen session", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1"), createSession("s2")]),
+			);
+
+			hoisted.mockShowQuickPick
+				.mockResolvedValueOnce({ label: "Remove session", value: "remove" } as never)
+				.mockResolvedValueOnce({ label: "s1", value: "s1" } as never);
+
+			await provider.manageAuthentication();
+
+			const stored = JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]");
+			expect(stored.map((s: { id: string }) => s.id)).toEqual(["s2"]);
+		});
+
+		it("changes nothing when the action menu is cancelled", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(undefined as never);
+
+			await provider.manageAuthentication();
+
+			expect(JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]")).toHaveLength(1);
+		});
+
+		it("does not offer switching with a single session", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(undefined as never);
+
+			await provider.manageAuthentication();
+
+			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
+			expect(options.map((o) => o.value)).not.toContain("switch");
+		});
+	});
+
+	describe("authentication method options", () => {
+		it("offers only API key when the Vercel CLI is not logged in", async () => {
+			vi.mocked(checkVercelCliAvailable).mockReturnValue(false);
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(undefined as never);
+
+			await provider.createSession([]).catch(() => undefined);
+
+			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
+			expect(options.map((o) => o.value)).toEqual(["api-key"]);
+		});
+
+		it("also offers OIDC when the Vercel CLI is logged in", async () => {
+			vi.mocked(checkVercelCliAvailable).mockReturnValue(true);
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(undefined as never);
+
+			await provider.createSession([]).catch(() => undefined);
+
+			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
+			expect(options.map((o) => o.value)).toEqual(["api-key", "oidc"]);
+		});
+
+		it("rejects an API key that is not a vck_ key", async () => {
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "API Key",
+				value: "api-key",
+			} as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("Name").mockResolvedValueOnce("vck_ok");
+
+			await provider.createSession([]);
+
+			const apiKeyPrompt = hoisted.mockShowInputBox.mock.calls[1][0] as {
+				validateInput: (value: string) => string | null;
+			};
+			expect(apiKeyPrompt.validateInput("wrong")).toMatch(/vck_/);
+			expect(apiKeyPrompt.validateInput("vck_good")).toBeNull();
+		});
 	});
 });

@@ -105,5 +105,79 @@ describe("vercel-auth", () => {
 				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
 			).rejects.toThrow("Failed to refresh OIDC token");
 		});
+
+		it("preserves the team across a refresh", async () => {
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: () =>
+					Promise.resolve({ token: createJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }) }),
+			});
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			const result = await refreshOidcToken({
+				...storedToken,
+				expiresAt: Date.now() - 1000,
+				teamId: "t1",
+				teamName: "Team One",
+			});
+
+			expect(result).toMatchObject({ teamId: "t1", teamName: "Team One" });
+		});
+
+		it("scopes the refresh request to the team when one is set", async () => {
+			const fetchMock = vi.fn().mockResolvedValue({
+				ok: true,
+				json: () =>
+					Promise.resolve({ token: createJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }) }),
+			});
+			global.fetch = fetchMock;
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000, teamId: "team_abc" });
+
+			expect(String(fetchMock.mock.calls[0][0])).toContain("teamId=team_abc");
+		});
+
+		it("rejects a response whose token is not a JWT", async () => {
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: () => Promise.resolve({ token: "not-a-jwt" }),
+			});
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			await expect(
+				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
+			).rejects.toThrow("Invalid JWT token");
+		});
+
+		it("rejects a response with no token field", async () => {
+			global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			await expect(
+				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
+			).rejects.toThrow("Invalid token response");
+		});
+
+		it("falls back to a one-hour expiry when exp is not a number", async () => {
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: () => Promise.resolve({ token: createJwt({ exp: "not-a-number" }) }),
+			});
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			const before = Date.now();
+			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 });
+
+			expect(result.expiresAt).toBeGreaterThan(before);
+			expect(result.expiresAt).toBeLessThanOrEqual(before + 60 * 60 * 1000 + 1000);
+		});
+
+		it("reports the CLI as unavailable when auth.json has no token", async () => {
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ notToken: "x" }));
+			const { checkVercelCliAvailable } = await import("./vercel-auth");
+
+			expect(checkVercelCliAvailable()).toBe(false);
+		});
 	});
 });
