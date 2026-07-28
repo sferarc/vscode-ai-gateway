@@ -39,6 +39,12 @@
 		"onLanguageModelChatProvider:vercelAiGateway"
 	],
 	"contributes": {
+		"authentication": [
+			{
+				"id": "vercelAiGateway",
+				"label": "Vercel AI Gateway"
+			}
+		],
 		"languageModelChatProviders": [
 			{
 				"vendor": "vercelAiGateway",
