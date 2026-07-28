@@ -2,6 +2,7 @@ import { createGatewayProvider } from "@ai-sdk/gateway";
 import { jsonSchema, type ModelMessage, streamText, type TextStreamPart, type ToolSet } from "ai";
 import * as vscode from "vscode";
 import {
+	type AuthenticationSessionAccountInformation,
 	authentication,
 	type CancellationToken,
 	type LanguageModelChatInformation,
@@ -39,7 +40,15 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	readonly onDidChangeLanguageModelChatInformation = this.modelInfoChangeEmitter.event;
 	private readonly sessionChangeSubscription: vscode.Disposable;
 
-	constructor() {
+	/**
+	 * @param getActiveAccount Resolves the account the user has made active, so requests use that
+	 * account rather than whichever session VS Code happens to prefer.
+	 */
+	constructor(
+		private readonly getActiveAccount?: () => Promise<
+			AuthenticationSessionAccountInformation | undefined
+		>,
+	) {
 		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
 			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
 			this.modelsClient.invalidateCache();
@@ -189,9 +198,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 	private async getApiKey(silent: boolean): Promise<string | undefined> {
 		try {
+			const account = await this.getActiveAccount?.();
 			const session = await authentication.getSession(VERCEL_AI_AUTH_PROVIDER_ID, [], {
 				createIfNone: !silent,
 				silent,
+				...(account ? { account } : {}),
 			});
 			return session?.accessToken;
 		} catch (error) {

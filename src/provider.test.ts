@@ -126,6 +126,39 @@ describe("session change refresh", () => {
 	});
 });
 
+describe("active account", () => {
+	it("asks VS Code for the account the user made active", async () => {
+		const vscode = await import("vscode");
+		const getSession = vi.mocked(vscode.authentication.getSession);
+		getSession.mockClear();
+		getSession.mockResolvedValue({ accessToken: "key" } as never);
+
+		const account = { id: "s2", label: "Personal" };
+		const provider = new VercelAIChatModelProvider(async () => account);
+
+		await provider.provideLanguageModelChatInformation({ silent: true }, {} as never);
+
+		expect(getSession).toHaveBeenCalledWith(
+			"vercelAiGateway",
+			[],
+			expect.objectContaining({ account }),
+		);
+	});
+
+	it("omits the account when none is active", async () => {
+		const vscode = await import("vscode");
+		const getSession = vi.mocked(vscode.authentication.getSession);
+		getSession.mockClear();
+		getSession.mockResolvedValue({ accessToken: "key" } as never);
+
+		const provider = new VercelAIChatModelProvider(async () => undefined);
+
+		await provider.provideLanguageModelChatInformation({ silent: true }, {} as never);
+
+		expect(getSession.mock.calls[0][2]).not.toHaveProperty("account");
+	});
+});
+
 describe("isValidMimeType", () => {
 	it("accepts valid MIME types", () => {
 		const valid = ["text/plain", "image/png", "application/json", "audio/mpeg", "model/gltf+json"];

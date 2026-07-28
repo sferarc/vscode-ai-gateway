@@ -346,4 +346,99 @@ describe("VercelAIAuthenticationProvider", () => {
 			expect(apiKeyPrompt.validateInput("vck_good")).toBeNull();
 		});
 	});
+
+	describe("accounts", () => {
+		async function createApiKeySession(name: string, key: string) {
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "API Key",
+				value: "api-key",
+			} as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce(name).mockResolvedValueOnce(key);
+			return provider.createSession([]);
+		}
+
+		it("declares support for multiple accounts", async () => {
+			const { authentication } = await import("vscode");
+			const options = vi
+				.mocked(authentication.registerAuthenticationProvider)
+				.mock.calls.at(-1)?.[3];
+
+			expect(options).toMatchObject({ supportsMultipleAccounts: true });
+		});
+
+		it("gives every session its own account id", async () => {
+			const first = await createApiKeySession("Work", "vck_work");
+			const second = await createApiKeySession("Personal", "vck_personal");
+
+			expect(first.account.id).not.toBe(second.account.id);
+			expect(first.account.id).toBe(first.id);
+			expect(second.account.label).toBe("Personal");
+		});
+
+		it("migrates sessions that shared a legacy account id", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([
+					{ ...createSession("s1"), account: { id: "vercel-ai-user", label: "Work" } },
+					{ ...createSession("s2"), account: { id: "vercel-ai-user", label: "Personal" } },
+				]),
+			);
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions.map((s) => s.account.id).sort()).toEqual(["s1", "s2"]);
+			expect(sessions.map((s) => s.account.label).sort()).toEqual(["Personal", "Work"]);
+		});
+
+		it("returns only the requested account's sessions", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([
+					{ ...createSession("s1"), account: { id: "s1", label: "Work" } },
+					{ ...createSession("s2"), account: { id: "s2", label: "Personal" } },
+				]),
+			);
+
+			const sessions = await provider.getSessions(undefined, {
+				account: { id: "s2", label: "Personal" },
+			});
+
+			expect(sessions.map((s) => s.id)).toEqual(["s2"]);
+		});
+
+		it("exposes the active session's account", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([
+					{ ...createSession("s1"), account: { id: "s1", label: "Work" } },
+					{ ...createSession("s2"), account: { id: "s2", label: "Personal" } },
+				]),
+			);
+			await ctx.globalState.update(ACTIVE_KEY, "s2");
+
+			expect(await provider.getActiveAccount()).toMatchObject({ id: "s2", label: "Personal" });
+		});
+
+		it("has no active account when there are no sessions", async () => {
+			expect(await provider.getActiveAccount()).toBeUndefined();
+		});
+
+		it("follows the active session after a switch", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([
+					{ ...createSession("s1"), account: { id: "s1", label: "Work" } },
+					{ ...createSession("s2"), account: { id: "s2", label: "Personal" } },
+				]),
+			);
+			await ctx.globalState.update(ACTIVE_KEY, "s1");
+
+			hoisted.mockShowQuickPick
+				.mockResolvedValueOnce({ label: "Switch active session", value: "switch" } as never)
+				.mockResolvedValueOnce({ label: "Personal", value: "s2" } as never);
+			await provider.manageAuthentication();
+
+			expect(await provider.getActiveAccount()).toMatchObject({ id: "s2" });
+		});
+	});
 });

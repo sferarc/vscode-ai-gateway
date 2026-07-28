@@ -3,6 +3,7 @@ import {
 	type AuthenticationProviderAuthenticationSessionsChangeEvent,
 	type AuthenticationProviderSessionOptions,
 	type AuthenticationSession,
+	type AuthenticationSessionAccountInformation,
 	authentication,
 	type Disposable,
 	type Event,
@@ -22,6 +23,12 @@ export const VERCEL_AI_AUTH_PROVIDER_ID = EXTENSION_ID;
 
 const SESSIONS_SECRET_KEY = `${VERCEL_AI_AUTH_PROVIDER_ID}.sessions`;
 const ACTIVE_SESSION_KEY = `${VERCEL_AI_AUTH_PROVIDER_ID}.activeSession`;
+
+/**
+ * Sessions used to share one of these ids across every account, which made accounts
+ * indistinguishable to VS Code. They are rewritten to the session id on read.
+ */
+const LEGACY_ACCOUNT_IDS = new Set(["vercel-ai-user", "vercel-oidc-user"]);
 
 export type AuthenticationMethod = "api-key" | "oidc";
 
@@ -50,7 +57,9 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			EXTENSION_ID,
 			"Vercel AI Gateway",
 			this,
-			{ supportsMultipleAccounts: false },
+			// Several sessions can be stored at once, each its own account, so VS Code has to
+			// be told that multiple accounts are possible for it to keep them apart.
+			{ supportsMultipleAccounts: true },
 		);
 	}
 
@@ -65,7 +74,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 	async getSessions(
 		_scopes?: readonly string[],
-		_options?: AuthenticationProviderSessionOptions,
+		options?: AuthenticationProviderSessionOptions,
 	): Promise<AuthenticationSession[]> {
 		const sessions = await this.getSessionsData();
 		const { refreshedSessions, needsUpdate, changedSessions } =
@@ -90,9 +99,15 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			}
 		}
 
+		// VS Code passes the account when it wants the sessions for one specific account.
+		const requestedAccountId = options?.account?.id;
+		const matchingSessions = requestedAccountId
+			? refreshedSessions.filter((session) => session.account.id === requestedAccountId)
+			: refreshedSessions;
+
 		// Sort sessions so the active session comes first
 		const activeSessionId = await this.getActiveSessionId();
-		const sortedSessions = [...refreshedSessions].sort((a, b) => {
+		const sortedSessions = [...matchingSessions].sort((a, b) => {
 			if (a.id === activeSessionId) {
 				return -1;
 			}
@@ -183,6 +198,10 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			return sessions.map((session) => ({
 				...session,
 				method: session.method || "api-key",
+				// Migrate sessions stored before account ids were unique per session.
+				account: LEGACY_ACCOUNT_IDS.has(session.account.id)
+					? { ...session.account, id: session.id }
+					: session.account,
 			}));
 		} catch {
 			await this.context.secrets.delete(SESSIONS_SECRET_KEY);
@@ -210,10 +229,13 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			throw new Error("API key required");
 		}
 
+		// The account id must be unique per session, otherwise VS Code treats every session as
+		// the same account and cannot switch between them.
+		const sessionId = this.generateSessionId();
 		const session: SessionData = {
-			id: this.generateSessionId(),
+			id: sessionId,
 			accessToken: apiKey,
-			account: { id: "vercel-ai-user", label: sessionName },
+			account: { id: sessionId, label: sessionName },
 			scopes: [],
 			method: "api-key",
 		};
@@ -231,11 +253,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		const storedToken = await createInteractiveOidcSession();
 
 		const teamLabel = storedToken.teamName ? ` (${storedToken.teamName})` : "";
+		const sessionId = this.generateSessionId();
 		const session: SessionData = {
-			id: this.generateSessionId(),
+			id: sessionId,
 			accessToken: storedToken.token,
 			account: {
-				id: "vercel-oidc-user",
+				id: sessionId,
 				label: `${storedToken.projectName}${teamLabel}`,
 			},
 			scopes: [],
@@ -459,6 +482,22 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		if (selected) {
 			await this.removeSession(selected.value);
 		}
+	}
+
+	/**
+	 * The account backing the currently active session, so callers can ask VS Code for that exact
+	 * account instead of relying on it to pick one for them. Deliberately does not refresh tokens:
+	 * it is called on every request, and `getSessions` already handles refreshing.
+	 */
+	async getActiveAccount(): Promise<AuthenticationSessionAccountInformation | undefined> {
+		const sessions = await this.getSessionsData();
+		if (sessions.length === 0) {
+			return undefined;
+		}
+
+		const activeSessionId = await this.getActiveSessionId();
+		const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
+		return activeSession.account;
 	}
 
 	async getActiveSession(): Promise<SessionData | null> {
