@@ -123,4 +123,95 @@ describe("ModelsClient", () => {
 
 		expect(result.map((m) => m.id)).toEqual(["a:chat", "c:undef"]);
 	});
+
+	describe("capability detection", () => {
+		const baseModel: Model = {
+			id: "vendor:model",
+			object: "model",
+			created: 0,
+			owned_by: "vendor",
+			name: "Model",
+			description: "",
+			context_window: 1000,
+			max_tokens: 100,
+			type: "language",
+			pricing: { input: "0", output: "0" },
+		};
+
+		async function capabilitiesOf(model: Model) {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({ data: [model] }),
+			}) as unknown as typeof fetch;
+
+			const result = await new ModelsClient().getModels("test-key");
+			return result[0].capabilities;
+		}
+
+		it("prefers structured fields over tags", async () => {
+			const capabilities = await capabilitiesOf({
+				...baseModel,
+				tags: [],
+				modalities: { input: ["text", "image"], output: ["text"] },
+				supported_parameters: ["tools", "tool_choice", "reasoning"],
+			});
+
+			expect(capabilities).toMatchObject({
+				imageInput: true,
+				toolCalling: true,
+				reasoning: true,
+			});
+		});
+
+		it("treats a present structured field as authoritative over contradicting tags", async () => {
+			const capabilities = await capabilitiesOf({
+				...baseModel,
+				tags: ["vision", "tool-use", "reasoning"],
+				modalities: { input: ["text"], output: ["text"] },
+				supported_parameters: ["max_tokens", "temperature"],
+			});
+
+			expect(capabilities).toMatchObject({
+				imageInput: false,
+				toolCalling: false,
+				reasoning: false,
+			});
+		});
+
+		it("falls back to tags when structured fields are absent", async () => {
+			const capabilities = await capabilitiesOf({
+				...baseModel,
+				tags: ["vision", "function_calling", "o3", "web-search"],
+			});
+
+			expect(capabilities).toMatchObject({
+				imageInput: true,
+				toolCalling: true,
+				reasoning: true,
+				webSearch: true,
+			});
+		});
+
+		it("detects reasoning from reasoning_options alone", async () => {
+			const capabilities = await capabilitiesOf({
+				...baseModel,
+				tags: [],
+				supported_parameters: ["max_tokens"],
+				reasoning_options: [{ type: "toggle" }],
+			});
+
+			expect(capabilities.reasoning).toBe(true);
+		});
+
+		it("keeps using tags for web search, which has no structured field", async () => {
+			const capabilities = await capabilitiesOf({
+				...baseModel,
+				tags: ["web-search"],
+				modalities: { input: ["text"], output: ["text"] },
+				supported_parameters: ["max_tokens"],
+			});
+
+			expect(capabilities.webSearch).toBe(true);
+		});
+	});
 });

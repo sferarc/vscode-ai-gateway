@@ -30,6 +30,15 @@ export interface Model {
 	max_tokens: number;
 	type?: string;
 	tags?: string[];
+	/** Input/output modalities, e.g. `{ input: ["text", "image"] }`. */
+	modalities?: {
+		input?: string[];
+		output?: string[];
+	};
+	/** Request parameters the model accepts, e.g. `["tools", "reasoning"]`. */
+	supported_parameters?: string[];
+	/** Present when the model exposes configurable reasoning. */
+	reasoning_options?: { type: string }[];
 	pricing: {
 		input: string;
 		output: string;
@@ -47,6 +56,40 @@ interface ModelsCache {
 
 function hasTag(tags: string[], tagSet: Set<string>): boolean {
 	return tags.some((tag) => tagSet.has(tag));
+}
+
+/**
+ * Capability detection prefers the structured metadata the API returns and only falls back to
+ * the tag heuristics when a field is absent, since keyword matching on tags is fragile.
+ * A field that is present is authoritative, including when it says the capability is missing.
+ */
+function detectImageInput(model: Model, tags: string[]): boolean {
+	const inputModalities = model.modalities?.input;
+	if (inputModalities) {
+		return inputModalities.includes("image");
+	}
+	return hasTag(tags, IMAGE_INPUT_TAGS);
+}
+
+function detectToolCalling(model: Model, tags: string[]): boolean {
+	const supportedParameters = model.supported_parameters;
+	if (supportedParameters) {
+		return supportedParameters.includes("tools") || supportedParameters.includes("tool_choice");
+	}
+	return hasTag(tags, TOOL_CALLING_TAGS);
+}
+
+function detectReasoning(model: Model, tags: string[]): boolean {
+	if (model.reasoning_options?.length) {
+		return true;
+	}
+	const supportedParameters = model.supported_parameters;
+	if (supportedParameters) {
+		return (
+			supportedParameters.includes("reasoning") || supportedParameters.includes("include_reasoning")
+		);
+	}
+	return hasTag(tags, REASONING_TAGS);
 }
 
 export class ModelsClient {
@@ -126,9 +169,10 @@ export class ModelsClient {
 					maxOutputTokens: model.max_tokens,
 					tooltip: model.description || "No description available.",
 					capabilities: {
-						imageInput: hasTag(tags, IMAGE_INPUT_TAGS),
-						toolCalling: hasTag(tags, TOOL_CALLING_TAGS),
-						reasoning: hasTag(tags, REASONING_TAGS),
+						imageInput: detectImageInput(model, tags),
+						toolCalling: detectToolCalling(model, tags),
+						reasoning: detectReasoning(model, tags),
+						// No dedicated metadata field exists yet, so tags remain the only signal.
 						webSearch: hasTag(tags, WEB_SEARCH_TAGS),
 					},
 				};
