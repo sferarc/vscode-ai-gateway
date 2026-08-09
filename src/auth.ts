@@ -3,7 +3,6 @@ import {
 	type AuthenticationProviderAuthenticationSessionsChangeEvent,
 	type AuthenticationProviderSessionOptions,
 	type AuthenticationSession,
-	type AuthenticationSessionAccountInformation,
 	authentication,
 	type Disposable,
 	type Event,
@@ -485,21 +484,10 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	/**
-	 * The account backing the currently active session, so callers can ask VS Code for that exact
-	 * account instead of relying on it to pick one for them. Deliberately does not refresh tokens:
-	 * it is called on every request, and `getSessions` already handles refreshing.
+	 * The session the user made active, for callers that own this provider. They read it directly
+	 * rather than through `authentication.getSession`, which refuses to hand back sessions created
+	 * via the provider interface because no consumer-side access grant was ever recorded for them.
 	 */
-	async getActiveAccount(): Promise<AuthenticationSessionAccountInformation | undefined> {
-		const sessions = await this.getSessionsData();
-		if (sessions.length === 0) {
-			return undefined;
-		}
-
-		const activeSessionId = await this.getActiveSessionId();
-		const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
-		return activeSession.account;
-	}
-
 	async getActiveSession(): Promise<SessionData | null> {
 		const sessions = await this.getSessionsData();
 		if (sessions.length === 0) {

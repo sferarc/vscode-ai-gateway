@@ -406,7 +406,7 @@ describe("VercelAIAuthenticationProvider", () => {
 			expect(sessions.map((s) => s.id)).toEqual(["s2"]);
 		});
 
-		it("exposes the active session's account", async () => {
+		it("exposes the active session with its token", async () => {
 			await ctx.secrets.store(
 				SESSIONS_KEY,
 				JSON.stringify([
@@ -416,11 +416,15 @@ describe("VercelAIAuthenticationProvider", () => {
 			);
 			await ctx.globalState.update(ACTIVE_KEY, "s2");
 
-			expect(await provider.getActiveAccount()).toMatchObject({ id: "s2", label: "Personal" });
+			expect(await provider.getActiveSession()).toMatchObject({
+				id: "s2",
+				accessToken: "token",
+				account: { id: "s2", label: "Personal" },
+			});
 		});
 
-		it("has no active account when there are no sessions", async () => {
-			expect(await provider.getActiveAccount()).toBeUndefined();
+		it("has no active session when there are no sessions", async () => {
+			expect(await provider.getActiveSession()).toBeNull();
 		});
 
 		it("follows the active session after a switch", async () => {
@@ -438,7 +442,7 @@ describe("VercelAIAuthenticationProvider", () => {
 				.mockResolvedValueOnce({ label: "Personal", value: "s2" } as never);
 			await provider.manageAuthentication();
 
-			expect(await provider.getActiveAccount()).toMatchObject({ id: "s2" });
+			expect(await provider.getActiveSession()).toMatchObject({ id: "s2" });
 		});
 	});
 });

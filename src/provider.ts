@@ -2,7 +2,6 @@ import { createGatewayProvider } from "@ai-sdk/gateway";
 import { jsonSchema, type ModelMessage, streamText, type TextStreamPart, type ToolSet } from "ai";
 import * as vscode from "vscode";
 import {
-	type AuthenticationSessionAccountInformation,
 	authentication,
 	type CancellationToken,
 	type LanguageModelChatInformation,
@@ -30,6 +29,11 @@ type StreamChunk = TextStreamPart<ToolSet>;
 
 const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
+/** The part of an authentication session the chat provider needs to talk to the gateway. */
+interface ActiveSession {
+	accessToken: string;
+}
+
 export function isValidMimeType(mimeType: string): boolean {
 	return MIME_TYPE_PATTERN.test(mimeType);
 }
@@ -41,14 +45,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	private readonly sessionChangeSubscription: vscode.Disposable;
 
 	/**
-	 * @param getActiveAccount Resolves the account the user has made active, so requests use that
-	 * account rather than whichever session VS Code happens to prefer.
+	 * @param getActiveSession Resolves the session the user has made active, read straight from the
+	 * authentication provider this extension registers, so requests use that session rather than
+	 * whichever one VS Code happens to prefer.
 	 */
-	constructor(
-		private readonly getActiveAccount?: () => Promise<
-			AuthenticationSessionAccountInformation | undefined
-		>,
-	) {
+	constructor(private readonly getActiveSession?: () => Promise<ActiveSession | null>) {
 		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
 			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
 			this.modelsClient.invalidateCache();
@@ -196,15 +197,28 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		);
 	}
 
+	/**
+	 * Reads the token from our own authentication provider instead of `authentication.getSession`.
+	 * Sessions created through the provider interface never go through the consumer code path that
+	 * records an access grant, so VS Code answers `undefined` for them when asked silently, even
+	 * though this extension owns them. `authentication.getSession` is only used as a fallback to
+	 * start the sign-in flow when there is no session at all.
+	 */
 	private async getApiKey(silent: boolean): Promise<string | undefined> {
 		try {
-			const account = await this.getActiveAccount?.();
-			const session = await authentication.getSession(VERCEL_AI_AUTH_PROVIDER_ID, [], {
-				createIfNone: !silent,
-				silent,
-				...(account ? { account } : {}),
+			const session = await this.getActiveSession?.();
+			if (session) {
+				return session.accessToken;
+			}
+
+			if (silent) {
+				return undefined;
+			}
+
+			const created = await authentication.getSession(VERCEL_AI_AUTH_PROVIDER_ID, [], {
+				createIfNone: true,
 			});
-			return session?.accessToken;
+			return created?.accessToken;
 		} catch (error) {
 			if (!silent) {
 				logger.error("Failed to get authentication session:", error);

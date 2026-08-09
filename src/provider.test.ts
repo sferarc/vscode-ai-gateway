@@ -126,36 +126,56 @@ describe("session change refresh", () => {
 	});
 });
 
-describe("active account", () => {
-	it("asks VS Code for the account the user made active", async () => {
+describe("active session", () => {
+	async function mockedGetSession() {
 		const vscode = await import("vscode");
 		const getSession = vi.mocked(vscode.authentication.getSession);
 		getSession.mockClear();
-		getSession.mockResolvedValue({ accessToken: "key" } as never);
+		getSession.mockResolvedValue({ accessToken: "created" } as never);
+		return getSession;
+	}
 
-		const account = { id: "s2", label: "Personal" };
-		const provider = new VercelAIChatModelProvider(async () => account);
+	it("reads the token from our own auth provider instead of authentication.getSession", async () => {
+		const getSession = await mockedGetSession();
+		const provider = new VercelAIChatModelProvider(async () => ({ accessToken: "active" }));
+		const getModels = vi.spyOn(
+			(provider as unknown as { modelsClient: { getModels: (key: string) => unknown } })
+				.modelsClient,
+			"getModels",
+		);
 
 		await provider.provideLanguageModelChatInformation({ silent: true }, {} as never);
 
-		expect(getSession).toHaveBeenCalledWith(
-			"vercelAiGateway",
-			[],
-			expect.objectContaining({ account }),
-		);
+		expect(getModels).toHaveBeenCalledWith("active");
+		expect(getSession).not.toHaveBeenCalled();
 	});
 
-	it("omits the account when none is active", async () => {
-		const vscode = await import("vscode");
-		const getSession = vi.mocked(vscode.authentication.getSession);
-		getSession.mockClear();
-		getSession.mockResolvedValue({ accessToken: "key" } as never);
+	it("stays silent when there is no session and silent mode is requested", async () => {
+		const getSession = await mockedGetSession();
+		const provider = new VercelAIChatModelProvider(async () => null);
 
-		const provider = new VercelAIChatModelProvider(async () => undefined);
+		const models = await provider.provideLanguageModelChatInformation(
+			{ silent: true },
+			{} as never,
+		);
 
-		await provider.provideLanguageModelChatInformation({ silent: true }, {} as never);
+		expect(models).toEqual([]);
+		expect(getSession).not.toHaveBeenCalled();
+	});
 
-		expect(getSession.mock.calls[0][2]).not.toHaveProperty("account");
+	it("asks VS Code to start sign-in when there is no session and prompting is allowed", async () => {
+		const getSession = await mockedGetSession();
+		const provider = new VercelAIChatModelProvider(async () => null);
+		const getModels = vi.spyOn(
+			(provider as unknown as { modelsClient: { getModels: (key: string) => unknown } })
+				.modelsClient,
+			"getModels",
+		);
+
+		await provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+
+		expect(getSession).toHaveBeenCalledWith("vercelAiGateway", [], { createIfNone: true });
+		expect(getModels).toHaveBeenCalledWith("created");
 	});
 });
 
