@@ -1,5 +1,26 @@
 # vscode-extension-vercel-ai
 
+## 0.4.1
+
+### Patch Changes
+
+- f4792d4: Send the VS Code system prompt as instructions instead of a system message
+
+  VS Code sends its instructions as assistant messages before the first user message. Those were
+  rewritten to `system` role messages and left in the `messages` array, which the AI SDK rejects with
+  "System messages are not allowed in the prompt or messages fields", breaking every chat request.
+  They are now extracted and passed through the `instructions` option, leaving `messages` with only
+  user, assistant and tool turns.
+
+- cf4a7e0: Read the active session from our own authentication provider
+
+  Probing for models silently found no credential and reported no models, even with a valid session
+  stored. VS Code only hands a session back to a consumer once an access grant has been recorded, and
+  sessions created through the provider interface never take that path, so `authentication.getSession`
+  answered `undefined` in silent mode. The chat provider now reads the active session straight from
+  the authentication provider this extension registers, and only falls back to
+  `authentication.getSession` to start the sign-in flow when no session exists yet.
+
 ## 0.4.0
 
 ### Minor Changes
