@@ -109,9 +109,12 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			const tools = this.buildToolSet(options.tools);
 			const toolChoice = this.getToolChoice(options.toolMode, tools);
 
+			const { messages, instructions } = convertMessages(chatMessages);
+
 			const response = streamText({
 				model: gateway(model.id),
-				messages: convertMessages(chatMessages),
+				messages,
+				instructions,
 				toolChoice,
 				temperature: options.modelOptions?.temperature ?? 0.7,
 				maxOutputTokens: options.modelOptions?.maxOutputTokens ?? 4096,
@@ -341,7 +344,14 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 // Message conversion utilities
 
-export function convertMessages(messages: readonly LanguageModelChatMessage[]): ModelMessage[] {
+export interface ConvertedMessages {
+	/** Conversation messages, for the `messages` field. Never contains `system` role messages. */
+	messages: ModelMessage[];
+	/** System prompt extracted from the messages preceding the first user message. */
+	instructions: string | undefined;
+}
+
+export function convertMessages(messages: readonly LanguageModelChatMessage[]): ConvertedMessages {
 	const toolNameMap: Record<string, string> = {};
 	for (const msg of messages) {
 		for (const part of msg.content) {
@@ -355,8 +365,7 @@ export function convertMessages(messages: readonly LanguageModelChatMessage[]): 
 		.flatMap((msg) => convertSingleMessage(msg, toolNameMap))
 		.filter(isValidMessage);
 
-	fixSystemMessages(result);
-	return result;
+	return extractInstructions(result);
 }
 
 export function convertSingleMessage(
@@ -465,13 +474,37 @@ function isValidMessage(msg: ModelMessage): boolean {
 	return Array.isArray(msg.content) && msg.content.length > 0;
 }
 
-function fixSystemMessages(result: ModelMessage[]): void {
-	const firstUserIndex = result.findIndex((msg) => msg.role === "user");
-	for (let i = 0; i < firstUserIndex; i++) {
-		const msg = result[i];
-		// Only convert to system if content is a string (SystemModelMessage requires string content)
-		if (msg.role === "assistant" && typeof msg.content === "string") {
-			result[i] = { role: "system", content: msg.content };
+/**
+ * Splits the system prompt out of the conversation.
+ *
+ * VS Code sends its instructions as assistant messages before the first user message. They cannot
+ * be turned into `system` role messages and left in `messages`: the AI SDK rejects system messages
+ * in the `messages` field with "System messages are not allowed in the prompt or messages fields",
+ * so they have to travel in the `instructions` option instead.
+ *
+ * With no user message there is nothing to instruct about, so the assistant messages are left as
+ * conversation rather than draining `messages` empty.
+ */
+function extractInstructions(messages: ModelMessage[]): ConvertedMessages {
+	const cutoff = Math.max(
+		messages.findIndex((msg) => msg.role === "user"),
+		0,
+	);
+
+	const instructionParts: string[] = [];
+	const conversation: ModelMessage[] = [];
+
+	messages.forEach((msg, index) => {
+		// Instructions require string content; anything richer stays in the conversation.
+		if (index < cutoff && msg.role === "assistant" && typeof msg.content === "string") {
+			instructionParts.push(msg.content);
+		} else {
+			conversation.push(msg);
 		}
-	}
+	});
+
+	return {
+		messages: conversation,
+		instructions: instructionParts.length > 0 ? instructionParts.join("\n\n") : undefined,
+	};
 }

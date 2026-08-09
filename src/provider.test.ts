@@ -179,6 +179,39 @@ describe("active session", () => {
 	});
 });
 
+describe("provideLanguageModelChatResponse", () => {
+	it("sends the system prompt via instructions, not inside messages", async () => {
+		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+
+		const vscode = await import("vscode");
+		const getSession = vi.mocked(vscode.authentication.getSession);
+		getSession.mockResolvedValue({ accessToken: "key" } as never);
+
+		const { streamText } = await import("ai");
+		const streamTextMock = vi.mocked(streamText);
+		streamTextMock.mockClear();
+		streamTextMock.mockReturnValue({ fullStream: [{ type: "text-delta", text: "hi" }] } as never);
+
+		const provider = createProvider();
+		const chatMessages = [
+			{ role: 2, content: [new hoisted.MockLanguageModelTextPart("You are helpful.")] },
+			{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] },
+		] as unknown as LanguageModelChatMessage[];
+
+		await provider.provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o" } as never,
+			chatMessages,
+			{} as never,
+			{ report: vi.fn() },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+
+		const options = streamTextMock.mock.calls[0][0];
+		expect(options.instructions).toBe("You are helpful.");
+		expect(options.messages).toEqual([{ role: "user", content: "Hello" }]);
+	});
+});
+
 describe("isValidMimeType", () => {
 	it("accepts valid MIME types", () => {
 		const valid = ["text/plain", "image/png", "application/json", "audio/mpeg", "model/gltf+json"];
@@ -302,10 +335,71 @@ describe("convertMessages", () => {
 			},
 		] as unknown as LanguageModelChatMessage[];
 
-		const converted = convertMessages(messages);
+		const { messages: converted } = convertMessages(messages);
 		const toolResult = converted.find((m) => m.role === "tool" && Array.isArray(m.content));
 
 		expect(toolResult).toBeDefined();
 		expect((toolResult?.content as any)?.[0]?.toolName).toBe("searchDocs");
+	});
+});
+
+describe("instruction extraction", () => {
+	function textMessage(role: 1 | 2, text: string) {
+		return {
+			role,
+			content: [new hoisted.MockLanguageModelTextPart(text)],
+		} as unknown as LanguageModelChatMessage;
+	}
+
+	it("moves pre-user assistant messages into instructions instead of the messages array", () => {
+		const { messages, instructions } = convertMessages([
+			textMessage(2, "You are a helpful assistant."),
+			textMessage(1, "Hello"),
+		]);
+
+		expect(instructions).toBe("You are a helpful assistant.");
+		expect(messages).toEqual([{ role: "user", content: "Hello" }]);
+	});
+
+	it("joins multiple pre-user messages into a single instruction block", () => {
+		const { messages, instructions } = convertMessages([
+			textMessage(2, "First rule."),
+			textMessage(2, "Second rule."),
+			textMessage(1, "Hello"),
+		]);
+
+		expect(instructions).toBe("First rule.\n\nSecond rule.");
+		expect(messages).toHaveLength(1);
+	});
+
+	it("leaves assistant replies after the first user message in the conversation", () => {
+		const { messages, instructions } = convertMessages([
+			textMessage(1, "Hello"),
+			textMessage(2, "Hi there"),
+			textMessage(1, "How are you?"),
+		]);
+
+		expect(instructions).toBeUndefined();
+		expect(messages).toEqual([
+			{ role: "user", content: "Hello" },
+			{ role: "assistant", content: "Hi there" },
+			{ role: "user", content: "How are you?" },
+		]);
+	});
+
+	it("keeps assistant messages when the conversation has no user message", () => {
+		const { messages, instructions } = convertMessages([textMessage(2, "Only an assistant turn")]);
+
+		expect(instructions).toBeUndefined();
+		expect(messages).toEqual([{ role: "assistant", content: "Only an assistant turn" }]);
+	});
+
+	it("never emits system role messages in the messages array", () => {
+		const { messages } = convertMessages([
+			textMessage(2, "You are a helpful assistant."),
+			textMessage(1, "Hello"),
+		]);
+
+		expect(messages.some((msg) => msg.role === "system")).toBe(false);
 	});
 });
