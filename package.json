@@ -9,7 +9,7 @@
 	"icon": "images/icon.png",
 	"type": "module",
 	"engines": {
-		"vscode": "^1.125.0"
+		"vscode": "^1.134.0"
 	},
 	"categories": [
 		"AI",
@@ -92,7 +92,7 @@
 		"@sferadev/tsconfig": "workspace:*",
 		"@types/json-schema": "catalog:",
 		"@types/node": "catalog:",
-		"@types/vscode": "1.125.0",
+		"@types/vscode": "1.134.0",
 		"@vscode/vsce": "catalog:",
 		"bunchee": "catalog:",
 		"typescript": "catalog:",
