@@ -5,6 +5,7 @@
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
 		"target": "ES2024",
+		"types": ["node"],
 		"sourceMap": true,
 		"rootDir": "src",
 		"outDir": "out"

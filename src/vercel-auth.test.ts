@@ -8,7 +8,7 @@ vi.mock("vscode", () => ({
 	window: { showQuickPick: vi.fn(), showInputBox: vi.fn(), showErrorMessage: vi.fn() },
 }));
 
-const originalFetch = global.fetch;
+const originalFetch = globalThis.fetch;
 
 function createJwt(payload: Record<string, unknown>): string {
 	const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
@@ -24,7 +24,7 @@ describe("vercel-auth", () => {
 	});
 
 	afterEach(() => {
-		global.fetch = originalFetch;
+		globalThis.fetch = originalFetch;
 	});
 
 	describe("checkVercelCliAvailable", () => {
@@ -53,17 +53,17 @@ describe("vercel-auth", () => {
 		});
 
 		it("skips refresh when token not expired", async () => {
-			global.fetch = vi.fn();
+			globalThis.fetch = vi.fn();
 			const { refreshOidcToken } = await import("./vercel-auth");
 
 			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() + 3600000 });
-			expect(global.fetch).not.toHaveBeenCalled();
+			expect(globalThis.fetch).not.toHaveBeenCalled();
 			expect(result.token).toBe("old");
 		});
 
 		it("refreshes expired token and parses JWT exp", async () => {
 			const exp = Math.floor(Date.now() / 1000) + 3600;
-			global.fetch = vi.fn().mockResolvedValue({
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () => Promise.resolve({ token: createJwt({ exp }) }),
 			});
@@ -71,12 +71,12 @@ describe("vercel-auth", () => {
 			const { refreshOidcToken } = await import("./vercel-auth");
 			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 });
 
-			expect(global.fetch).toHaveBeenCalled();
+			expect(globalThis.fetch).toHaveBeenCalled();
 			expect(result.expiresAt).toBe(exp * 1000);
 		});
 
 		it("handles JWT without exp field gracefully", async () => {
-			global.fetch = vi.fn().mockResolvedValue({
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () => Promise.resolve({ token: createJwt({ sub: "user" }) }),
 			});
@@ -98,7 +98,7 @@ describe("vercel-auth", () => {
 		});
 
 		it("throws on API error", async () => {
-			global.fetch = vi.fn().mockResolvedValue({ ok: false, statusText: "Unauthorized" });
+			globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, statusText: "Unauthorized" });
 			const { refreshOidcToken } = await import("./vercel-auth");
 
 			await expect(
@@ -107,7 +107,7 @@ describe("vercel-auth", () => {
 		});
 
 		it("preserves the team across a refresh", async () => {
-			global.fetch = vi.fn().mockResolvedValue({
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () =>
 					Promise.resolve({ token: createJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }) }),
@@ -130,7 +130,7 @@ describe("vercel-auth", () => {
 				json: () =>
 					Promise.resolve({ token: createJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }) }),
 			});
-			global.fetch = fetchMock;
+			globalThis.fetch = fetchMock;
 			const { refreshOidcToken } = await import("./vercel-auth");
 
 			await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000, teamId: "team_abc" });
@@ -139,7 +139,7 @@ describe("vercel-auth", () => {
 		});
 
 		it("rejects a response whose token is not a JWT", async () => {
-			global.fetch = vi.fn().mockResolvedValue({
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () => Promise.resolve({ token: "not-a-jwt" }),
 			});
@@ -151,7 +151,7 @@ describe("vercel-auth", () => {
 		});
 
 		it("rejects a response with no token field", async () => {
-			global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+			globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
 			const { refreshOidcToken } = await import("./vercel-auth");
 
 			await expect(
@@ -160,7 +160,7 @@ describe("vercel-auth", () => {
 		});
 
 		it("falls back to a one-hour expiry when exp is not a number", async () => {
-			global.fetch = vi.fn().mockResolvedValue({
+			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () => Promise.resolve({ token: createJwt({ exp: "not-a-number" }) }),
 			});

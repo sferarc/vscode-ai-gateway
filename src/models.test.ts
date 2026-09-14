@@ -200,7 +200,9 @@ describe("ModelsClient", () => {
 				reasoning_options: [{ type: "toggle" }],
 			});
 
-			expect(capabilities.reasoning).toBe(true);
+			// `reasoning` is sent to VS Code but is not part of the stable `LanguageModelChatCapabilities`
+			// type, so it is asserted structurally rather than read as a typed property.
+			expect(capabilities).toMatchObject({ reasoning: true });
 		});
 
 		it("keeps using tags for web search, which has no structured field", async () => {
@@ -211,7 +213,7 @@ describe("ModelsClient", () => {
 				supported_parameters: ["max_tokens"],
 			});
 
-			expect(capabilities.webSearch).toBe(true);
+			expect(capabilities).toMatchObject({ webSearch: true });
 		});
 	});
 });
