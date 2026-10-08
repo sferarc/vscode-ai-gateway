@@ -5,3 +5,8 @@ node_modules
 *.vsix
 .vercel
 .env*.local
+coverage
+*.log
+*.tgz
+.DS_Store
+.env

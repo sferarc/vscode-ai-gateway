@@ -24,3 +24,12 @@ package-lock.json
 *.vsix
 .claude/
 CHANGELOG.md
+.changeset/**
+.github/**
+scripts/**
+biome.json
+knip.json
+lefthook.yml
+mise.toml
+mise.lock
+pnpm-workspace.yaml

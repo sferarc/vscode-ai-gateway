@@ -1,14 +1,19 @@
 {
-	"extends": "@sferadev/tsconfig/base.json",
+	"$schema": "https://json.schemastore.org/tsconfig",
 	"compilerOptions": {
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true,
 		"lib": ["ES2024", "DOM"],
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
-		"target": "ES2024",
-		"types": ["node"],
-		"sourceMap": true,
+		"outDir": "out",
 		"rootDir": "src",
-		"outDir": "out"
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"target": "ES2024",
+		"types": ["node"]
 	},
 	"include": ["src"],
 	"exclude": ["out", "node_modules"]

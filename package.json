@@ -27,12 +27,11 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/SferaDev/SferaDev",
-		"directory": "apps/vscode-ai-gateway"
+		"url": "git+https://github.com/sferarc/vscode-ai-gateway.git"
 	},
-	"homepage": "https://github.com/SferaDev/SferaDev/tree/main/apps/vscode-ai-gateway#readme",
+	"homepage": "https://github.com/sferarc/vscode-ai-gateway#readme",
 	"bugs": {
-		"url": "https://github.com/SferaDev/SferaDev/issues"
+		"url": "https://github.com/sferarc/vscode-ai-gateway/issues"
 	},
 	"main": "./out/extension.js",
 	"activationEvents": [
@@ -80,26 +79,34 @@
 		"build": "NODE_ENV=production bunchee ./src/extension.ts --format cjs --no-external",
 		"dev": "bunchee ./src/extension.ts --format cjs --watch",
 		"compile": "tsc -p ./",
-		"tsc": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"clean": "rm -rf out",
 		"prepackage": "pnpm run build",
 		"package": "vsce package --no-dependencies",
-		"release": "pnpm run package && vsce publish --no-dependencies"
+		"release": "./scripts/release.sh",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"fix": "biome check --write .",
+		"knip": "knip",
+		"changeset": "changeset"
 	},
 	"devDependencies": {
-		"@sferadev/tsconfig": "workspace:*",
+		"@biomejs/biome": "catalog:",
+		"@changesets/cli": "catalog:",
 		"@types/json-schema": "catalog:",
 		"@types/node": "catalog:",
 		"@types/vscode": "1.137.0",
+		"@typescript/typescript6": "catalog:",
 		"@vscode/vsce": "catalog:",
 		"bunchee": "catalog:",
+		"knip": "catalog:",
+		"lefthook": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
 	"dependencies": {
 		"@ai-sdk/gateway": "catalog:",
 		"ai": "catalog:"
-	}
+	},
+	"packageManager": "pnpm@12.10.1"
 }

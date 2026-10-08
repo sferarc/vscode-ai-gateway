@@ -22,6 +22,18 @@ For detailed documentation including authentication options, usage guides, and t
 
 **[https://sferadev.com/docs/packages/vscode-extension-vercel-ai](https://sferadev.com/docs/packages/vscode-extension-vercel-ai)**
 
+## Development
+
+The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
+
+```bash
+mise install
+pnpm install
+pnpm lint && pnpm typecheck && pnpm test && pnpm package
+```
+
+`@types/vscode` stays a literal version equal to the `engines.vscode` floor: `vsce` cannot read the catalog protocol and refuses to package when the types are newer than the engine. Add a changeset with `pnpm changeset` for any change that should be released.
+
 ## License
 
 MIT
