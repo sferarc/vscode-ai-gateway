@@ -5,6 +5,7 @@
 ## Storage
 
 - All sessions are one JSON array in VS Code `SecretStorage` under `vercelAiGateway.sessions` (`context.secrets`).
+- Every read-modify-write of that array runs through `withLock`, a promise chain, and re-reads the array inside it, so concurrent `getSessions`, `getActiveSession`, add and remove calls cannot drop or resurrect a session. Concurrent refreshes of one OIDC session share a single request (`inflightRefresh`).
 - The active session id is in `globalState` under `vercelAiGateway.activeSession`. It is an id, not a secret.
 - Nothing is written to disk by the extension itself.
 

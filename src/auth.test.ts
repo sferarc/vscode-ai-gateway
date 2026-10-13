@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => ({
 	mockEventEmitterFire: vi.fn(),
@@ -241,6 +241,95 @@ describe("VercelAIAuthenticationProvider", () => {
 			const sessions = await provider.getSessions();
 
 			expect(sessions.map((s) => s.id).sort()).toEqual(["s1", "s2"]);
+		});
+	});
+
+	describe("concurrent session writes", () => {
+		function deferredRefresh() {
+			let resolve: () => void = () => undefined;
+			const gate = new Promise<void>((r) => {
+				resolve = r;
+			});
+			vi.mocked(refreshOidcToken).mockImplementation(async () => {
+				await gate;
+				return {
+					token: "fresh",
+					expiresAt: Date.now() + 3600000,
+					projectId: "p1",
+					projectName: "P",
+					teamId: "t1",
+					teamName: "T",
+				};
+			});
+			return resolve;
+		}
+
+		const flush = () => new Promise((r) => setTimeout(r, 0));
+		const storedSessions = async () =>
+			JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]") as Array<{
+				id: string;
+				accessToken: string;
+			}>;
+
+		beforeEach(async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1", "oidc", Date.now() + 60 * 1000)]),
+			);
+			hoisted.mockEventEmitterFire.mockClear();
+		});
+
+		afterEach(() => {
+			vi.mocked(refreshOidcToken).mockReset();
+		});
+
+		it("shares one OIDC refresh between getSessions and getActiveSession", async () => {
+			const release = deferredRefresh();
+
+			const sessions = provider.getSessions();
+			const active = provider.getActiveSession();
+			await flush();
+			release();
+
+			expect((await sessions)[0].accessToken).toBe("fresh");
+			expect((await active)?.accessToken).toBe("fresh");
+			expect(refreshOidcToken).toHaveBeenCalledTimes(1);
+			expect(await storedSessions()).toEqual([
+				expect.objectContaining({ id: "s1", accessToken: "fresh" }),
+			]);
+			expect(hoisted.mockEventEmitterFire).toHaveBeenCalledTimes(1);
+		});
+
+		it("keeps a session created during a slow refresh", async () => {
+			const release = deferredRefresh();
+			const sessions = provider.getSessions();
+			await flush();
+
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "API Key",
+				value: "api-key",
+			} as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("Work").mockResolvedValueOnce("vck_work");
+			const created = await provider.createSession([]);
+
+			release();
+			await sessions;
+
+			const stored = await storedSessions();
+			expect(stored.map((s) => s.id)).toEqual(["s1", created.id]);
+			expect(stored[0].accessToken).toBe("fresh");
+		});
+
+		it("does not bring back a session removed during a slow refresh", async () => {
+			const release = deferredRefresh();
+			const sessions = provider.getSessions();
+			await flush();
+
+			await provider.removeSession("s1");
+
+			release();
+			expect(await sessions).toEqual([]);
+			expect(await storedSessions()).toEqual([]);
 		});
 	});
 
