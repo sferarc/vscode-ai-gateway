@@ -120,7 +120,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				maxOutputTokens: options.modelOptions?.maxOutputTokens ?? 4096,
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
 				abortSignal: abortController.signal,
-				timeout: config.timeout,
+				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
 			});
 
 			for await (const chunk of response.fullStream) {
@@ -135,13 +135,15 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 			logger.info(`Chat request completed for ${model.id}`);
 		} catch (error) {
-			if (this.isAbortError(error)) {
+			if (token.isCancellationRequested || abortController.signal.aborted) {
 				logger.debug("Request was cancelled");
 				return;
 			}
 
 			logger.error("Exception during streaming:", error);
-			const errorMessage = extractErrorMessage(error);
+			const errorMessage = this.isAbortError(error)
+				? `Request timed out after ${getConfig().timeout} ms with no output from the model.`
+				: extractErrorMessage(error);
 			progress.report(new LanguageModelTextPart(`\n\n**Error:** ${errorMessage}\n\n`));
 		} finally {
 			abortSubscription.dispose();
@@ -192,12 +194,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 	private isAbortError(error: unknown): boolean {
 		if (!(error instanceof Error)) return false;
-		return (
-			error.name === "AbortError" ||
-			error.message.includes("aborted") ||
-			error.message.includes("cancelled") ||
-			error.message.includes("canceled")
-		);
+		return error.name === "AbortError" || error.name === "TimeoutError";
 	}
 
 	/**
