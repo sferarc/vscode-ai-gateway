@@ -124,6 +124,14 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			});
 
 			for await (const chunk of response.fullStream) {
+				// streamText ends the stream with an abort part instead of throwing when a chunk timeout fires.
+				if (chunk.type === "abort") {
+					if (!token.isCancellationRequested && !abortController.signal.aborted) {
+						logger.error("Stream aborted:", chunk.reason);
+						this.reportTimeout(progress);
+					}
+					return;
+				}
 				const emitted = this.handleStreamChunk(chunk, progress);
 				if (emitted) responseSent = true;
 			}
@@ -141,10 +149,13 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			}
 
 			logger.error("Exception during streaming:", error);
-			const errorMessage = this.isAbortError(error)
-				? `Request timed out after ${getConfig().timeout} ms with no output from the model.`
-				: extractErrorMessage(error);
-			progress.report(new LanguageModelTextPart(`\n\n**Error:** ${errorMessage}\n\n`));
+			if (this.isAbortError(error)) {
+				this.reportTimeout(progress);
+			} else {
+				progress.report(
+					new LanguageModelTextPart(`\n\n**Error:** ${extractErrorMessage(error)}\n\n`),
+				);
+			}
 		} finally {
 			abortSubscription.dispose();
 		}
@@ -190,6 +201,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		if (toolMode === LanguageModelChatToolMode.Required) return "required";
 		if (Object.keys(tools).length === 0) return "none";
 		return "auto";
+	}
+
+	private reportTimeout(progress: Progress<LanguageModelResponsePart>): void {
+		const message = `Request timed out after ${getConfig().timeout} ms with no output from the model.`;
+		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${message}\n\n`));
 	}
 
 	private isAbortError(error: unknown): boolean {
