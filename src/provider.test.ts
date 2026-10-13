@@ -211,7 +211,7 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(options.messages).toEqual([{ role: "user", content: "Hello" }]);
 	});
 
-	async function respondWithTimeout(isCancellationRequested: boolean) {
+	async function respondWithTimeout(isCancellationRequested: boolean, textBeforeStall?: string) {
 		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
 
 		const vscode = await import("vscode");
@@ -222,8 +222,8 @@ describe("provideLanguageModelChatResponse", () => {
 		streamTextMock.mockClear();
 		streamTextMock.mockReturnValue({
 			fullStream: (async function* () {
-				yield* [];
-				throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+				if (textBeforeStall) yield { type: "text-delta", text: textBeforeStall };
+				yield { type: "abort", reason: "Chunk timeout of 30000ms exceeded" };
 			})(),
 		} as never);
 
@@ -252,6 +252,13 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(report.mock.calls[0][0].value).toContain(
 			"**Error:** Request timed out after 30000 ms with no output from the model.",
 		);
+	});
+
+	it("reports a timeout after a partial answer instead of ending it silently", async () => {
+		const { report } = await respondWithTimeout(false, "Half an answer");
+		expect(report).toHaveBeenCalledTimes(2);
+		expect(report.mock.calls[0][0].value).toBe("Half an answer");
+		expect(report.mock.calls[1][0].value).toContain("**Error:** Request timed out after 30000 ms");
 	});
 
 	it("stays silent when the user cancelled", async () => {
