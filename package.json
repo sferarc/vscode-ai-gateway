@@ -68,7 +68,7 @@
 				"vercelAiGateway.timeout": {
 					"type": "number",
 					"default": 30000,
-					"description": "Request timeout in milliseconds.",
+					"description": "Maximum time in milliseconds to wait for the model to start or continue responding.",
 					"minimum": 5000,
 					"maximum": 300000
 				}

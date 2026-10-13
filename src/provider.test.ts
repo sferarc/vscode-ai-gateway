@@ -210,6 +210,54 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(options.instructions).toBe("You are helpful.");
 		expect(options.messages).toEqual([{ role: "user", content: "Hello" }]);
 	});
+
+	async function respondWithTimeout(isCancellationRequested: boolean) {
+		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+
+		const { streamText } = await import("ai");
+		const streamTextMock = vi.mocked(streamText);
+		streamTextMock.mockClear();
+		streamTextMock.mockReturnValue({
+			fullStream: (async function* () {
+				yield* [];
+				throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+			})(),
+		} as never);
+
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{
+				isCancellationRequested,
+				onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })),
+			} as never,
+		);
+		return { report, options: streamTextMock.mock.calls[0][0] };
+	}
+
+	it("bounds silence between chunks instead of the total response time", async () => {
+		const { options } = await respondWithTimeout(false);
+		expect(options.timeout).toEqual({ firstChunkMs: 30000, chunkMs: 30000 });
+	});
+
+	it("reports a timeout that the user did not cause", async () => {
+		const { report } = await respondWithTimeout(false);
+		expect(report).toHaveBeenCalledTimes(1);
+		expect(report.mock.calls[0][0].value).toContain(
+			"**Error:** Request timed out after 30000 ms with no output from the model.",
+		);
+	});
+
+	it("stays silent when the user cancelled", async () => {
+		const { report } = await respondWithTimeout(true);
+		expect(report).not.toHaveBeenCalled();
+	});
 });
 
 describe("isValidMimeType", () => {
