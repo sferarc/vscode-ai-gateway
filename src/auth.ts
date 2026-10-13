@@ -50,6 +50,8 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private _sessionChangeEmitter =
 		new EventEmitter<AuthenticationProviderAuthenticationSessionsChangeEvent>();
 	private _disposable: Disposable;
+	private writeQueue: Promise<void> = Promise.resolve();
+	private inflightRefresh = new Map<string, Promise<SessionData>>();
 
 	constructor(private readonly context: ExtensionContext) {
 		this._disposable = authentication.registerAuthenticationProvider(
@@ -75,16 +77,17 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		_scopes?: readonly string[],
 		options?: AuthenticationProviderSessionOptions,
 	): Promise<AuthenticationSession[]> {
-		const sessions = await this.getSessionsData();
-		const { refreshedSessions, needsUpdate, changedSessions } =
-			await this.refreshSessionTokens(sessions);
+		const snapshot = await this.getSessionsData();
+		const refreshed = await this.refreshSessionTokens(snapshot);
 
-		if (needsUpdate) {
-			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(refreshedSessions));
+		let refreshedSessions = snapshot;
+		if (refreshed.length > 0) {
+			const result = await this.applyRefreshedSessions(refreshed);
+			refreshedSessions = result.sessions;
 
 			// Fire session change event for refreshed tokens
-			if (changedSessions.length > 0) {
-				const changedAuthSessions: AuthenticationSession[] = changedSessions.map((session) => ({
+			if (result.changed.length > 0) {
+				const changedAuthSessions: AuthenticationSession[] = result.changed.map((session) => ({
 					id: session.id,
 					accessToken: session.accessToken,
 					account: session.account,
@@ -119,34 +122,77 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		return this.convertToAuthSessions(sortedSessions);
 	}
 
-	private async refreshSessionTokens(sessions: SessionData[]): Promise<{
-		refreshedSessions: SessionData[];
-		needsUpdate: boolean;
-		changedSessions: SessionData[];
-	}> {
-		const refreshedSessions: SessionData[] = [];
+	/** Returns only the sessions whose token changed. */
+	private async refreshSessionTokens(sessions: SessionData[]): Promise<SessionData[]> {
 		const changedSessions: SessionData[] = [];
-		let needsUpdate = false;
 
 		for (const session of sessions) {
 			if (session.method === "oidc" && session.oidcData) {
 				try {
-					const refreshedSession = await this.refreshOidcSession(session);
+					const refreshedSession = await this.refreshOidcSessionOnce(session);
 					if (refreshedSession.accessToken !== session.accessToken) {
-						needsUpdate = true;
 						changedSessions.push(refreshedSession);
 					}
-					refreshedSessions.push(refreshedSession);
 				} catch (error) {
 					logger.error("Failed to refresh OIDC token in getSessions:", error);
-					refreshedSessions.push(session);
 				}
-			} else {
-				refreshedSessions.push(session);
 			}
 		}
 
-		return { refreshedSessions, needsUpdate, changedSessions };
+		return changedSessions;
+	}
+
+	/**
+	 * Merges refreshed tokens into the stored array by id. Sessions removed meanwhile stay
+	 * removed, and a token another caller already stored is not reported as changed again.
+	 */
+	private applyRefreshedSessions(
+		refreshed: SessionData[],
+	): Promise<{ sessions: SessionData[]; changed: SessionData[] }> {
+		return this.withLock(async () => {
+			const sessions = await this.getSessionsData();
+			const changed: SessionData[] = [];
+
+			for (const update of refreshed) {
+				const index = sessions.findIndex((s) => s.id === update.id);
+				if (index === -1 || sessions[index].accessToken === update.accessToken) {
+					continue;
+				}
+				sessions[index] = {
+					...sessions[index],
+					accessToken: update.accessToken,
+					oidcData: update.oidcData,
+				};
+				changed.push(sessions[index]);
+			}
+
+			if (changed.length > 0) {
+				await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
+			}
+			return { sessions, changed };
+		});
+	}
+
+	private withLock<T>(fn: () => Promise<T>): Promise<T> {
+		const run = this.writeQueue.then(fn);
+		this.writeQueue = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
+	}
+
+	private refreshOidcSessionOnce(session: SessionData): Promise<SessionData> {
+		const inflight = this.inflightRefresh.get(session.id);
+		if (inflight) {
+			return inflight;
+		}
+
+		const refresh = this.refreshOidcSession(session).finally(() => {
+			this.inflightRefresh.delete(session.id);
+		});
+		this.inflightRefresh.set(session.id, refresh);
+		return refresh;
 	}
 
 	private async refreshOidcSession(session: SessionData): Promise<SessionData> {
@@ -276,11 +322,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	private async storeSession(session: SessionData): Promise<void> {
-		const existingSessions = await this.getSessionsData();
-		const sessions = [...existingSessions, session];
-		await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
-
-		await this.setActiveSession(session.id);
+		await this.withLock(async () => {
+			const existingSessions = await this.getSessionsData();
+			const sessions = [...existingSessions, session];
+			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
+			await this.setActiveSession(session.id);
+		});
 
 		this._sessionChangeEmitter.fire({
 			added: [session],
@@ -291,25 +338,34 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	async removeSession(sessionId: string): Promise<void> {
-		const sessions = await this.getSessionsData();
-		const index = sessions.findIndex((s) => s.id === sessionId);
+		const result = await this.withLock(async () => {
+			const sessions = await this.getSessionsData();
+			const index = sessions.findIndex((s) => s.id === sessionId);
 
-		if (index === -1) {
+			if (index === -1) {
+				return null;
+			}
+
+			const [removed] = sessions.splice(index, 1);
+			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
+
+			let newActive: SessionData | undefined;
+			const activeSessionId = await this.getActiveSessionId();
+			if (activeSessionId === sessionId) {
+				newActive = sessions[0];
+				await this.setActiveSession(newActive?.id ?? null);
+			}
+			return { removed, newActive };
+		});
+
+		if (!result) {
 			return;
 		}
 
-		const [removed] = sessions.splice(index, 1);
-		await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
-
-		const activeSessionId = await this.getActiveSessionId();
-		if (activeSessionId === sessionId) {
-			const newActiveSession = sessions.length > 0 ? sessions[0].id : null;
-			await this.setActiveSession(newActiveSession);
-			if (newActiveSession) {
-				const newActive = sessions[0];
-				const methodLabel = this.getMethodLabel(newActive.method);
-				window.showInformationMessage(`Activated: ${newActive.account.label} ${methodLabel}`);
-			}
+		const { removed, newActive } = result;
+		if (newActive) {
+			const methodLabel = this.getMethodLabel(newActive.method);
+			window.showInformationMessage(`Activated: ${newActive.account.label} ${methodLabel}`);
 		}
 
 		const removedAuthSession: AuthenticationSession = {
@@ -509,7 +565,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		// Refresh OIDC token if needed
 		if (activeSession.method === "oidc" && activeSession.oidcData) {
 			try {
-				const refreshedSession = await this.refreshOidcSession(activeSession);
+				const refreshedSession = await this.refreshOidcSessionOnce(activeSession);
 				if (refreshedSession.accessToken !== activeSession.accessToken) {
 					// Update the stored session with refreshed token
 					await this.updateStoredSession(refreshedSession);
@@ -526,19 +582,15 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	private async updateStoredSession(updatedSession: SessionData): Promise<void> {
-		const sessions = await this.getSessionsData();
-		const index = sessions.findIndex((s) => s.id === updatedSession.id);
+		const { changed } = await this.applyRefreshedSessions([updatedSession]);
 
-		if (index !== -1) {
-			sessions[index] = updatedSession;
-			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
-
-			// Fire session change event to notify VS Code of the token update
+		// Fire session change event to notify VS Code of the token update
+		for (const session of changed) {
 			const authSession: AuthenticationSession = {
-				id: updatedSession.id,
-				accessToken: updatedSession.accessToken,
-				account: updatedSession.account,
-				scopes: [...updatedSession.scopes],
+				id: session.id,
+				accessToken: session.accessToken,
+				account: session.account,
+				scopes: [...session.scopes],
 			};
 			this._sessionChangeEmitter.fire({
 				added: [],
