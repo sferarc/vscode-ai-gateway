@@ -95,7 +95,7 @@
 		"@changesets/cli": "catalog:",
 		"@types/json-schema": "catalog:",
 		"@types/node": "catalog:",
-		"@types/vscode": "1.137.0",
+		"@types/vscode": "catalog:",
 		"@typescript/typescript6": "catalog:",
 		"@vscode/vsce": "catalog:",
 		"bunchee": "catalog:",
@@ -108,5 +108,5 @@
 		"@ai-sdk/gateway": "catalog:",
 		"ai": "catalog:"
 	},
-	"packageManager": "pnpm@12.10.1"
+	"packageManager": "pnpm@12.11.2"
 }
