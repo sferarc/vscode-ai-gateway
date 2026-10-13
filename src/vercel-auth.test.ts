@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as vscode from "vscode";
 
 vi.mock("node:fs", () => ({ existsSync: vi.fn(), readFileSync: vi.fn() }));
 vi.mock("node:os", () => ({ platform: vi.fn(), homedir: vi.fn() }));
@@ -178,6 +179,136 @@ describe("vercel-auth", () => {
 			const { checkVercelCliAvailable } = await import("./vercel-auth");
 
 			expect(checkVercelCliAvailable()).toBe(false);
+		});
+	});
+
+	describe("createInteractiveOidcSession", () => {
+		type QuickPickItems = Array<{ label: string; value: unknown }>;
+
+		function jsonResponse(body: unknown) {
+			return { ok: true, status: 200, statusText: "", json: () => Promise.resolve(body) };
+		}
+
+		function projectsPage(names: string[], next: number | null) {
+			return jsonResponse({
+				projects: names.map((name) => ({ id: `prj_${name}`, name })),
+				pagination: { count: names.length, next, prev: null },
+			});
+		}
+
+		function requestUrl(fetchMock: ReturnType<typeof vi.fn>, index: number): URL {
+			return new URL(String(fetchMock.mock.calls[index][0]));
+		}
+
+		function pickTeam(team: unknown) {
+			vi.mocked(vscode.window.showQuickPick).mockImplementation((async (items: QuickPickItems) => {
+				if (items[0]?.label === "Personal Account") {
+					return items.find((item) => item.value === team) ?? items[0];
+				}
+				return undefined;
+			}) as never);
+		}
+
+		function projectPickItems(): QuickPickItems {
+			const calls = vi.mocked(vscode.window.showQuickPick).mock.calls;
+			return calls[calls.length - 1][0] as unknown as QuickPickItems;
+		}
+
+		beforeEach(() => {
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ token: "cli" }));
+			pickTeam(null);
+		});
+
+		it("offers projects from every page and passes pagination.next as until", async () => {
+			const fetchMock = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [], pagination: { next: null } }))
+				.mockResolvedValueOnce(projectsPage(["a", "b"], 1700000000000))
+				.mockResolvedValueOnce(projectsPage(["c"], null));
+			globalThis.fetch = fetchMock;
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+
+			expect(fetchMock).toHaveBeenCalledTimes(3);
+			expect(requestUrl(fetchMock, 1).searchParams.get("until")).toBeNull();
+			expect(requestUrl(fetchMock, 1).searchParams.get("limit")).toBe("100");
+			expect(requestUrl(fetchMock, 2).searchParams.get("until")).toBe("1700000000000");
+			expect(projectPickItems().map((item) => item.label)).toEqual(["a", "b", "c"]);
+		});
+
+		it("offers teams from every page", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(
+					jsonResponse({
+						teams: [{ id: "t1", name: "One", slug: "one" }],
+						pagination: { next: 5 },
+					}),
+				)
+				.mockResolvedValueOnce(
+					jsonResponse({
+						teams: [{ id: "t2", name: "Two", slug: "two" }],
+						pagination: { next: null },
+					}),
+				)
+				.mockResolvedValueOnce(projectsPage([], null));
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+
+			const teamItems = vi.mocked(vscode.window.showQuickPick).mock
+				.calls[0][0] as unknown as QuickPickItems;
+			expect(teamItems.map((item) => item.label)).toEqual(["Personal Account", "One", "Two"]);
+		});
+
+		it("stops at the page cap when pagination.next never ends", async () => {
+			const fetchMock = vi.fn().mockImplementation(async (input: URL | string) => {
+				const url = new URL(String(input));
+				if (url.pathname === "/v2/teams") {
+					return jsonResponse({ teams: [], pagination: { next: null } });
+				}
+				return projectsPage(["p"], 1);
+			});
+			globalThis.fetch = fetchMock;
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+
+			expect(fetchMock).toHaveBeenCalledTimes(1 + 20);
+			expect(projectPickItems()).toHaveLength(20);
+		});
+
+		it("encodes a teamId that contains reserved characters", async () => {
+			const team = { id: "team&x=1", name: "Odd", slug: "odd" };
+			const fetchMock = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [team], pagination: { next: null } }))
+				.mockResolvedValueOnce(projectsPage([], null));
+			globalThis.fetch = fetchMock;
+			vi.mocked(vscode.window.showQuickPick).mockImplementation((async (items: QuickPickItems) =>
+				items[0]?.label === "Personal Account" ? items[1] : undefined) as never);
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+
+			const url = requestUrl(fetchMock, 1);
+			expect(url.search).toContain("teamId=team%26x%3D1");
+			expect(url.searchParams.get("teamId")).toBe("team&x=1");
+			expect(url.searchParams.has("x")).toBe(false);
+		});
+
+		it("includes the HTTP status when statusText is empty", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [], pagination: { next: null } }))
+				.mockResolvedValueOnce({ ok: false, status: 403, statusText: "" });
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toThrow(
+				"Failed to load projects: Failed to fetch projects: 403",
+			);
 		});
 	});
 });

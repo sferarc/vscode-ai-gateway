@@ -28,17 +28,14 @@ interface Team {
 	slug: string;
 }
 
-interface TeamsResponse {
-	teams: Team[];
-}
-
 interface Project {
 	id: string;
 	name: string;
 }
 
-interface ProjectsResponse {
-	projects: Project[];
+interface PaginatedResponse {
+	[key: string]: unknown;
+	pagination?: { next?: number | string | null };
 }
 
 class VercelOidcTokenError extends Error {
@@ -147,13 +144,67 @@ export function checkVercelCliAvailable(): boolean {
 	return getVercelCliToken() !== null;
 }
 
+const VERCEL_API = "https://api.vercel.com";
+const PAGE_LIMIT = 100;
+const MAX_PAGES = 20;
+
+function vercelApiUrl(pathname: string, teamId?: string): URL {
+	const url = new URL(pathname, VERCEL_API);
+	if (teamId) {
+		url.searchParams.set("teamId", teamId);
+	}
+	return url;
+}
+
+async function fetchAllPages<T>(
+	authToken: string,
+	url: URL,
+	key: "teams" | "projects",
+): Promise<T[]> {
+	const items: T[] = [];
+	let until: number | string | null = null;
+
+	for (let page = 0; page < MAX_PAGES; page++) {
+		const pageUrl = new URL(url);
+		pageUrl.searchParams.set("limit", String(PAGE_LIMIT));
+		if (until !== null) {
+			pageUrl.searchParams.set("until", String(until));
+		}
+
+		const response = await fetch(pageUrl, {
+			headers: {
+				Authorization: `Bearer ${authToken}`,
+			},
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to fetch ${key}: ${response.status} ${response.statusText}`.trim());
+		}
+
+		const data = (await response.json()) as PaginatedResponse;
+		const pageItems = data[key];
+		if (Array.isArray(pageItems)) {
+			items.push(...(pageItems as T[]));
+		}
+
+		until = data.pagination?.next ?? null;
+		if (until === null) {
+			return items;
+		}
+	}
+
+	logger.warn(`Stopped loading ${key} after ${MAX_PAGES} pages`);
+	return items;
+}
+
 async function getVercelOidcToken(
 	authToken: string,
 	projectId: string,
 	teamId?: string,
 ): Promise<VercelTokenResponse | null> {
 	try {
-		const url = `https://api.vercel.com/v1/projects/${projectId}/token?source=vercel-oidc-refresh${teamId ? `&teamId=${teamId}` : ""}`;
+		const url = vercelApiUrl(`/v1/projects/${encodeURIComponent(projectId)}/token`, teamId);
+		url.searchParams.set("source", "vercel-oidc-refresh");
 		const res = await fetch(url, {
 			method: "POST",
 			headers: {
@@ -162,7 +213,9 @@ async function getVercelOidcToken(
 		});
 
 		if (!res.ok) {
-			throw new VercelOidcTokenError(`Failed to refresh OIDC token: ${res.statusText}`);
+			throw new VercelOidcTokenError(
+				`Failed to refresh OIDC token: ${res.status} ${res.statusText}`.trim(),
+			);
 		}
 
 		const tokenRes = (await res.json()) as { token?: string };
@@ -184,17 +237,7 @@ async function getVercelOidcToken(
 
 async function selectTeam(authToken: string): Promise<Team | null> {
 	try {
-		const response = await fetch("https://api.vercel.com/v2/teams", {
-			headers: {
-				Authorization: `Bearer ${authToken}`,
-			},
-		});
-
-		if (!response.ok) {
-			throw new Error(`Failed to fetch teams: ${response.statusText}`);
-		}
-
-		const data = (await response.json()) as TeamsResponse;
+		const teams = await fetchAllPages<Team>(authToken, vercelApiUrl("/v2/teams"), "teams");
 
 		// Always include "Personal Account" option at the top
 		const options: Array<{
@@ -210,7 +253,7 @@ async function selectTeam(authToken: string): Promise<Team | null> {
 		];
 
 		// Add team options
-		for (const team of data.teams) {
+		for (const team of teams) {
 			options.push({
 				label: team.name || team.slug,
 				description: `Team: ${team.slug}`,
@@ -242,29 +285,14 @@ async function selectProject(
 	team: Team | null,
 ): Promise<{ id: string; name: string }> {
 	try {
-		console.log("Loading projects...", team ? `for team ${team.slug}` : "for personal account");
-
-		const url = team
-			? `https://api.vercel.com/v10/projects?teamId=${team.id}`
-			: "https://api.vercel.com/v10/projects";
-
-		const response = await fetch(url, {
-			headers: {
-				Authorization: `Bearer ${authToken}`,
-			},
-		});
-
-		if (!response.ok) {
-			throw new Error(`Failed to fetch projects: ${response.statusText}`);
-		}
-
-		const data = (await response.json()) as ProjectsResponse;
-		console.log(
-			`Loaded ${data.projects.length} projects`,
-			data.projects.map((p) => p.name).join(", "),
+		const projects = await fetchAllPages<Project>(
+			authToken,
+			vercelApiUrl("/v10/projects", team?.id),
+			"projects",
 		);
+		logger.debug(`Loaded ${projects.length} projects`);
 
-		const options = data.projects.map((project) => ({
+		const options = projects.map((project) => ({
 			label: project.name,
 			description: `ID: ${project.id}`,
 			value: { id: project.id, name: project.name },
