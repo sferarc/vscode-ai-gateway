@@ -95,7 +95,7 @@
 		"@changesets/cli": "catalog:",
 		"@types/json-schema": "catalog:",
 		"@types/node": "catalog:",
-		"@types/vscode": "catalog:",
+		"@types/vscode": "1.137.0",
 		"@typescript/typescript6": "catalog:",
 		"@vscode/vsce": "catalog:",
 		"bunchee": "catalog:",
