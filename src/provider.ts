@@ -1,5 +1,15 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
-import { jsonSchema, type ModelMessage, streamText, type TextStreamPart, type ToolSet } from "ai";
+import {
+	type ImagePart,
+	jsonSchema,
+	type ModelMessage,
+	streamText,
+	type TextPart,
+	type TextStreamPart,
+	type ToolCallPart,
+	type ToolResultPart,
+	type ToolSet,
+} from "ai";
 import * as vscode from "vscode";
 import {
 	authentication,
@@ -381,105 +391,161 @@ export function convertMessages(messages: readonly LanguageModelChatMessage[]): 
 	return extractInstructions(result);
 }
 
+type ContentPart = TextPart | ImagePart | ToolCallPart;
+type ToolResultOutput = ToolResultPart["output"];
+type ToolResultContent = Extract<ToolResultOutput, { type: "content" }>["value"];
+
+/**
+ * Converts one VS Code message. Tool calls stay in a single assistant message alongside its text,
+ * and all tool results go in a single tool message, because OpenAI-style APIs require an assistant
+ * message with tool calls to be followed directly by the results for every one of them.
+ */
 export function convertSingleMessage(
 	msg: LanguageModelChatMessage,
 	toolNameMap: Record<string, string>,
 ): ModelMessage[] {
-	const results: ModelMessage[] = [];
 	const role = msg.role === LanguageModelChatMessageRole.User ? "user" : "assistant";
-	const contentParts: Array<{ type: string; text?: string; image?: string }> = [];
+	const parts: ContentPart[] = [];
+	const toolCalls: ToolCallPart[] = [];
+	const toolResults: ToolResultPart[] = [];
 
 	for (const part of msg.content) {
 		if (typeof part !== "object" || part === null) continue;
 
 		if (isTextPart(part)) {
-			contentParts.push({ type: "text", text: part.value });
+			parts.push({ type: "text", text: part.value });
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType.startsWith("image/")) {
 				const base64 = Buffer.from(part.data).toString("base64");
-				contentParts.push({ type: "image", image: `data:${part.mimeType};base64,${base64}` });
+				parts.push({ type: "image", image: `data:${part.mimeType};base64,${base64}` });
 			} else {
-				contentParts.push({ type: "text", text: new TextDecoder().decode(part.data) });
+				parts.push({ type: "text", text: new TextDecoder().decode(part.data) });
 			}
 		} else if (part instanceof LanguageModelToolCallPart) {
-			if (contentParts.length > 0) {
-				results.push(createMessage(role, contentParts));
-				contentParts.length = 0;
-			}
-			results.push({
-				role: "assistant",
-				content: [
-					{ type: "tool-call", toolName: part.name, toolCallId: part.callId, input: part.input },
-				],
-			});
+			const call: ToolCallPart = {
+				type: "tool-call",
+				toolName: part.name,
+				toolCallId: part.callId,
+				input: part.input,
+			};
+			if (role === "assistant") parts.push(call);
+			else toolCalls.push(call);
 		} else if (part instanceof LanguageModelToolResultPart) {
-			if (contentParts.length > 0) {
-				results.push(createMessage(role, contentParts));
-				contentParts.length = 0;
-			}
-			const texts = extractToolResultTexts(part);
-			if (texts.length > 0) {
-				const toolName = toolNameMap[part.callId] ?? "unknown_tool";
-				if (toolName === "unknown_tool") {
-					logger.warn(`Tool result references unknown callId: ${part.callId}`);
-				}
-				results.push({
-					role: "tool",
-					content: [
-						{
-							type: "tool-result",
-							toolCallId: part.callId,
-							toolName,
-							output: { type: "text", value: texts.join(" ") },
-						},
-					],
-				});
-			}
+			toolResults.push(convertToolResult(part, toolNameMap));
 		}
 	}
 
-	if (contentParts.length > 0) {
-		results.push(createMessage(role, contentParts));
-	}
+	const message = createMessage(role, parts);
+	const callMessage: ModelMessage[] =
+		toolCalls.length > 0 ? [{ role: "assistant", content: toolCalls }] : [];
+	const toolMessage: ModelMessage[] =
+		toolResults.length > 0 ? [{ role: "tool", content: toolResults }] : [];
 
-	if (results.length === 0) {
-		results.push({ role, content: "" });
-	}
+	// Results answer calls made earlier, so they precede this message unless it makes the calls itself.
+	const results = parts.some((p) => p.type === "tool-call")
+		? [message, ...toolMessage]
+		: [...callMessage, ...toolMessage, message];
 
-	return results;
+	const valid = results.filter(isValidMessage);
+	return valid.length > 0 ? valid : [{ role, content: "" }];
 }
 
-function createMessage(
-	role: "user" | "assistant",
-	parts: Array<{ type: string; text?: string; image?: string }>,
-): ModelMessage {
-	const textOnly = parts.every((p) => p.type === "text");
-	if (textOnly) {
+function createMessage(role: "user" | "assistant", parts: ContentPart[]): ModelMessage {
+	if (parts.every((p) => p.type === "text")) {
 		return { role, content: parts.map((p) => p.text).join("") };
 	}
 
 	if (role === "user") {
-		return {
-			role: "user",
-			content: parts.map((p) =>
-				p.type === "text"
-					? { type: "text" as const, text: p.text ?? "" }
-					: { type: "image" as const, image: p.image ?? "" },
-			),
-		};
+		return { role, content: parts.filter((p) => p.type !== "tool-call") };
 	}
 
-	return { role, content: parts.map((p) => (p.type === "text" ? p.text : "[Image]")).join("") };
+	const content: Array<TextPart | ToolCallPart> = [];
+	for (const part of parts) {
+		const last = content.at(-1);
+		if (part.type === "tool-call") {
+			content.push(part);
+			continue;
+		}
+		const text = part.type === "text" ? part.text : "[Image]";
+		if (last?.type === "text") last.text += text;
+		else if (text.length > 0) content.push({ type: "text", text });
+	}
+
+	if (content.every((p) => p.type === "text")) {
+		return { role, content: content.map((p) => p.text).join("") };
+	}
+	return { role, content };
 }
 
 function isTextPart(part: object): part is { value: string } {
 	return "value" in part && typeof (part as { value: unknown }).value === "string";
 }
 
-function extractToolResultTexts(part: LanguageModelToolResultPart): string[] {
-	return part.content
-		.filter((p): p is { value: string } => typeof p === "object" && p !== null && "value" in p)
-		.map((p) => p.value);
+function convertToolResult(
+	part: LanguageModelToolResultPart,
+	toolNameMap: Record<string, string>,
+): ToolResultPart {
+	const toolName = toolNameMap[part.callId] ?? "unknown_tool";
+	if (toolName === "unknown_tool") {
+		logger.warn(`Tool result references unknown callId: ${part.callId}`);
+	}
+	return {
+		type: "tool-result",
+		toolCallId: part.callId,
+		toolName,
+		output: convertToolResultOutput(part.content),
+	};
+}
+
+/** Every result part yields some output, so a tool call is never left without a matching result. */
+function convertToolResultOutput(content: readonly unknown[]): ToolResultOutput {
+	const items: ToolResultContent = [];
+	const appendText = (text: string) => {
+		const last = items.at(-1);
+		if (last?.type === "text") last.text += text;
+		else items.push({ type: "text", text });
+	};
+
+	for (const part of content) {
+		if (typeof part !== "object" || part === null) {
+			appendText(UNSUPPORTED_TOOL_RESULT);
+		} else if (isTextPart(part)) {
+			appendText(part.value);
+		} else if (part instanceof LanguageModelDataPart) {
+			if (part.mimeType === CACHE_CONTROL_MIME_TYPE) continue;
+			if (part.mimeType.startsWith("image/")) {
+				items.push({
+					type: "file",
+					mediaType: part.mimeType,
+					data: { type: "data", data: part.data },
+				});
+			} else if (isTextualMimeType(part.mimeType)) {
+				appendText(new TextDecoder().decode(part.data));
+			} else {
+				appendText(UNSUPPORTED_TOOL_RESULT);
+			}
+		} else {
+			appendText(UNSUPPORTED_TOOL_RESULT);
+		}
+	}
+
+	if (items.every((item) => item.type === "text")) {
+		return { type: "text", value: items.map((item) => item.text).join("") };
+	}
+	return { type: "content", value: items };
+}
+
+const UNSUPPORTED_TOOL_RESULT = "[Unsupported tool result content]";
+/** VS Code marks prompt cache breakpoints with a data part of this type; it carries no content. */
+const CACHE_CONTROL_MIME_TYPE = "cache_control";
+
+function isTextualMimeType(mimeType: string): boolean {
+	return (
+		mimeType.startsWith("text/") ||
+		mimeType === "application/json" ||
+		mimeType.endsWith("+json") ||
+		mimeType === "application/xml"
+	);
 }
 
 function isValidMessage(msg: ModelMessage): boolean {
