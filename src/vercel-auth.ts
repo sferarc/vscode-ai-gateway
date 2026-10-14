@@ -48,38 +48,27 @@ class VercelOidcTokenError extends Error {
 	}
 }
 
-function getUserDataDir(): string | null {
+// Mirrors xdg-portable 7.3.0, which the Vercel CLI uses through xdg-app-paths to place com.vercel.cli.
+function getUserDataDir(): string {
 	if (process.env.XDG_DATA_HOME) {
 		return process.env.XDG_DATA_HOME;
 	}
 
 	switch (os.platform()) {
 		case "darwin":
-			return path.join(os.homedir(), "Library/Application Support");
-		case "linux":
-			return path.join(os.homedir(), ".local/share");
+			return path.join(os.homedir(), "Library", "Application Support");
 		case "win32":
-			return process.env.LOCALAPPDATA || null;
+			return path.join(
+				process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+				"xdg.data",
+			);
 		default:
-			return null;
+			return path.join(os.homedir(), ".local", "share");
 	}
-}
-
-function getVercelCliDataDir(): string | null {
-	const dataDir = getUserDataDir();
-	if (dataDir) {
-		return path.join(dataDir, "com.vercel.cli");
-	}
-	return null;
 }
 
 function getVercelCliToken(): string | null {
-	const dataDir = getVercelCliDataDir();
-	if (!dataDir) {
-		return null;
-	}
-
-	const tokenPath = path.join(dataDir, "auth.json");
+	const tokenPath = path.join(getUserDataDir(), "com.vercel.cli", "auth.json");
 	if (!fs.existsSync(tokenPath)) {
 		return null;
 	}
@@ -87,7 +76,7 @@ function getVercelCliToken(): string | null {
 	try {
 		const tokenData = fs.readFileSync(tokenPath, "utf8");
 		const authJson = JSON.parse(tokenData);
-		return authJson.token || null;
+		return typeof authJson?.token === "string" && authJson.token !== "" ? authJson.token : null;
 	} catch {
 		return null;
 	}

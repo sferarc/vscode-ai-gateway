@@ -12,7 +12,20 @@
 ## Methods
 
 - **API key.** Entered in an input box; it must start with `vck_` (`validateApiKey`). Used as the bearer token as is.
-- **Vercel OIDC.** Offered only when the Vercel CLI is logged in: `src/vercel-auth.ts` reads the CLI's `auth.json` from `com.vercel.cli` under the platform data directory (`XDG_DATA_HOME`, `~/Library/Application Support`, `~/.local/share` or `%LOCALAPPDATA%`). With that token it lets the user pick a team and project and requests a project OIDC token from `api.vercel.com/v1/projects/{id}/token`. The token is refreshed once it is within 15 minutes of expiry (`TOKEN_REFRESH_MARGIN`), on `getSessions` and `getActiveSession`; a failed refresh logs and keeps the old token.
+- **Vercel OIDC.** Offered only when the Vercel CLI is logged in: `src/vercel-auth.ts` reads `com.vercel.cli/auth.json` under the platform data directory and accepts only a non-empty string `token`. With that token it lets the user pick a team and project and requests a project OIDC token from `api.vercel.com/v1/projects/{id}/token`. The token is refreshed once it is within 15 minutes of expiry (`TOKEN_REFRESH_MARGIN`), on `getSessions` and `getActiveSession`; a failed refresh logs and keeps the old token.
+
+## Vercel CLI login location
+
+`getUserDataDir` mirrors the CLI's own resolution: `packages/cli-config/src/paths.ts` in vercel/vercel (`getGlobalPathConfig`, `XDGAppPaths('com.vercel.cli').dataDirs()`) through xdg-app-paths 5.1.0 and xdg-portable 7.3.0 (`src/lib/index.js`, pinned in the vercel/vercel lockfile), checked at vercel/vercel `c628be7`.
+
+| Platform | Data directory |
+| --- | --- |
+| Any, with `XDG_DATA_HOME` set | `$XDG_DATA_HOME` |
+| darwin | `~/Library/Application Support` |
+| win32 | `%APPDATA%\xdg.data`, or `~\AppData\Roaming\xdg.data` without `APPDATA` (not `%LOCALAPPDATA%`) |
+| linux and anything else | `~/.local/share` |
+
+Not mirrored: the CLI also falls back to an existing `XDG_DATA_DIRS` entry, `~/.now` or a legacy `now` data directory, honours `--global-config`, and can keep credentials in the OS keyring (`cred-storage.ts`) instead of `auth.json`. A login stored any of those ways is not detected.
 
 ## Accounts and the active session
 
@@ -26,4 +39,4 @@ The chat provider reads the active session straight from this provider through t
 
 ## Tests
 
-`src/auth.test.ts` (sessions, active session tracking, the manage flow, method options, accounts) and `src/vercel-auth.test.ts` (CLI detection, OIDC refresh), added largely in SferaDev/SferaDev#560.
+`src/auth.test.ts` (sessions, active session tracking, the manage flow, method options, accounts) and `src/vercel-auth.test.ts` (CLI detection and its per-platform paths, `auth.json` variants, the refresh margin boundary, OIDC refresh), added largely in SferaDev/SferaDev#560.
