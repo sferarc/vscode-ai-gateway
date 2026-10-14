@@ -46,6 +46,21 @@ interface SessionData {
 	};
 }
 
+function isStoredSession(value: unknown): value is SessionData {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+	const { id, accessToken, account } = value as Partial<Record<keyof SessionData, unknown>>;
+	return (
+		typeof id === "string" &&
+		typeof accessToken === "string" &&
+		typeof account === "object" &&
+		account !== null &&
+		typeof (account as { id?: unknown }).id === "string" &&
+		typeof (account as { label?: unknown }).label === "string"
+	);
+}
+
 export class VercelAIAuthenticationProvider implements AuthenticationProvider, Disposable {
 	private _sessionChangeEmitter =
 		new EventEmitter<AuthenticationProviderAuthenticationSessionsChangeEvent>();
@@ -238,20 +253,31 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			return [];
 		}
 
+		let parsed: unknown;
 		try {
-			const sessions = JSON.parse(stored) as SessionData[];
-			return sessions.map((session) => ({
-				...session,
-				method: session.method || "api-key",
-				// Migrate sessions stored before account ids were unique per session.
-				account: LEGACY_ACCOUNT_IDS.has(session.account.id)
-					? { ...session.account, id: session.id }
-					: session.account,
-			}));
+			parsed = JSON.parse(stored);
 		} catch {
+			// Unreadable JSON holds nothing recoverable; dropping it lets the user sign in again.
 			await this.context.secrets.delete(SESSIONS_SECRET_KEY);
 			return [];
 		}
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+
+		const sessions = parsed.filter(isStoredSession);
+		if (sessions.length < parsed.length) {
+			logger.warn(`Ignoring ${parsed.length - sessions.length} malformed stored session(s)`);
+		}
+		return sessions.map((session) => ({
+			...session,
+			scopes: Array.isArray(session.scopes) ? session.scopes : [],
+			method: session.method || "api-key",
+			// Migrate sessions stored before account ids were unique per session.
+			account: LEGACY_ACCOUNT_IDS.has(session.account.id)
+				? { ...session.account, id: session.id }
+				: session.account,
+		}));
 	}
 
 	async createSession(_scopes: readonly string[]): Promise<AuthenticationSession> {

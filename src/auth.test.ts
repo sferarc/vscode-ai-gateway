@@ -534,4 +534,78 @@ describe("VercelAIAuthenticationProvider", () => {
 			expect(await provider.getActiveSession()).toMatchObject({ id: "s2" });
 		});
 	});
+	describe("stored session parsing", () => {
+		it("keeps valid sessions when a sibling entry has no account", async () => {
+			const { account: _account, ...noAccount } = createSession("bad");
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1"), noAccount]));
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions.map((s) => s.id)).toEqual(["s1"]);
+			expect(ctx.secrets.delete).not.toHaveBeenCalled();
+		});
+
+		it("drops entries without a string id or access token", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([
+					{ ...createSession("s1"), id: undefined },
+					{ ...createSession("s2"), accessToken: 42 },
+					createSession("s3"),
+					null,
+					"x",
+				]),
+			);
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions.map((s) => s.id)).toEqual(["s3"]);
+			expect(ctx.secrets.delete).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			["null", "null"],
+			["an object", "{}"],
+			["a string", '"x"'],
+		])("returns no sessions when the blob parses to %s", async (_label, blob) => {
+			await ctx.secrets.store(SESSIONS_KEY, blob);
+
+			await expect(provider.getSessions()).resolves.toEqual([]);
+			await expect(provider.getActiveSession()).resolves.toBeNull();
+			expect(ctx.secrets.delete).not.toHaveBeenCalled();
+		});
+
+		it("still migrates legacy accounts and defaults the method next to a dropped entry", async () => {
+			const { method: _method, ...noMethod } = createSession("s2");
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([
+					{ ...createSession("s1"), account: { id: "vercel-ai-user", label: "Work" } },
+					noMethod,
+					{ ...createSession("bad"), account: null },
+				]),
+			);
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions.map((s) => s.id).sort()).toEqual(["s1", "s2"]);
+			expect(sessions.find((s) => s.id === "s1")?.account.id).toBe("s1");
+			await provider.removeSession("s1");
+			const stored = JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]");
+			expect(stored).toEqual([expect.objectContaining({ id: "s2", method: "api-key" })]);
+		});
+
+		it("keeps the other valid session when removing one next to a bad entry", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1"), { id: "bad" }, createSession("s2")]),
+			);
+
+			await provider.removeSession("s1");
+
+			const stored = JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]");
+			expect(stored.map((s: { id: string }) => s.id)).toEqual(["s2"]);
+			expect(ctx.secrets.delete).not.toHaveBeenCalled();
+		});
+	});
 });
