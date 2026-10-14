@@ -50,6 +50,7 @@ interface ModelsResponse {
 }
 
 interface ModelsCache {
+	apiKey: string;
 	fetchedAt: number;
 	models: LanguageModelChatInformation[];
 }
@@ -94,26 +95,42 @@ function detectReasoning(model: Model, tags: string[]): boolean {
 
 export class ModelsClient {
 	private modelsCache?: ModelsCache;
-	private inflightFetch?: Promise<LanguageModelChatInformation[]>;
+	private inflightFetch?: { apiKey: string; promise: Promise<LanguageModelChatInformation[]> };
+	private generation = 0;
 
 	invalidateCache(): void {
 		this.modelsCache = undefined;
+		this.inflightFetch = undefined;
+		this.generation++;
 	}
 
 	async getModels(apiKey: string): Promise<LanguageModelChatInformation[]> {
-		if (this.isModelsCacheFresh() && this.modelsCache) {
-			return this.modelsCache.models;
+		const cache = this.modelsCache;
+		if (cache && cache.apiKey === apiKey && Date.now() - cache.fetchedAt < MODELS_CACHE_TTL_MS) {
+			return cache.models;
 		}
 
-		if (this.inflightFetch) {
-			return this.inflightFetch;
+		if (this.inflightFetch?.apiKey === apiKey) {
+			return this.inflightFetch.promise;
 		}
 
-		this.inflightFetch = this.fetchAndTransform(apiKey).finally(() => {
-			this.inflightFetch = undefined;
-		});
+		const generation = this.generation;
+		const promise = this.fetchAndTransform(apiKey)
+			.then((models) => {
+				// A fetch that outlived invalidateCache belongs to the previous session.
+				if (generation === this.generation) {
+					this.modelsCache = { apiKey, fetchedAt: Date.now(), models };
+				}
+				return models;
+			})
+			.finally(() => {
+				if (this.inflightFetch?.promise === promise) {
+					this.inflightFetch = undefined;
+				}
+			});
+		this.inflightFetch = { apiKey, promise };
 
-		return this.inflightFetch;
+		return promise;
 	}
 
 	private async fetchAndTransform(apiKey: string): Promise<LanguageModelChatInformation[]> {
@@ -127,7 +144,6 @@ export class ModelsClient {
 		const models = this.transformToVSCodeModels(data);
 
 		logger.info(`Models fetched in ${Date.now() - startTime}ms, count: ${models.length}`);
-		this.modelsCache = { fetchedAt: Date.now(), models };
 		return models;
 	}
 
@@ -142,12 +158,6 @@ export class ModelsClient {
 
 		const { data } = (await response.json()) as ModelsResponse;
 		return data;
-	}
-
-	private isModelsCacheFresh(): boolean {
-		return Boolean(
-			this.modelsCache && Date.now() - this.modelsCache.fetchedAt < MODELS_CACHE_TTL_MS,
-		);
 	}
 
 	private transformToVSCodeModels(data: Model[]): LanguageModelChatInformation[] {

@@ -9,6 +9,7 @@ vi.mock("vscode", () => ({
 	},
 }));
 
+import { MODELS_CACHE_TTL_MS } from "./constants";
 import { type Model, ModelsClient } from "./models";
 
 describe("ModelsClient", () => {
@@ -215,5 +216,126 @@ describe("ModelsClient", () => {
 
 			expect(capabilities).toMatchObject({ webSearch: true });
 		});
+	});
+});
+
+describe("models cache", () => {
+	interface PendingFetch {
+		authorization: string | undefined;
+		resolve: (modelIds: string[]) => void;
+		reject: (status: number) => void;
+	}
+
+	let originalFetch: typeof fetch;
+	let pending: PendingFetch[];
+
+	function chatModel(id: string): Model {
+		return {
+			id,
+			object: "model",
+			created: 0,
+			owned_by: "a",
+			name: id,
+			description: "",
+			context_window: 1000,
+			max_tokens: 100,
+			type: "chat",
+			pricing: { input: "0", output: "0" },
+		};
+	}
+
+	function ids(models: { id: string }[]): string[] {
+		return models.map((model) => model.id);
+	}
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		originalFetch = globalThis.fetch;
+		pending = [];
+		globalThis.fetch = vi.fn(
+			(_url: string, init?: { headers?: Record<string, string> }) =>
+				new Promise((resolve) => {
+					pending.push({
+						authorization: init?.headers?.Authorization,
+						resolve: (modelIds) =>
+							resolve({ ok: true, json: async () => ({ data: modelIds.map(chatModel) }) }),
+						reject: (status) => resolve({ ok: false, status, statusText: "Error" }),
+					});
+				}),
+		) as unknown as typeof fetch;
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		vi.useRealTimers();
+	});
+
+	it("shares one fetch between concurrent calls with the same key", async () => {
+		const client = new ModelsClient();
+		const first = client.getModels("keyA");
+		const second = client.getModels("keyA");
+
+		expect(pending).toHaveLength(1);
+		pending[0].resolve(["a:one"]);
+
+		expect(ids(await first)).toEqual(["a:one"]);
+		expect(ids(await second)).toEqual(["a:one"]);
+	});
+
+	it("serves a fresh cache without fetching and refetches once it expires", async () => {
+		const client = new ModelsClient();
+		const initial = client.getModels("keyA");
+		pending[0].resolve(["a:one"]);
+		await initial;
+
+		vi.advanceTimersByTime(MODELS_CACHE_TTL_MS - 1);
+		expect(ids(await client.getModels("keyA"))).toEqual(["a:one"]);
+		expect(pending).toHaveLength(1);
+
+		vi.advanceTimersByTime(1);
+		const refetch = client.getModels("keyA");
+		expect(pending).toHaveLength(2);
+		pending[1].resolve(["a:two"]);
+		expect(ids(await refetch)).toEqual(["a:two"]);
+	});
+
+	it("does not cache a failed fetch", async () => {
+		const client = new ModelsClient();
+		const failed = client.getModels("keyA");
+		pending[0].reject(500);
+		await expect(failed).rejects.toThrow("HTTP 500");
+
+		const retry = client.getModels("keyA");
+		expect(pending).toHaveLength(2);
+		pending[1].resolve(["a:one"]);
+		expect(ids(await retry)).toEqual(["a:one"]);
+	});
+
+	it("does not let a fetch started before invalidateCache populate the cache", async () => {
+		const client = new ModelsClient();
+		const stale = client.getModels("keyA");
+
+		client.invalidateCache();
+		pending[0].resolve(["old:model"]);
+		await stale;
+
+		const fresh = client.getModels("keyA");
+		expect(pending).toHaveLength(2);
+		pending[1].resolve(["new:model"]);
+		expect(ids(await fresh)).toEqual(["new:model"]);
+	});
+
+	it("does not hand one key's in-flight fetch to a call with another key", async () => {
+		const client = new ModelsClient();
+		const forA = client.getModels("keyA");
+		const forB = client.getModels("keyB");
+
+		expect(pending).toHaveLength(2);
+		expect(pending[1].authorization).toBe("Bearer keyB");
+		pending[1].resolve(["b:model"]);
+		pending[0].resolve(["a:model"]);
+
+		expect(ids(await forB)).toEqual(["b:model"]);
+		expect(ids(await forA)).toEqual(["a:model"]);
 	});
 });
