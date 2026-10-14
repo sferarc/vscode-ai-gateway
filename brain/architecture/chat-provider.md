@@ -10,7 +10,7 @@
 - `maxInputTokens` and `maxOutputTokens` come from `context_window` and `max_tokens`.
 - Image input, tool calling and reasoning are read from the gateway's structured fields, falling back to tags only when a field is absent (SferaDev/SferaDev#559). Web search is tags only, since no field exists.
 
-The list is cached for 5 minutes (`MODELS_CACHE_TTL_MS`, `src/constants.ts`) and concurrent fetches share one request. Any session change on the `vercelAiGateway` provider clears the cache and fires `onDidChangeLanguageModelChatInformation` (SferaDev/SferaDev#344).
+The list is cached for 5 minutes (`MODELS_CACHE_TTL_MS`, `src/constants.ts`). Both the cache and the in-flight request are keyed by the API key they were fetched with: concurrent calls with the same key share one request, and a call with a different key starts its own and never sees another key's list. A failed fetch is not cached. Any session change on the `vercelAiGateway` provider calls `invalidateCache` and fires `onDidChangeLanguageModelChatInformation` (SferaDev/SferaDev#344). `invalidateCache` drops the cache and the in-flight request and bumps a generation counter so a fetch started before the switch cannot write its result into the cache when it lands. The `models cache` tests in `src/models.test.ts` cover sharing, expiry, failures, invalidation during a fetch and a key change during a fetch.
 
 ## Chat requests
 

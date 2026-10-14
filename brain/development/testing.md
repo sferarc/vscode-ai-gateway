@@ -7,7 +7,7 @@ Vitest, no config file: `pnpm test` runs every `src/**/*.test.ts`. On 2026-10-08
 | `src/auth.test.ts` | session storage, active session tracking, the manage flow, which methods are offered, per-session accounts |
 | `src/vercel-auth.test.ts` | Vercel CLI detection and OIDC refresh |
 | `src/provider.test.ts` | session change refresh, active session lookup, streaming, chunk handling, message conversion, instruction extraction |
-| `src/models.test.ts` | the models client and capability detection |
+| `src/models.test.ts` | the models client, its cache and in-flight sharing, and capability detection |
 | `src/models/identity.test.ts` | `parseModelIdentity` |
 | `src/logger.test.ts` | the logger and `extractErrorMessage` |
 
