@@ -8,6 +8,7 @@
 - Every read-modify-write of that array runs through `withLock`, a promise chain, and re-reads the array inside it, so concurrent `getSessions`, `getActiveSession`, add and remove calls cannot drop or resurrect a session. Concurrent refreshes of one OIDC session share a single request (`inflightRefresh`).
 - The active session id is in `globalState` under `vercelAiGateway.activeSession`. It is an id, not a secret.
 - Nothing is written to disk by the extension itself.
+- Reading the array validates each entry: one without a string `id`, a string `accessToken` or an `account` with string `id` and `label` is dropped with a warning that gives only the count, and its valid siblings are kept. The next write (add, remove, token refresh) persists only the valid entries. A blob that parses to something other than an array reads as no sessions and is left in place; only JSON that does not parse at all deletes the secret. Tests: `stored session parsing` in `src/auth.test.ts` ("keeps valid sessions when a sibling entry has no account", "drops entries without a string id or access token", "returns no sessions when the blob parses to %s", "keeps the other valid session when removing one next to a bad entry") and "handles corrupted session data gracefully".
 
 ## Methods
 
