@@ -211,6 +211,47 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(options.messages).toEqual([{ role: "user", content: "Hello" }]);
 	});
 
+	async function requestOptions(model: object, modelOptions?: Record<string, unknown>) {
+		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+
+		const { streamText } = await import("ai");
+		const streamTextMock = vi.mocked(streamText);
+		streamTextMock.mockClear();
+		streamTextMock.mockReturnValue({ fullStream: [{ type: "text-delta", text: "hi" }] } as never);
+
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o", ...model } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{ modelOptions } as never,
+			{ report: vi.fn() },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+		return streamTextMock.mock.calls[0][0];
+	}
+
+	it("leaves temperature to the provider and uses the model's output limit by default", async () => {
+		const options = await requestOptions({ maxOutputTokens: 32000 });
+		expect(options.temperature).toBeUndefined();
+		expect(options.maxOutputTokens).toBe(32000);
+	});
+
+	it("sends no output limit when the model does not report one", async () => {
+		expect((await requestOptions({ maxOutputTokens: 0 })).maxOutputTokens).toBeUndefined();
+		expect((await requestOptions({})).maxOutputTokens).toBeUndefined();
+	});
+
+	it("lets the caller's model options override the defaults", async () => {
+		const options = await requestOptions(
+			{ maxOutputTokens: 32000 },
+			{ temperature: 0.2, maxOutputTokens: 1000 },
+		);
+		expect(options.temperature).toBe(0.2);
+		expect(options.maxOutputTokens).toBe(1000);
+	});
+
 	async function respondWithTimeout(isCancellationRequested: boolean, textBeforeStall?: string) {
 		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
 
@@ -301,6 +342,20 @@ describe("handleStreamChunk", () => {
 			"tool-output-denied",
 		];
 		for (const type of ignored) provider.handleStreamChunk({ type } as any, progress);
+		expect(progress.report).not.toHaveBeenCalled();
+	});
+
+	it("notes when the answer stopped at the output limit", () => {
+		const provider = createProvider();
+		const progress = { report: vi.fn() };
+		expect(
+			provider.handleStreamChunk({ type: "finish", finishReason: "length" } as any, progress),
+		).toBe(true);
+		expect(progress.report).toHaveBeenCalledTimes(1);
+		expect(progress.report.mock.calls[0][0].value).toContain("output token limit");
+
+		progress.report.mockClear();
+		provider.handleStreamChunk({ type: "finish", finishReason: "stop" } as any, progress);
 		expect(progress.report).not.toHaveBeenCalled();
 	});
 

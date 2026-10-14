@@ -14,13 +14,13 @@ The list is cached for 5 minutes (`MODELS_CACHE_TTL_MS`, `src/constants.ts`) and
 
 ## Chat requests
 
-`provideLanguageModelChatResponse` builds an AI SDK gateway provider (`createGatewayProvider` from `@ai-sdk/gateway`) with the session's token and `baseURL` `{endpoint}/v1/ai`, then streams with `streamText` from `ai`. Defaults when VS Code passes none: temperature `0.7`, `maxOutputTokens` `4096`. The request timeout is the `timeout` setting ([[configuration]]). Cancellation aborts the stream through an `AbortController`.
+`provideLanguageModelChatResponse` builds an AI SDK gateway provider (`createGatewayProvider` from `@ai-sdk/gateway`) with the session's token and `baseURL` `{endpoint}/v1/ai`, then streams with `streamText` from `ai`. `modelOptions.temperature` and `modelOptions.maxOutputTokens` are passed through when VS Code sets them. Otherwise temperature is left to the provider, and `maxOutputTokens` is the model's own `maxOutputTokens` when positive and unset when not. The request timeout is the `timeout` setting ([[configuration]]). Cancellation aborts the stream through an `AbortController`.
 
 `convertMessages` splits VS Code's messages into `messages` and `instructions`. VS Code sends its system prompt as assistant messages before the first user message; those go to the `instructions` option because the AI SDK rejects `system` messages inside `messages` ([[decisions/2026-08-09-system-prompt-as-instructions]]).
 
 Each VS Code message becomes at most one assistant message and one tool message. An assistant message keeps its text and every tool call in their original order, and all tool results in a message share one `tool` message, since OpenAI-style APIs reject an assistant message with tool calls that is not followed directly by the results for each call. Tool results precede any user text sent alongside them. Every tool result part produces a result so no call is left without one: text and JSON or other textual data parts become text, joined with no separator; image data parts become `file` content; anything else becomes the placeholder `[Unsupported tool result content]`. `cache_control` data parts are skipped.
 
-Errors are reported into the chat as a `**Error:**` text part rather than thrown; a stream that ends with no content reports "No response received from model."
+Errors are reported into the chat as a `**Error:**` text part rather than thrown; a stream that ends with no content reports "No response received from model." A `finish` part with reason `length` adds a note that the answer was cut off at the model's output token limit.
 
 ## Token counting
 

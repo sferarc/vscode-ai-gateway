@@ -39,9 +39,16 @@ type StreamChunk = TextStreamPart<ToolSet>;
 
 const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
+const OUTPUT_LIMIT_NOTE =
+	"\n\n*The answer was cut off because it reached the model's output token limit.*";
+
 /** The part of an authentication session the chat provider needs to talk to the gateway. */
 interface ActiveSession {
 	accessToken: string;
+}
+
+function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | undefined {
+	return model.maxOutputTokens > 0 ? model.maxOutputTokens : undefined;
 }
 
 export function isValidMimeType(mimeType: string): boolean {
@@ -126,8 +133,8 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				messages,
 				instructions,
 				toolChoice,
-				temperature: options.modelOptions?.temperature ?? 0.7,
-				maxOutputTokens: options.modelOptions?.maxOutputTokens ?? 4096,
+				temperature: options.modelOptions?.temperature,
+				maxOutputTokens: options.modelOptions?.maxOutputTokens ?? defaultMaxOutputTokens(model),
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -288,9 +295,14 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return true;
 			}
 
+			case "finish": {
+				if (chunk.finishReason !== "length") return false;
+				progress.report(new LanguageModelTextPart(OUTPUT_LIMIT_NOTE));
+				return true;
+			}
+
 			// Lifecycle events — no content to emit
 			case "start":
-			case "finish":
 			case "start-step":
 			case "finish-step":
 			case "abort":
