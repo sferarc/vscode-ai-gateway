@@ -5,7 +5,7 @@
 ## Storage
 
 - All sessions are one JSON array in VS Code `SecretStorage` under `vercelAiGateway.sessions` (`context.secrets`).
-- Every read-modify-write of that array runs through `withLock`, a promise chain, and re-reads the array inside it, so concurrent `getSessions`, `getActiveSession`, add and remove calls cannot drop or resurrect a session. Concurrent refreshes of one OIDC session share a single request (`inflightRefresh`).
+- Every read-modify-write of that array runs through `withLock`, a promise chain, and re-reads the array inside it, so concurrent `getSessions`, `getActiveSession`, add and remove calls cannot drop or resurrect a session. Concurrent refreshes of one OIDC session share a single request (`inflightRefresh`) (#10).
 - The active session id is in `globalState` under `vercelAiGateway.activeSession`. It is an id, not a secret.
 - Nothing is written to disk by the extension itself.
 - Reading the array validates each entry: one without a string `id`, a string `accessToken` or an `account` with string `id` and `label` is dropped with a warning that gives only the count, and its valid siblings are kept. The next write (add, remove, token refresh) persists only the valid entries. A blob that parses to something other than an array reads as no sessions and is left in place; only JSON that does not parse at all deletes the secret. Tests: `stored session parsing` in `src/auth.test.ts` ("keeps valid sessions when a sibling entry has no account", "drops entries without a string id or access token", "returns no sessions when the blob parses to %s", "keeps the other valid session when removing one next to a bad entry") and "handles corrupted session data gracefully".
@@ -13,7 +13,21 @@
 ## Methods
 
 - **API key.** Entered in an input box; it must start with `vck_` (`validateApiKey`). Used as the bearer token as is.
-- **Vercel OIDC.** Offered only when the Vercel CLI is logged in: `src/vercel-auth.ts` reads `com.vercel.cli/auth.json` under the platform data directory and accepts only a non-empty string `token`. With that token it lets the user pick a team and project and requests a project OIDC token from `api.vercel.com/v1/projects/{id}/token`. The token is refreshed once it is within 15 minutes of expiry (`TOKEN_REFRESH_MARGIN`), on `getSessions` and `getActiveSession`; a failed refresh logs and keeps the old token.
+- **Vercel OIDC.** Offered only when the Vercel CLI is logged in: `src/vercel-auth.ts` reads `com.vercel.cli/auth.json` under the platform data directory and accepts only a non-empty string `token`. With that token it lets the user pick a team (or "Personal Account") and then a project, and requests a project OIDC token with a `POST` to `api.vercel.com/v1/projects/{id}/token`. The token is refreshed once it is within 15 minutes of expiry (`TOKEN_REFRESH_MARGIN`), on `getSessions` and `getActiveSession`; a failed refresh logs and keeps the old token.
+  - Teams (`/v2/teams`) and projects (`/v10/projects`, with `teamId` when a team was picked) load through `fetchAllPages` (#9): `limit=100` per request (`PAGE_LIMIT`), and each response's `pagination.next` is sent back as `until` until it is null. It stops after 20 pages (`MAX_PAGES`), logs `Stopped loading {teams|projects} after 20 pages` at warn and offers what it has, so an account with more than 2000 teams or projects sees a truncated picker.
+  - A non-OK response throws `Failed to fetch {teams|projects}: {status} {statusText}`; `selectTeam` and `selectProject` wrap it as `Failed to load teams: ...` or `Failed to load projects: ...`.
+  - Tests: `createInteractiveOidcSession` in `src/vercel-auth.test.ts` ("offers projects from every page and passes pagination.next as until", "offers teams from every page", "stops at the page cap when pagination.next never ends", "includes the HTTP status when statusText is empty").
+
+## Adding a session
+
+`createSession` in `src/auth.ts` is what VS Code calls on sign-in, and what the manage command's add action calls.
+
+1. `promptForAuthMethod` always offers "API Key" and offers "Vercel OIDC" only when `checkVercelCliAvailable()` is true. Dismissing the pick throws `Authentication method required`. Tests: `authentication method options` in `src/auth.test.ts`.
+2. API key: an input box asks for a session name (required, `validateSessionName`), then a second one asks for the key (masked, `vck_` prefix). Either one dismissed throws `Session name required` or `API key required`. The account label is the session name.
+3. Vercel OIDC: `createOidcSession` checks the CLI login again and, if it is gone, shows `ERROR_MESSAGES.VERCEL_CLI_NOT_LOGGED_IN` (`src/constants.ts`) and throws it. Otherwise it runs the team and project pickers above. The account label is `{projectName} ({teamName})`, or just `{projectName}` when there is no team name (a personal account).
+4. `storeSession` appends the session inside `withLock` and makes it the active session, then fires an `added` change event.
+
+Only "creates API key session" in `src/auth.test.ts` drives this end to end; the OIDC label and the active-session switch on add have no direct test (unknown whether covered indirectly).
 
 ## Vercel CLI login location
 
@@ -36,7 +50,7 @@ The chat provider reads the active session straight from this provider through t
 
 ## Manage command
 
-`vercelAiGateway.manage` opens a quick pick: add, switch (with more than one session), remove, cancel. With no sessions it goes straight to add.
+`vercelAiGateway.manage` opens a quick pick: add, switch ("Switch active session", only with more than one session), remove, cancel. With no sessions it goes straight to add.
 
 ## Tests
 
