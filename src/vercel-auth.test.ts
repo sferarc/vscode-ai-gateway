@@ -1,7 +1,9 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
+import { TOKEN_REFRESH_MARGIN } from "./constants";
 
 vi.mock("node:fs", () => ({ existsSync: vi.fn(), readFileSync: vi.fn() }));
 vi.mock("node:os", () => ({ platform: vi.fn(), homedir: vi.fn() }));
@@ -179,6 +181,154 @@ describe("vercel-auth", () => {
 			const { checkVercelCliAvailable } = await import("./vercel-auth");
 
 			expect(checkVercelCliAvailable()).toBe(false);
+		});
+	});
+
+	describe("Vercel CLI token location", () => {
+		const envKeys = ["XDG_DATA_HOME", "APPDATA", "LOCALAPPDATA"] as const;
+		let savedEnv: Record<string, string | undefined>;
+
+		beforeEach(() => {
+			savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+			for (const key of envKeys) {
+				delete process.env[key];
+			}
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ token: "t" }));
+		});
+
+		afterEach(() => {
+			for (const key of envKeys) {
+				if (savedEnv[key] === undefined) {
+					delete process.env[key];
+				} else {
+					process.env[key] = savedEnv[key];
+				}
+			}
+		});
+
+		async function expectAuthJsonAt(expected: string) {
+			const { checkVercelCliAvailable } = await import("./vercel-auth");
+			expect(checkVercelCliAvailable()).toBe(true);
+			expect(fs.existsSync).toHaveBeenCalledWith(expected);
+			expect(fs.readFileSync).toHaveBeenCalledWith(expected, "utf8");
+		}
+
+		it.each(["darwin", "linux", "win32"] as const)("uses XDG_DATA_HOME on %s", async (platform) => {
+			vi.mocked(os.platform).mockReturnValue(platform);
+			process.env.XDG_DATA_HOME = "/xdg/data";
+			process.env.APPDATA = "C:\\Users\\test\\AppData\\Roaming";
+			await expectAuthJsonAt(path.join("/xdg/data", "com.vercel.cli", "auth.json"));
+		});
+
+		it("uses Application Support on darwin", async () => {
+			await expectAuthJsonAt(
+				path.join("/Users/test", "Library", "Application Support", "com.vercel.cli", "auth.json"),
+			);
+		});
+
+		it("uses ~/.local/share on linux", async () => {
+			vi.mocked(os.platform).mockReturnValue("linux");
+			vi.mocked(os.homedir).mockReturnValue("/home/test");
+			await expectAuthJsonAt(
+				path.join("/home/test", ".local", "share", "com.vercel.cli", "auth.json"),
+			);
+		});
+
+		it("uses APPDATA\\xdg.data on win32, not LOCALAPPDATA", async () => {
+			vi.mocked(os.platform).mockReturnValue("win32");
+			process.env.APPDATA = "C:\\Users\\test\\AppData\\Roaming";
+			process.env.LOCALAPPDATA = "C:\\Users\\test\\AppData\\Local";
+			await expectAuthJsonAt(
+				path.join("C:\\Users\\test\\AppData\\Roaming", "xdg.data", "com.vercel.cli", "auth.json"),
+			);
+		});
+
+		it("falls back to AppData/Roaming under the home directory on win32 without APPDATA", async () => {
+			vi.mocked(os.platform).mockReturnValue("win32");
+			vi.mocked(os.homedir).mockReturnValue("C:\\Users\\test");
+			await expectAuthJsonAt(
+				path.join(
+					"C:\\Users\\test",
+					"AppData",
+					"Roaming",
+					"xdg.data",
+					"com.vercel.cli",
+					"auth.json",
+				),
+			);
+		});
+
+		it("uses the linux layout on other platforms such as freebsd", async () => {
+			vi.mocked(os.platform).mockReturnValue("freebsd");
+			vi.mocked(os.homedir).mockReturnValue("/home/test");
+			await expectAuthJsonAt(
+				path.join("/home/test", ".local", "share", "com.vercel.cli", "auth.json"),
+			);
+		});
+
+		it.each([
+			["an empty token", { token: "" }],
+			["a numeric token", { token: 123 }],
+			["no token", {}],
+			["null", null],
+		])("reports the CLI as unavailable for auth.json with %s", async (_label, authJson) => {
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(authJson));
+			const { checkVercelCliAvailable } = await import("./vercel-auth");
+			expect(checkVercelCliAvailable()).toBe(false);
+		});
+
+		it("does not send a numeric auth.json token as the bearer token", async () => {
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ token: 123 }));
+			globalThis.fetch = vi.fn();
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			await expect(
+				refreshOidcToken({ token: "old", expiresAt: 0, projectId: "p1", projectName: "P" }),
+			).rejects.toThrow("Vercel CLI not logged in");
+			expect(globalThis.fetch).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("refresh margin", () => {
+		const now = new Date("2026-01-01T00:00:00Z").getTime();
+		const storedToken = { token: "old", projectId: "p1", projectName: "P" };
+
+		beforeEach(() => {
+			vi.useFakeTimers();
+			vi.setSystemTime(now);
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ token: "cli" }));
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: () => Promise.resolve({ token: createJwt({ exp: now / 1000 + 3600 }) }),
+			});
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("keeps a token that expires exactly TOKEN_REFRESH_MARGIN from now", async () => {
+			const { refreshOidcToken } = await import("./vercel-auth");
+			const result = await refreshOidcToken({
+				...storedToken,
+				expiresAt: now + TOKEN_REFRESH_MARGIN,
+			});
+			expect(globalThis.fetch).not.toHaveBeenCalled();
+			expect(result.token).toBe("old");
+		});
+
+		it("refreshes a token that expires one millisecond inside the margin", async () => {
+			const { refreshOidcToken } = await import("./vercel-auth");
+			await refreshOidcToken({ ...storedToken, expiresAt: now + TOKEN_REFRESH_MARGIN - 1 });
+			expect(globalThis.fetch).toHaveBeenCalledOnce();
+		});
+
+		it("refreshes a token that has already expired", async () => {
+			const { refreshOidcToken } = await import("./vercel-auth");
+			await refreshOidcToken({ ...storedToken, expiresAt: now - 1 });
+			expect(globalThis.fetch).toHaveBeenCalledOnce();
 		});
 	});
 
