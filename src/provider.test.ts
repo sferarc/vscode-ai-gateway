@@ -398,6 +398,125 @@ describe("convertMessages", () => {
 	});
 });
 
+describe("tool message conversion", () => {
+	const {
+		MockLanguageModelTextPart,
+		MockLanguageModelToolCallPart,
+		MockLanguageModelToolResultPart,
+	} = hoisted;
+	const { MockLanguageModelDataPart } = hoisted;
+
+	function message(role: 1 | 2, content: unknown[]) {
+		return { role, content } as unknown as LanguageModelChatMessage;
+	}
+
+	function toolResultOutput(content: unknown[]) {
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Run it")]),
+			message(2, [new MockLanguageModelToolCallPart("c1", "readFile", {})]),
+			message(1, [new MockLanguageModelToolResultPart("c1", content)]),
+		]);
+		const tool = messages.find((m) => m.role === "tool");
+		expect(tool).toBeDefined();
+		return (tool?.content as any)?.[0]?.output;
+	}
+
+	it("serialises a JSON data part tool result instead of dropping it", () => {
+		const output = toolResultOutput([MockLanguageModelDataPart.json({ ok: true, items: [1, 2] })]);
+
+		expect(output).toEqual({ type: "text", value: '{"ok":true,"items":[1,2]}' });
+	});
+
+	it("sends an image data part tool result as file content", () => {
+		const bytes = new Uint8Array([137, 80, 78, 71]);
+		const output = toolResultOutput([
+			new MockLanguageModelTextPart("Screenshot:"),
+			MockLanguageModelDataPart.image(bytes, "image/png"),
+		]);
+
+		expect(output).toEqual({
+			type: "content",
+			value: [
+				{ type: "text", text: "Screenshot:" },
+				{ type: "file", mediaType: "image/png", data: { type: "data", data: bytes } },
+			],
+		});
+	});
+
+	it("emits a placeholder result for content it cannot convert", () => {
+		const output = toolResultOutput([{ value: { node: "prompt-tsx" } }]);
+
+		expect(output).toEqual({ type: "text", value: "[Unsupported tool result content]" });
+	});
+
+	it("joins text parts of a tool result without inserting separators", () => {
+		const output = toolResultOutput([
+			new MockLanguageModelTextPart("con"),
+			new MockLanguageModelTextPart("tent"),
+		]);
+
+		expect(output).toEqual({ type: "text", value: "content" });
+	});
+
+	it("groups parallel tool calls into one assistant message followed by one tool message", () => {
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Check both files")]),
+			message(2, [
+				new MockLanguageModelTextPart("Reading them now."),
+				new MockLanguageModelToolCallPart("c1", "readFile", { path: "a" }),
+				new MockLanguageModelToolCallPart("c2", "readFile", { path: "b" }),
+			]),
+			message(1, [
+				new MockLanguageModelToolResultPart("c1", [new MockLanguageModelTextPart("A")]),
+				new MockLanguageModelToolResultPart("c2", [new MockLanguageModelTextPart("B")]),
+			]),
+		]);
+
+		expect(messages).toEqual([
+			{ role: "user", content: "Check both files" },
+			{
+				role: "assistant",
+				content: [
+					{ type: "text", text: "Reading them now." },
+					{ type: "tool-call", toolCallId: "c1", toolName: "readFile", input: { path: "a" } },
+					{ type: "tool-call", toolCallId: "c2", toolName: "readFile", input: { path: "b" } },
+				],
+			},
+			{
+				role: "tool",
+				content: [
+					{
+						type: "tool-result",
+						toolCallId: "c1",
+						toolName: "readFile",
+						output: { type: "text", value: "A" },
+					},
+					{
+						type: "tool-result",
+						toolCallId: "c2",
+						toolName: "readFile",
+						output: { type: "text", value: "B" },
+					},
+				],
+			},
+		]);
+	});
+
+	it("keeps user text that accompanies tool results after the tool message", () => {
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Go")]),
+			message(2, [new MockLanguageModelToolCallPart("c1", "run", {})]),
+			message(1, [
+				new MockLanguageModelToolResultPart("c1", [new MockLanguageModelTextPart("done")]),
+				new MockLanguageModelTextPart("Now summarise"),
+			]),
+		]);
+
+		expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "tool", "user"]);
+		expect(messages[3]).toEqual({ role: "user", content: "Now summarise" });
+	});
+});
+
 describe("instruction extraction", () => {
 	function textMessage(role: 1 | 2, text: string) {
 		return {
