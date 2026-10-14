@@ -31,9 +31,9 @@ import {
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
 import { getConfig } from "./config";
-import { ERROR_MESSAGES } from "./constants";
+import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { extractErrorMessage, logger } from "./logger";
-import { ModelsClient } from "./models";
+import { ModelsClient, ModelsFetchError } from "./models";
 
 type StreamChunk = TextStreamPart<ToolSet>;
 
@@ -94,7 +94,29 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			return models;
 		} catch (error) {
 			logger.error(ERROR_MESSAGES.MODELS_FETCH_FAILED, error);
+			if (!options.silent) {
+				this.showModelsFetchError(error).catch((notifyError: unknown) =>
+					logger.error("Failed to show the model list error", notifyError),
+				);
+			}
 			return [];
+		}
+	}
+
+	private async showModelsFetchError(error: unknown): Promise<void> {
+		const showLogs = "Show Logs";
+		const manageAuth = "Manage Authentication";
+		const status = error instanceof ModelsFetchError ? error.status : undefined;
+		const actions = status === 401 || status === 403 ? [manageAuth, showLogs] : [showLogs];
+
+		const choice = await window.showErrorMessage(
+			`${ERROR_MESSAGES.MODELS_FETCH_FAILED}: ${extractErrorMessage(error)}`,
+			...actions,
+		);
+		if (choice === showLogs) {
+			logger.show();
+		} else if (choice === manageAuth) {
+			await vscode.commands.executeCommand(`${EXTENSION_ID}.manage`);
 		}
 	}
 
