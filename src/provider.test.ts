@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelChatMessage } from "vscode";
+import { ERROR_MESSAGES } from "./constants";
 import {
 	convertMessages,
 	convertSingleMessage,
@@ -176,6 +177,213 @@ describe("active session", () => {
 
 		expect(getSession).toHaveBeenCalledWith("vercelAiGateway", [], { createIfNone: true });
 		expect(getModels).toHaveBeenCalledWith("created");
+	});
+	describe("sign-in fallback", () => {
+		const TOKEN = "tok_secret_value";
+
+		async function setup(getActiveSession: () => Promise<{ accessToken: string } | null>) {
+			hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+			const vscode = await import("vscode");
+			const getSession = vi.mocked(vscode.authentication.getSession);
+			getSession.mockReset();
+			const showErrorMessage = vi.mocked(vscode.window.showErrorMessage);
+			showErrorMessage.mockClear();
+			const { createGatewayProvider } = await import("@ai-sdk/gateway");
+			const gateway = vi.mocked(createGatewayProvider);
+			gateway.mockClear();
+			const { streamText } = await import("ai");
+			const stream = vi.mocked(streamText);
+			stream.mockClear();
+			const { logger } = await import("./logger");
+			const logs = (["error", "warn", "info", "debug"] as const).map((level) =>
+				vi
+					.spyOn(logger, level)
+					.mockClear()
+					.mockImplementation(() => {}),
+			);
+			const provider = new VercelAIChatModelProvider(getActiveSession);
+			const getModels = vi.spyOn(
+				(provider as unknown as { modelsClient: { getModels: (key: string) => unknown } })
+					.modelsClient,
+				"getModels",
+			);
+			return {
+				provider,
+				getSession,
+				showErrorMessage,
+				gateway,
+				stream,
+				getModels,
+				logged: () => logs.flatMap((spy) => spy.mock.calls),
+				errorLog: logs[0],
+			};
+		}
+
+		function expectNoTokenLogged(calls: unknown[][]) {
+			for (const args of calls) {
+				for (const arg of args) {
+					const text = arg instanceof Error ? `${arg.message} ${arg.stack}` : String(arg);
+					expect(text).not.toContain(TOKEN);
+					expect(JSON.stringify(arg) ?? "").not.toContain(TOKEN);
+				}
+			}
+		}
+
+		async function chat(provider: VercelAIChatModelProvider) {
+			const report = vi.fn();
+			await provider.provideLanguageModelChatResponse(
+				{ id: "openai/gpt-4o" } as never,
+				[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+				{} as never,
+				{ report },
+				{
+					isCancellationRequested: false,
+					onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })),
+				} as never,
+			);
+			return report.mock.calls.map(([part]) => (part as { value: string }).value).join("");
+		}
+
+		const secretStorageFailure = () => Promise.reject(new Error("SecretStorage unavailable"));
+
+		it("returns no models and stays quiet when reading the session fails silently", async () => {
+			const t = await setup(secretStorageFailure);
+
+			const models = await t.provider.provideLanguageModelChatInformation(
+				{ silent: true },
+				{} as never,
+			);
+
+			expect(models).toEqual([]);
+			expect(t.getModels).not.toHaveBeenCalled();
+			expect(t.getSession).not.toHaveBeenCalled();
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+			expect(t.errorLog).not.toHaveBeenCalled();
+		});
+
+		it("logs and shows AUTH_FAILED when reading the session fails and prompting is allowed", async () => {
+			const t = await setup(secretStorageFailure);
+
+			const models = await t.provider.provideLanguageModelChatInformation(
+				{ silent: false },
+				{} as never,
+			);
+
+			expect(models).toEqual([]);
+			expect(t.getSession).not.toHaveBeenCalled();
+			expect(t.errorLog).toHaveBeenCalledWith(
+				"Failed to get authentication session:",
+				expect.objectContaining({ message: "SecretStorage unavailable" }),
+			);
+			expect(t.showErrorMessage).toHaveBeenCalledWith(ERROR_MESSAGES.AUTH_FAILED);
+		});
+
+		it("shows no error toast when the user declines the sign-in prompt", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockRejectedValue(new Error("User did not consent to login."));
+
+			const models = await t.provider.provideLanguageModelChatInformation(
+				{ silent: false },
+				{} as never,
+			);
+
+			expect(models).toEqual([]);
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+			expect(t.errorLog).not.toHaveBeenCalled();
+		});
+
+		it("shows no error toast when VS Code cancels the sign-in", async () => {
+			const t = await setup(async () => null);
+			const cancelled = new Error("Canceled");
+			cancelled.name = "Canceled";
+			t.getSession.mockRejectedValue(cancelled);
+
+			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+			expect(t.errorLog).not.toHaveBeenCalled();
+		});
+
+		it("still shows AUTH_FAILED when sign-in fails for another reason", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockRejectedValue(new Error("Dynamic authentication provider not found"));
+
+			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+
+			expect(t.errorLog).toHaveBeenCalledWith(
+				"Failed to get authentication session:",
+				expect.any(Error),
+			);
+			expect(t.showErrorMessage).toHaveBeenCalledWith(ERROR_MESSAGES.AUTH_FAILED);
+		});
+
+		it("returns no models without a toast when sign-in resolves no session", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockResolvedValue(undefined as never);
+
+			const models = await t.provider.provideLanguageModelChatInformation(
+				{ silent: false },
+				{} as never,
+			);
+
+			expect(models).toEqual([]);
+			expect(t.getModels).not.toHaveBeenCalled();
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+		});
+
+		it("returns no models without fetching when silent and signed out", async () => {
+			const t = await setup(async () => null);
+
+			const models = await t.provider.provideLanguageModelChatInformation(
+				{ silent: true },
+				{} as never,
+			);
+
+			expect(models).toEqual([]);
+			expect(t.getModels).not.toHaveBeenCalled();
+			expect(t.getSession).not.toHaveBeenCalled();
+		});
+
+		it("reports a missing key in the chat and makes no gateway request", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockResolvedValue(undefined as never);
+
+			const output = await chat(t.provider);
+
+			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.API_KEY_NOT_FOUND}`);
+			expect(t.gateway).not.toHaveBeenCalled();
+			expect(t.stream).not.toHaveBeenCalled();
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+		});
+
+		it("reports a missing key without a toast when the user cancels sign-in from a chat", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockRejectedValue(new Error("User did not consent to login."));
+
+			const output = await chat(t.provider);
+
+			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.API_KEY_NOT_FOUND}`);
+			expect(t.gateway).not.toHaveBeenCalled();
+			expect(t.stream).not.toHaveBeenCalled();
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+		});
+
+		it("never logs the access token on the sign-in paths", async () => {
+			const fromSession = await setup(async () => ({ accessToken: TOKEN }));
+			fromSession.getModels.mockRejectedValue(new Error("gateway down"));
+			await fromSession.provider.provideLanguageModelChatInformation(
+				{ silent: false },
+				{} as never,
+			);
+			expectNoTokenLogged(fromSession.logged());
+
+			const created = await setup(async () => null);
+			created.getSession.mockResolvedValue({ accessToken: TOKEN } as never);
+			created.stream.mockReturnValue({ fullStream: [] } as never);
+			await chat(created.provider);
+			expectNoTokenLogged(created.logged());
+			expect(created.gateway).toHaveBeenCalledWith(expect.objectContaining({ apiKey: TOKEN }));
+		});
 	});
 });
 

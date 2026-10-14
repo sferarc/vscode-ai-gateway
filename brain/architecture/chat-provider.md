@@ -12,6 +12,20 @@
 
 The list is cached for 5 minutes (`MODELS_CACHE_TTL_MS`, `src/constants.ts`). Both the cache and the in-flight request are keyed by the API key they were fetched with: concurrent calls with the same key share one request, and a call with a different key starts its own and never sees another key's list. A failed fetch is not cached. Any session change on the `vercelAiGateway` provider calls `invalidateCache` and fires `onDidChangeLanguageModelChatInformation` (SferaDev/SferaDev#344). `invalidateCache` drops the cache and the in-flight request and bumps a generation counter so a fetch started before the switch cannot write its result into the cache when it lands. The `models cache` tests in `src/models.test.ts` cover sharing, expiry, failures, invalidation during a fetch and a key change during a fetch.
 
+## Getting a key
+
+`getApiKey` is the only place a model-list or chat request gets credentials. It reads the active session from this extension's own provider ([[decisions/2026-08-09-active-session-from-own-provider]]) and falls back to `authentication.getSession` with `createIfNone` only when there is no session and the request may prompt. Without a key the model list is `[]` with no fetch, and a chat request reports `**Error:** Vercel AI Gateway API key not found` in the chat without building a gateway provider.
+
+| Situation | Silent | Prompting |
+| --- | --- | --- |
+| Reading the active session throws | No key, nothing logged or shown | Error logged, `AUTH_FAILED` toast |
+| No session | No key, sign-in not started | Sign-in started |
+| User cancels sign-in | Not reached | Logged at info, no toast |
+| Sign-in fails otherwise | Not reached | Error logged, `AUTH_FAILED` toast |
+| Sign-in resolves no session | Not reached | No key, no toast |
+
+A cancel is recognised by what VS Code rejects with: `User did not consent to login.` when the consent prompt is dismissed, or an error named `Canceled` (`mainThreadAuthentication.ts` in the VS Code repository). Dismissing a picker inside this extension's own `createSession` (`src/auth.ts`) throws its own messages and still counts as a failure. No log line on these paths carries the token. Covered by the `sign-in fallback` tests in `src/provider.test.ts`.
+
 ## Chat requests
 
 `provideLanguageModelChatResponse` builds an AI SDK gateway provider (`createGatewayProvider` from `@ai-sdk/gateway`) with the session's token and `baseURL` `{endpoint}/v1/ai`, then streams with `streamText` from `ai`. `modelOptions.temperature` and `modelOptions.maxOutputTokens` are passed through when VS Code sets them. Otherwise temperature is left to the provider, and `maxOutputTokens` is the model's own `maxOutputTokens` when positive and unset when not. The request timeout is the `timeout` setting ([[configuration]]). Cancellation aborts the stream through an `AbortController`.

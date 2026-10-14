@@ -51,6 +51,12 @@ function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | u
 	return model.maxOutputTokens > 0 ? model.maxOutputTokens : undefined;
 }
 
+// The errors VS Code's mainThreadAuthentication.ts rejects getSession with when sign-in is dismissed.
+function isSignInCancellation(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	return error.message === "User did not consent to login." || error.name === "Canceled";
+}
+
 export function isValidMimeType(mimeType: string): boolean {
 	return MIME_TYPE_PATTERN.test(mimeType);
 }
@@ -253,6 +259,10 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			});
 			return created?.accessToken;
 		} catch (error) {
+			if (isSignInCancellation(error)) {
+				logger.info("Sign-in was cancelled");
+				return undefined;
+			}
 			if (!silent) {
 				logger.error("Failed to get authentication session:", error);
 				window.showErrorMessage(ERROR_MESSAGES.AUTH_FAILED);
