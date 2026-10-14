@@ -155,7 +155,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 			if (!responseSent) {
 				logger.error("Stream completed with no content");
-				progress.report(new LanguageModelTextPart("**Error**: No response received from model."));
+				progress.report(
+					new LanguageModelTextPart("\n\n**Error:** No response received from model.\n\n"),
+				);
 			}
 
 			logger.info(`Chat request completed for ${model.id}`);
