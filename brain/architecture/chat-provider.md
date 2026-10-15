@@ -38,7 +38,7 @@ Errors, timeouts included, are reported into the chat as a `**Error:**` text par
 
 ## Token counting
 
-`provideTokenCount` estimates `ceil(characters / 4)` over the text a message sends: text parts, a tool call's name and JSON input, the text inside tool results, and data parts with a textual MIME type (`countableText` in `src/provider.ts`). Images count as zero. Until the `provideTokenCount` tests in `src/provider.test.ts` were added it counted top-level text parts only, so tool results, usually the bulk of an agent prompt, counted as zero and VS Code budgeted its prompt against an undercount. It is not a tokenizer.
+`provideTokenCount` estimates `ceil(characters / 4)` over the text a message sends: text parts, a tool call's name and JSON input, the text inside tool results, and data parts with a textual MIME type (`tallyPart` in `src/provider.ts`). Each image data part, top level or inside a tool result, adds a fixed `IMAGE_TOKENS` (1600), and every message adds `MESSAGE_OVERHEAD_TOKENS` (4) for role framing. Binary and `cache_control` data parts count as zero. A plain string is `ceil(length / 4)` with no overhead. Until the `provideTokenCount` tests in `src/provider.test.ts` were added it counted top-level text parts only, so tool results, usually the bulk of an agent prompt, counted as zero and VS Code budgeted its prompt against an undercount. It is not a tokenizer, and stays synchronous with no tokenizer dependency.
 
 ## Tests
 
