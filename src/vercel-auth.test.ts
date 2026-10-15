@@ -139,7 +139,7 @@ describe("vercel-auth", () => {
 
 			await refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000, teamId: "team_abc" });
 
-			expect(String(fetchMock.mock.calls[0][0])).toContain("teamId=team_abc");
+			expect(String(fetchMock.mock.calls[0]?.[0])).toContain("teamId=team_abc");
 		});
 
 		it("rejects a response whose token is not a JWT", async () => {
@@ -339,7 +339,7 @@ describe("vercel-auth", () => {
 		}
 
 		function requestUrl(fetchMock: ReturnType<typeof vi.fn>, index: number): URL {
-			return new URL(String(fetchMock.mock.calls[index][0]));
+			return new URL(String(fetchMock.mock.calls[index]?.[0]));
 		}
 
 		function pickTeam(team: unknown) {
@@ -353,7 +353,7 @@ describe("vercel-auth", () => {
 
 		function projectPickItems(): QuickPickItems {
 			const calls = vi.mocked(vscode.window.showQuickPick).mock.calls;
-			return calls[calls.length - 1][0] as unknown as QuickPickItems;
+			return calls.at(-1)?.[0] as unknown as QuickPickItems;
 		}
 
 		beforeEach(() => {
@@ -401,7 +401,7 @@ describe("vercel-auth", () => {
 			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
 
 			const teamItems = vi.mocked(vscode.window.showQuickPick).mock
-				.calls[0][0] as unknown as QuickPickItems;
+				.calls[0]?.[0] as unknown as QuickPickItems;
 			expect(teamItems.map((item) => item.label)).toEqual(["Personal Account", "One", "Two"]);
 		});
 

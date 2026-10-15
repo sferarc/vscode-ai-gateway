@@ -31,7 +31,7 @@ pnpm changeset   # describe a change for the next release
 
 ## TypeScript
 
-`tsconfig.json`: ES2024 target, `module` `ESNext`, `moduleResolution` `Bundler`, `strict`, types limited to `node`. The compiler is TypeScript 7; `@typescript/typescript6` stays only because bunchee looks for the TypeScript 6 API by name to emit declarations (`pnpm-workspace.yaml` comment). Remove it once bunchee runs on TypeScript 7 alone.
+`tsconfig.json`: ES2024 target, `module` `ESNext`, `moduleResolution` `Bundler`, `strict`, types limited to `node`. `lib` is `ES2024` only, without `DOM`: the extension runs in the Node extension host, and Node's types already declare `fetch`, `Response`, `AbortController` and `TextDecoder`. On top of `strict` it enables `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noImplicitOverride` and `noFallthroughCasesInSwitch`, for tests too: index into an array or record by checking the result (or `?.` in an assertion), not with `!`. The compiler is TypeScript 7; `@typescript/typescript6` stays only because bunchee looks for the TypeScript 6 API by name to emit declarations (`pnpm-workspace.yaml` comment). Remove it once bunchee runs on TypeScript 7 alone.
 
 ## Dependencies
 

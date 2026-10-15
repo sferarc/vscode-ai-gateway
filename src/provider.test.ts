@@ -523,7 +523,9 @@ describe("provideLanguageModelChatResponse", () => {
 			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
 		);
 
-		const options = streamTextMock.mock.calls[0][0];
+		const [call] = streamTextMock.mock.calls;
+		if (!call) throw new Error("streamText was not called");
+		const options = call[0];
 		expect(options.instructions).toBe("You are helpful.");
 		expect(options.messages).toEqual([{ role: "user", content: "Hello" }]);
 	});
@@ -549,7 +551,9 @@ describe("provideLanguageModelChatResponse", () => {
 			{ report: vi.fn() },
 			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
 		);
-		return streamTextMock.mock.calls[0][0];
+		const [call] = streamTextMock.mock.calls;
+		if (!call) throw new Error("streamText was not called");
+		return call[0];
 	}
 
 	it("leaves temperature to the provider and uses the model's output limit by default", async () => {
@@ -602,7 +606,9 @@ describe("provideLanguageModelChatResponse", () => {
 				onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })),
 			} as never,
 		);
-		return { report, options: streamTextMock.mock.calls[0][0] };
+		const [call] = streamTextMock.mock.calls;
+		if (!call) throw new Error("streamText was not called");
+		return { report, options: call[0] };
 	}
 
 	it("bounds silence between chunks instead of the total response time", async () => {
@@ -613,7 +619,7 @@ describe("provideLanguageModelChatResponse", () => {
 	it("reports a timeout that the user did not cause", async () => {
 		const { report } = await respondWithTimeout(false);
 		expect(report).toHaveBeenCalledTimes(1);
-		expect(report.mock.calls[0][0].value).toContain(
+		expect(report.mock.calls[0]?.[0].value).toContain(
 			"**Error:** Request timed out after 30000 ms with no output from the model.",
 		);
 	});
@@ -621,8 +627,10 @@ describe("provideLanguageModelChatResponse", () => {
 	it("reports a timeout after a partial answer instead of ending it silently", async () => {
 		const { report } = await respondWithTimeout(false, "Half an answer");
 		expect(report).toHaveBeenCalledTimes(2);
-		expect(report.mock.calls[0][0].value).toBe("Half an answer");
-		expect(report.mock.calls[1][0].value).toContain("**Error:** Request timed out after 30000 ms");
+		expect(report.mock.calls[0]?.[0].value).toBe("Half an answer");
+		expect(report.mock.calls[1]?.[0].value).toContain(
+			"**Error:** Request timed out after 30000 ms",
+		);
 	});
 
 	it("stays silent when the user cancelled", async () => {
@@ -666,7 +674,7 @@ describe("provideLanguageModelChatResponse", () => {
 			/model=openai\/gpt-4o status=401 url=https:\/\/ai-gateway\.vercel\.sh\/v1\/ai\/language-model retryable=false elapsedMs=\d+/,
 		);
 		expect(JSON.stringify(logError.mock.calls)).not.toContain("private prompt");
-		expect(report.mock.calls[0][0].value).toContain("Vercel AI Gateway: Manage Authentication");
+		expect(report.mock.calls[0]?.[0].value).toContain("Vercel AI Gateway: Manage Authentication");
 		logError.mockRestore();
 	});
 });
@@ -732,7 +740,7 @@ describe("handleStreamChunk", () => {
 			provider.handleStreamChunk({ type: "finish", finishReason: "length" } as any, progress),
 		).toBe(true);
 		expect(progress.report).toHaveBeenCalledTimes(1);
-		expect(progress.report.mock.calls[0][0].value).toContain("output token limit");
+		expect(progress.report.mock.calls[0]?.[0].value).toContain("output token limit");
 
 		progress.report.mockClear();
 		provider.handleStreamChunk({ type: "finish", finishReason: "stop" } as any, progress);
@@ -744,7 +752,7 @@ describe("handleStreamChunk", () => {
 		const progress = { report: vi.fn() };
 		provider.handleStreamChunk({ type: "text-delta", text: "hello" } as any, progress);
 		expect(progress.report).toHaveBeenCalledTimes(1);
-		expect(progress.report.mock.calls[0][0]).toBeInstanceOf(hoisted.MockLanguageModelTextPart);
+		expect(progress.report.mock.calls[0]?.[0]).toBeInstanceOf(hoisted.MockLanguageModelTextPart);
 	});
 
 	it("reports tool-call chunks using chunk.input", () => {
@@ -755,7 +763,7 @@ describe("handleStreamChunk", () => {
 			progress,
 		);
 		expect(progress.report).toHaveBeenCalledTimes(1);
-		const reported = progress.report.mock.calls[0][0];
+		const reported = progress.report.mock.calls[0]?.[0];
 		expect(reported).toBeInstanceOf(hoisted.MockLanguageModelToolCallPart);
 		expect(reported.input).toEqual({ query: "test" });
 	});
@@ -769,7 +777,7 @@ describe("handleStreamChunk", () => {
 		);
 		expect(result).toBe(true);
 		expect(progress.report).toHaveBeenCalledTimes(1);
-		expect(progress.report.mock.calls[0][0].value).toContain("fail");
+		expect(progress.report.mock.calls[0]?.[0].value).toContain("fail");
 	});
 
 	it("handles file chunks with valid MIME types, skips invalid", () => {

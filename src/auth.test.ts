@@ -122,7 +122,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		await ctx.secrets.store("vercelAiGateway.sessions", JSON.stringify([createSession("s1")]));
 		const sessions = await provider.getSessions();
 		expect(sessions).toHaveLength(1);
-		expect(sessions[0].id).toBe("s1");
+		expect(sessions[0]?.id).toBe("s1");
 	});
 
 	it("refreshes near-expiry OIDC tokens and fires change event", async () => {
@@ -140,7 +140,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 		const sessions = await provider.getSessions();
 		expect(refreshOidcToken).toHaveBeenCalled();
-		expect(sessions[0].accessToken).toBe("new_token");
+		expect(sessions[0]?.accessToken).toBe("new_token");
 		expect(hoisted.mockEventEmitterFire).toHaveBeenCalled();
 	});
 
@@ -150,7 +150,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		vi.mocked(refreshOidcToken).mockRejectedValueOnce(new Error("fail"));
 
 		const sessions = await provider.getSessions();
-		expect(sessions[0].accessToken).toBe("token");
+		expect(sessions[0]?.accessToken).toBe("token");
 	});
 
 	it("removes session and fires event", async () => {
@@ -225,7 +225,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			const sessions = await provider.getSessions();
 
-			expect(sessions[0].id).toBe("s3");
+			expect(sessions[0]?.id).toBe("s3");
 		});
 
 		it("persists a refreshed OIDC token so later reads see it", async () => {
@@ -245,7 +245,7 @@ describe("VercelAIAuthenticationProvider", () => {
 			await provider.getSessions();
 
 			const stored = JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]");
-			expect(stored[0].accessToken).toBe("fresh");
+			expect(stored[0]?.accessToken).toBe("fresh");
 		});
 
 		it("keeps other sessions when one OIDC refresh fails", async () => {
@@ -308,7 +308,7 @@ describe("VercelAIAuthenticationProvider", () => {
 			await refreshStarted();
 			release();
 
-			expect((await sessions)[0].accessToken).toBe("fresh");
+			expect((await sessions)[0]?.accessToken).toBe("fresh");
 			expect((await active)?.accessToken).toBe("fresh");
 			expect(refreshOidcToken).toHaveBeenCalledTimes(1);
 			expect(await storedSessions()).toEqual([
@@ -334,7 +334,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			const stored = await storedSessions();
 			expect(stored.map((s) => s.id)).toEqual(["s1", created.id]);
-			expect(stored[0].accessToken).toBe("fresh");
+			expect(stored[0]?.accessToken).toBe("fresh");
 		});
 
 		it("does not bring back a session removed during a slow refresh", async () => {
@@ -410,7 +410,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			await provider.manageAuthentication();
 
-			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
+			const options = hoisted.mockShowQuickPick.mock.calls[0]?.[0] as Array<{ value: string }>;
 			expect(options.map((o) => o.value)).not.toContain("switch");
 		});
 	});
@@ -494,7 +494,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			await provider.createSession([]).catch(() => undefined);
 
-			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
+			const options = hoisted.mockShowQuickPick.mock.calls[0]?.[0] as Array<{ value: string }>;
 			expect(options.map((o) => o.value)).toEqual(["api-key"]);
 		});
 
@@ -504,7 +504,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			await provider.createSession([]).catch(() => undefined);
 
-			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
+			const options = hoisted.mockShowQuickPick.mock.calls[0]?.[0] as Array<{ value: string }>;
 			expect(options.map((o) => o.value)).toEqual(["api-key", "oidc"]);
 		});
 
@@ -517,7 +517,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			await provider.createSession([]);
 
-			const apiKeyPrompt = hoisted.mockShowInputBox.mock.calls[1][0] as {
+			const apiKeyPrompt = hoisted.mockShowInputBox.mock.calls[1]?.[0] as {
 				validateInput: (value: string) => string | null;
 			};
 			expect(apiKeyPrompt.validateInput("wrong")).toMatch(/vck_/);

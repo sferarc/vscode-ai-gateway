@@ -86,6 +86,9 @@ function getVercelCliToken(): string | null {
 function getTokenPayload(token: string): TokenPayload {
 	try {
 		const [, payload] = token.split(".");
+		if (!payload) {
+			throw new VercelOidcTokenError("Invalid JWT token");
+		}
 		const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
 		const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
 		return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
