@@ -126,7 +126,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			const config = getConfig();
 			const gateway = createGatewayProvider({
 				apiKey,
-				baseURL: `${config.endpoint.replace(/\/+$/, "")}/v1/ai`,
+				baseURL: `${config.endpoint}/v1/ai`,
 			});
 
 			const tools = this.buildToolSet(options.tools);
