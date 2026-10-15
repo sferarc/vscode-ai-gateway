@@ -1024,15 +1024,24 @@ describe("instruction extraction", () => {
 describe("provideTokenCount", () => {
 	const model = {} as never;
 	const token = {} as never;
+	const overhead = 4;
+	const imageTokens = 1600;
 	const count = (content: unknown[]) =>
 		createProvider().provideTokenCount(
 			model,
 			{ role: 1, content } as unknown as LanguageModelChatMessage,
 			token,
 		);
+	const textOnly = new hoisted.MockLanguageModelTextPart("q".repeat(40));
+	const textOnlyCount = 10 + overhead;
 
 	it("estimates a string at four characters a token", async () => {
 		expect(await createProvider().provideTokenCount(model, "a".repeat(10), token)).toBe(3);
+	});
+
+	it("adds a per message overhead to text parts", async () => {
+		expect(await count([textOnly])).toBe(textOnlyCount);
+		expect(await count([])).toBe(overhead);
 	});
 
 	it("counts the text inside tool results", async () => {
@@ -1041,18 +1050,41 @@ describe("provideTokenCount", () => {
 			hoisted.MockLanguageModelDataPart.text("b".repeat(400), "text/plain"),
 		]);
 
-		expect(await count([result])).toBe(200);
+		expect(await count([textOnly, result])).toBe(textOnlyCount + 200);
 	});
 
 	it("counts the name and input of tool calls", async () => {
 		const call = new hoisted.MockLanguageModelToolCallPart("call_1", "read", { path: "a.ts" });
 
-		expect(await count([call])).toBe(Math.ceil('read{"path":"a.ts"}'.length / 4));
+		expect(await count([textOnly, call])).toBe(
+			Math.ceil((40 + 'read{"path":"a.ts"}'.length) / 4) + overhead,
+		);
 	});
 
-	it("counts textual data parts", async () => {
+	it("counts textual and JSON data parts by their decoded length", async () => {
 		expect(
-			await count([hoisted.MockLanguageModelDataPart.text("c".repeat(40), "text/plain")]),
-		).toBe(10);
+			await count([textOnly, hoisted.MockLanguageModelDataPart.text("c".repeat(40), "text/plain")]),
+		).toBe(textOnlyCount + 10);
+		expect(
+			await count([textOnly, hoisted.MockLanguageModelDataPart.json({ key: "v".repeat(30) })]),
+		).toBe(textOnlyCount + 10);
+	});
+
+	it("counts each image at a fixed estimate, inside tool results too", async () => {
+		const image = hoisted.MockLanguageModelDataPart.image(new Uint8Array(10_000), "image/png");
+		const result = new hoisted.MockLanguageModelToolResultPart("call_1", [image]);
+
+		expect(await count([textOnly, image])).toBe(textOnlyCount + imageTokens);
+		expect(await count([textOnly, image, result])).toBe(textOnlyCount + 2 * imageTokens);
+	});
+
+	it("ignores binary and cache control data parts", async () => {
+		expect(
+			await count([
+				textOnly,
+				new hoisted.MockLanguageModelDataPart(new Uint8Array(400), "application/octet-stream"),
+				hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control"),
+			]),
+		).toBe(textOnlyCount);
 	});
 });

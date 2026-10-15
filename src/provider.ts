@@ -223,11 +223,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			return Math.ceil(text.length / 4);
 		}
 
-		let characters = 0;
+		const tally = { characters: 0, images: 0 };
 		for (const part of text.content) {
-			characters += countableText(part).length;
+			tallyPart(part, tally);
 		}
-		return Math.ceil(characters / 4);
+		return Math.ceil(tally.characters / 4) + tally.images * IMAGE_TOKENS + MESSAGE_OVERHEAD_TOKENS;
 	}
 
 	private buildToolSet(
@@ -616,24 +616,32 @@ function isTextualMimeType(mimeType: string): boolean {
 	);
 }
 
+// Role and message framing tokens that providers add around every message.
+const MESSAGE_OVERHEAD_TOKENS = 4;
+// Image cost depends on resolution and provider; this sits near the top of the common range so a
+// prompt with images is overestimated rather than overflowing the context window.
+const IMAGE_TOKENS = 1600;
+
 /**
- * The text a message part sends to the model, for token estimates. Tool results usually carry the
- * bulk of an agent's prompt (file contents, terminal output), so leaving them out makes VS Code
- * budget its prompt against a count far below what the gateway receives.
+ * Adds the characters and images a message part sends to the model, for token estimates. Tool
+ * results carry the bulk of an agent's prompt (file contents, terminal output), so leaving them out
+ * makes VS Code budget its prompt against a count far below what the gateway receives.
  */
-function countableText(part: unknown): string {
-	if (typeof part !== "object" || part === null) return "";
-	if (isTextPart(part)) return part.value;
-	if (part instanceof LanguageModelToolCallPart) {
-		return part.name + JSON.stringify(part.input ?? {});
+function tallyPart(part: unknown, tally: { characters: number; images: number }): void {
+	if (typeof part !== "object" || part === null) return;
+	if (isTextPart(part)) {
+		tally.characters += part.value.length;
+	} else if (part instanceof LanguageModelToolCallPart) {
+		tally.characters += part.name.length + JSON.stringify(part.input ?? {}).length;
+	} else if (part instanceof LanguageModelToolResultPart) {
+		for (const item of part.content) tallyPart(item, tally);
+	} else if (part instanceof LanguageModelDataPart) {
+		if (part.mimeType.startsWith("image/")) {
+			tally.images += 1;
+		} else if (isTextualMimeType(part.mimeType)) {
+			tally.characters += new TextDecoder().decode(part.data).length;
+		}
 	}
-	if (part instanceof LanguageModelToolResultPart) {
-		return part.content.map(countableText).join("");
-	}
-	if (part instanceof LanguageModelDataPart && isTextualMimeType(part.mimeType)) {
-		return new TextDecoder().decode(part.data);
-	}
-	return "";
 }
 
 function isValidMessage(msg: ModelMessage): boolean {
