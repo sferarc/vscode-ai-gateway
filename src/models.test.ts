@@ -67,8 +67,8 @@ describe("ModelsClient", () => {
 			version: "2024-11-20",
 			maxInputTokens: 128000,
 		});
-		expect(result[0].capabilities).toMatchObject({ imageInput: true, toolCalling: true });
-		expect(result[1].capabilities).toMatchObject({ reasoning: true, webSearch: true });
+		expect(result[0]?.capabilities).toMatchObject({ imageInput: true, toolCalling: true });
+		expect(result[1]?.capabilities).toMatchObject({ reasoning: true, webSearch: true });
 	});
 
 	it("filters out non-chat models, keeps undefined type", async () => {
@@ -146,7 +146,7 @@ describe("ModelsClient", () => {
 			}) as unknown as typeof fetch;
 
 			const result = await new ModelsClient().getModels("test-key");
-			return result[0].capabilities;
+			return result[0]?.capabilities;
 		}
 
 		it("prefers structured fields over tags", async () => {
@@ -276,7 +276,7 @@ describe("models cache", () => {
 		const second = client.getModels("keyA");
 
 		expect(pending).toHaveLength(1);
-		pending[0].resolve(["a:one"]);
+		pending[0]?.resolve(["a:one"]);
 
 		expect(ids(await first)).toEqual(["a:one"]);
 		expect(ids(await second)).toEqual(["a:one"]);
@@ -285,7 +285,7 @@ describe("models cache", () => {
 	it("serves a fresh cache without fetching and refetches once it expires", async () => {
 		const client = new ModelsClient();
 		const initial = client.getModels("keyA");
-		pending[0].resolve(["a:one"]);
+		pending[0]?.resolve(["a:one"]);
 		await initial;
 
 		vi.advanceTimersByTime(MODELS_CACHE_TTL_MS - 1);
@@ -295,19 +295,19 @@ describe("models cache", () => {
 		vi.advanceTimersByTime(1);
 		const refetch = client.getModels("keyA");
 		expect(pending).toHaveLength(2);
-		pending[1].resolve(["a:two"]);
+		pending[1]?.resolve(["a:two"]);
 		expect(ids(await refetch)).toEqual(["a:two"]);
 	});
 
 	it("does not cache a failed fetch", async () => {
 		const client = new ModelsClient();
 		const failed = client.getModels("keyA");
-		pending[0].reject(500);
+		pending[0]?.reject(500);
 		await expect(failed).rejects.toThrow("HTTP 500");
 
 		const retry = client.getModels("keyA");
 		expect(pending).toHaveLength(2);
-		pending[1].resolve(["a:one"]);
+		pending[1]?.resolve(["a:one"]);
 		expect(ids(await retry)).toEqual(["a:one"]);
 	});
 
@@ -316,12 +316,12 @@ describe("models cache", () => {
 		const stale = client.getModels("keyA");
 
 		client.invalidateCache();
-		pending[0].resolve(["old:model"]);
+		pending[0]?.resolve(["old:model"]);
 		await stale;
 
 		const fresh = client.getModels("keyA");
 		expect(pending).toHaveLength(2);
-		pending[1].resolve(["new:model"]);
+		pending[1]?.resolve(["new:model"]);
 		expect(ids(await fresh)).toEqual(["new:model"]);
 	});
 
@@ -331,9 +331,9 @@ describe("models cache", () => {
 		const forB = client.getModels("keyB");
 
 		expect(pending).toHaveLength(2);
-		expect(pending[1].authorization).toBe("Bearer keyB");
-		pending[1].resolve(["b:model"]);
-		pending[0].resolve(["a:model"]);
+		expect(pending[1]?.authorization).toBe("Bearer keyB");
+		pending[1]?.resolve(["b:model"]);
+		pending[0]?.resolve(["a:model"]);
 
 		expect(ids(await forB)).toEqual(["b:model"]);
 		expect(ids(await forA)).toEqual(["a:model"]);

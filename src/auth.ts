@@ -170,15 +170,13 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 			for (const update of refreshed) {
 				const index = sessions.findIndex((s) => s.id === update.id);
-				if (index === -1 || sessions[index].accessToken === update.accessToken) {
+				const current = sessions[index];
+				if (!current || current.accessToken === update.accessToken) {
 					continue;
 				}
-				sessions[index] = {
-					...sessions[index],
-					accessToken: update.accessToken,
-					oidcData: update.oidcData,
-				};
-				changed.push(sessions[index]);
+				const merged = { ...current, accessToken: update.accessToken, oidcData: update.oidcData };
+				sessions[index] = merged;
+				changed.push(merged);
 			}
 
 			if (changed.length > 0) {
@@ -367,12 +365,13 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		const result = await this.withLock(async () => {
 			const sessions = await this.getSessionsData();
 			const index = sessions.findIndex((s) => s.id === sessionId);
+			const removed = sessions[index];
 
-			if (index === -1) {
+			if (!removed) {
 				return null;
 			}
 
-			const [removed] = sessions.splice(index, 1);
+			sessions.splice(index, 1);
 			await this.context.secrets.store(SESSIONS_SECRET_KEY, JSON.stringify(sessions));
 
 			let newActive: SessionData | undefined;
@@ -548,8 +547,9 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	private async handleRemoveSession(sessions: SessionData[]): Promise<void> {
-		if (sessions.length === 1) {
-			await this.removeSession(sessions[0].id);
+		const [only] = sessions;
+		if (sessions.length === 1 && only) {
+			await this.removeSession(only.id);
 			return;
 		}
 
@@ -577,15 +577,11 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		}
 
 		const activeSessionId = await this.getActiveSessionId();
-		let activeSession: SessionData | undefined;
-
-		if (activeSessionId) {
-			activeSession = sessions.find((s) => s.id === activeSessionId);
-		}
-
 		// Fall back to first session if active session not found
+		const activeSession =
+			(activeSessionId ? sessions.find((s) => s.id === activeSessionId) : undefined) ?? sessions[0];
 		if (!activeSession) {
-			activeSession = sessions[0];
+			return null;
 		}
 
 		// Refresh OIDC token if needed

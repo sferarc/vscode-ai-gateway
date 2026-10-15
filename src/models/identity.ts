@@ -79,9 +79,9 @@ function extractFamilyAndVersion(modelPart: string): {
 
 	const match = modelPart.match(VERSION_PATTERN);
 
-	if (match) {
+	const version = match?.[1];
+	if (match && version) {
 		// Found a version pattern at the end
-		const version = match[1];
 		// Family is everything before the version suffix (including the separator)
 		const family = modelPart.slice(0, match.index);
 		return { family, version };
