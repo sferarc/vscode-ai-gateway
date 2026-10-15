@@ -63,10 +63,13 @@ Chat requests and the model list always use the active session.
 The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
 
 ```bash
+mise trust
 mise install
 pnpm install
-pnpm lint && pnpm typecheck && pnpm test && pnpm package
+pnpm check
 ```
+
+`mise trust` is needed once per clone: mise refuses to read a `mise.toml` it has not been told to trust. `pnpm check` runs the same steps as CI's `Check` job, in the same order, and stops at the first failure.
 
 `@types/vscode` stays a literal version equal to the `engines.vscode` floor: `vsce` cannot read the catalog protocol and refuses to package when the types are newer than the engine. Add a changeset with `pnpm changeset` for any change that should be released.
 

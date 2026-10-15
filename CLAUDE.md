@@ -32,7 +32,7 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the extensi
 
 ## Ground rules
 
-- Run `pnpm lint`, `pnpm exec lefthook validate`, `pnpm knip`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm package` before opening a pull request. CI's `Check` job runs the same and is required.
+- Run `pnpm check` before opening a pull request. It runs the steps of CI's `Check` job in the same order (`brain/development/ci.md`), and that job is required.
 - Keep `@types/vscode` equal to the `engines.vscode` floor; raising one means raising both (`brain/decisions/2026-07-28-types-vscode-literal.md`).
 - Credentials live only in `SecretStorage` (`src/auth.ts`). Never log a key or token.
 - Add a changeset (`pnpm changeset`) for a change users should see.

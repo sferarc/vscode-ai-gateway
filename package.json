@@ -76,9 +76,9 @@
 		}
 	},
 	"scripts": {
+		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm package",
 		"build": "NODE_ENV=production bunchee ./src/extension.ts --format cjs --no-external",
 		"dev": "bunchee ./src/extension.ts --format cjs --watch",
-		"compile": "tsc -p ./",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"prepackage": "pnpm run build",
