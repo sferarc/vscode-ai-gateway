@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { VercelAIAuthenticationProvider } from "./auth";
 import { EXTENSION_ID } from "./constants";
+import { runConnectionCheck } from "./diagnostics";
 import { initializeLogger, logger } from "./logger";
 import { VercelAIChatModelProvider } from "./provider";
 
@@ -22,10 +23,14 @@ export function activate(context: vscode.ExtensionContext) {
 		authProvider.manageAuthentication();
 	});
 	context.subscriptions.push(commandDisposable);
+	context.subscriptions.push(
+		vscode.commands.registerCommand(`${EXTENSION_ID}.checkConnection`, () =>
+			runConnectionCheck(() => authProvider.getActiveSession()),
+		),
+		vscode.commands.registerCommand(`${EXTENSION_ID}.showLogs`, () => logger.show()),
+	);
 
 	logger.info("Vercel AI Gateway extension activated successfully");
-
-	return { authProvider };
 }
 
 export function deactivate() {

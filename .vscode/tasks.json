@@ -1,13 +1,33 @@
-// See https://go.microsoft.com/fwlink/?LinkId=733558
-// for the documentation about the tasks.json format
 {
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"type": "npm",
-			"script": "dev",
-			"problemMatcher": "$tsc-watch",
+			"label": "watch",
+			"type": "shell",
+			"command": "pnpm dev --sourcemap",
 			"isBackground": true,
+			"problemMatcher": {
+				"owner": "bunchee",
+				"source": "bunchee",
+				"fileLocation": "absolute",
+				"pattern": [
+					{
+						"regexp": "\\[Error:\\s+(?:×\\s+)?(.+)$",
+						"message": 1
+					},
+					{
+						"regexp": "\\[([^\\[\\]]+\\.tsx?):(\\d+):(\\d+)\\]$",
+						"file": 1,
+						"line": 2,
+						"column": 3
+					}
+				],
+				"background": {
+					"activeBegin": true,
+					"beginsPattern": "Building\\.\\.\\.",
+					"endsPattern": "Built in \\d+(\\.\\d+)?ms"
+				}
+			},
 			"presentation": {
 				"reveal": "never",
 				"group": "watchers"

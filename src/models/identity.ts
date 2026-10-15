@@ -3,7 +3,7 @@
  * from model IDs in the format "provider:family-version"
  */
 
-export interface ParsedModelIdentity {
+interface ParsedModelIdentity {
 	provider: string; // "openai"
 	family: string; // "gpt-4o"
 	version: string; // "2024-11-20" or "latest"
