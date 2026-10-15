@@ -631,7 +631,10 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 
 	it("logs the status of a rejected request without its body and points to sign-in", async () => {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 		const vscode = await import("vscode");
 		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
 
