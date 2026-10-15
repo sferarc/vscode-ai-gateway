@@ -1,6 +1,8 @@
 # Testing
 
-Vitest, no config file: `pnpm test` runs every `src/**/*.test.ts`. On 2026-10-15 that was 6 files and 145 tests. Each file that touches the editor API replaces it with `vi.mock("vscode", ...)`, so the tests run in Node without a VS Code instance.
+Vitest, no config file: `pnpm test` runs every `src/**/*.test.ts`. On 2026-10-15 that was 6 files and 149 tests. Each file that touches the editor API replaces it with `vi.mock("vscode", ...)`, so the tests run in Node without a VS Code instance.
+
+Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/vercel-auth.test.ts` call `vi.useFakeTimers({ toFake: ["Date"] })` and `vi.setSystemTime(NOW)` in `beforeEach`, build every expiry from `NOW`, and restore real timers in `afterEach`. Only `Date` is faked, so promises and `setTimeout` behave as in production. To wait for async work to reach a point, wait on the observable effect (`vi.waitFor(() => expect(mock).toHaveBeenCalled())`) rather than a `setTimeout(0)` flush.
 
 | File | Describe blocks and what they cover |
 | --- | --- |
@@ -10,5 +12,6 @@ Vitest, no config file: `pnpm test` runs every `src/**/*.test.ts`. On 2026-10-15
 | `src/models.test.ts` | `ModelsClient`, with `capability detection`. `models cache`: freshness, in-flight sharing per key, invalidation, failed fetches |
 | `src/models/identity.test.ts` | `parseModelIdentity` |
 | `src/logger.test.ts` | `Logger` and `extractErrorMessage` |
+| `src/diagnostics.test.ts` | Check Connection: success, rejected credentials, network failure, no session, and that the token never reaches the message or the log |
 
 There are no integration tests that launch VS Code (`.vscode-test/` is only in `.gitignore` and `.vscodeignore`). The `pnpm package` step in [[ci]] is the only check of the manifest as VS Code sees it.

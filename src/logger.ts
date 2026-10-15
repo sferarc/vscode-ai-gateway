@@ -44,6 +44,9 @@ export const logger = {
 	debug(message: string, ...args: unknown[]): void {
 		_logChannel?.debug(message, ...args);
 	},
+	show(): void {
+		_logChannel?.show(true);
+	},
 };
 
 /**
