@@ -67,6 +67,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private _disposable: Disposable;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private inflightRefresh = new Map<string, Promise<SessionData>>();
+	private unreadableSessionsNotified = false;
 
 	constructor(private readonly context: ExtensionContext) {
 		this._disposable = authentication.registerAuthenticationProvider(
@@ -256,18 +257,24 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		let parsed: unknown;
 		try {
 			parsed = JSON.parse(stored);
-		} catch {
-			// Unreadable JSON holds nothing recoverable; dropping it lets the user sign in again.
-			await this.context.secrets.delete(SESSIONS_SECRET_KEY);
+		} catch (error) {
+			const errorName = error instanceof Error ? error.name : typeof error;
+			logger.warn(`Stored sessions are not valid JSON (${errorName}, length ${stored.length})`);
+			this.notifyUnreadableSessions();
+			// Not awaited: callers already inside the write queue would wait on themselves.
+			void this.discardUnreadableSessions(stored);
 			return [];
 		}
 		if (!Array.isArray(parsed)) {
+			logger.warn(`Stored sessions are not an array (${typeof parsed})`);
+			this.notifyUnreadableSessions();
 			return [];
 		}
 
 		const sessions = parsed.filter(isStoredSession);
 		if (sessions.length < parsed.length) {
 			logger.warn(`Ignoring ${parsed.length - sessions.length} malformed stored session(s)`);
+			this.notifyUnreadableSessions();
 		}
 		return sessions.map((session) => ({
 			...session,
@@ -278,6 +285,35 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 				? { ...session.account, id: session.id }
 				: session.account,
 		}));
+	}
+
+	/** Deletes the secret only if it still holds the unreadable value, so a newer store survives. */
+	private discardUnreadableSessions(unreadable: string): Promise<void> {
+		return this.withLock(async () => {
+			if ((await this.context.secrets.get(SESSIONS_SECRET_KEY)) === unreadable) {
+				await this.context.secrets.delete(SESSIONS_SECRET_KEY);
+			}
+		}).catch((error) => {
+			logger.error("Failed to delete unreadable stored sessions:", error);
+		});
+	}
+
+	private notifyUnreadableSessions(): void {
+		if (this.unreadableSessionsNotified) {
+			return;
+		}
+		this.unreadableSessionsNotified = true;
+		const action = "Manage Authentication";
+		void Promise.resolve(
+			window.showWarningMessage(
+				"Some stored Vercel AI Gateway sessions could not be read and must be added again.",
+				action,
+			),
+		).then((choice) => {
+			if (choice === action) {
+				return this.manageAuthentication();
+			}
+		});
 	}
 
 	async createSession(_scopes: readonly string[]): Promise<AuthenticationSession> {
