@@ -9,7 +9,7 @@
 3. Constructs `VercelAIChatModelProvider`, passing `authProvider.getActiveSession` as the credential source, and registers it with `vscode.lm.registerLanguageModelChatProvider("vercelAiGateway", ...)` ([[chat-provider]]).
 4. Registers the command `vercelAiGateway.manage` ("Vercel AI Gateway: Manage Authentication"), which calls `manageAuthentication()`.
 
-Everything is pushed onto `context.subscriptions`. `activate()` returns `{ authProvider }`; no known consumer uses it. `deactivate()` only logs.
+Everything is pushed onto `context.subscriptions`. `activate()` returns nothing, so the extension exposes no API to other extensions. `deactivate()` only logs.
 
 ## Manifest contributions
 

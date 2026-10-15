@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelChatMessage } from "vscode";
 import { ERROR_MESSAGES } from "./constants";
-import {
-	convertMessages,
-	convertSingleMessage,
-	isValidMimeType,
-	VercelAIChatModelProvider,
-} from "./provider";
+import { convertMessages, VercelAIChatModelProvider } from "./provider";
 
 const hoisted = vi.hoisted(() => {
 	class MockEventEmitter {
@@ -516,15 +511,26 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 });
 
-describe("isValidMimeType", () => {
+describe("file chunk MIME validation", () => {
+	beforeEach(() => {
+		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+	});
+
+	function reportsFile(mediaType: string): boolean {
+		const progress = { report: vi.fn() };
+		const file = { uint8Array: new TextEncoder().encode("{}"), mediaType };
+		createProvider().handleStreamChunk({ type: "file", file } as any, progress);
+		return progress.report.mock.calls.length > 0;
+	}
+
 	it("accepts valid MIME types", () => {
 		const valid = ["text/plain", "image/png", "application/json", "audio/mpeg", "model/gltf+json"];
-		for (const mime of valid) expect(isValidMimeType(mime)).toBe(true);
+		for (const mime of valid) expect(reportsFile(mime)).toBe(true);
 	});
 
 	it("rejects invalid MIME types", () => {
 		const invalid = ["cache_control", "textplain", "text/", "", "invalid", "a/b/c"];
-		for (const mime of invalid) expect(isValidMimeType(mime)).toBe(false);
+		for (const mime of invalid) expect(reportsFile(mime)).toBe(false);
 	});
 });
 
@@ -640,7 +646,7 @@ describe("convertMessages", () => {
 		];
 		contents.forEach((content) => {
 			const msg = { role: 1, content } as unknown as LanguageModelChatMessage;
-			expect(() => convertSingleMessage(msg, {})).not.toThrow();
+			expect(() => convertMessages([msg])).not.toThrow();
 		});
 	});
 

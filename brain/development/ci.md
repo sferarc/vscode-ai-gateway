@@ -8,7 +8,7 @@
 2. `pnpm install --frozen-lockfile`
 3. `pnpm lint`
 4. `pnpm exec lefthook validate`. CI never commits, so this only proves `lefthook.yml` loads.
-5. `pnpm knip`
+5. `pnpm knip`, two passes. The default pass includes tests. `knip --production --strict` then analyses only what `src/extension.ts` reaches, so an export kept alive only by a test fails. A test seam that must stay exported carries `@internal` with a one-line reason.
 6. `pnpm typecheck`
 7. `pnpm test`
 8. `pnpm build`

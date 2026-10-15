@@ -24,8 +24,6 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(commandDisposable);
 
 	logger.info("Vercel AI Gateway extension activated successfully");
-
-	return { authProvider };
 }
 
 export function deactivate() {
