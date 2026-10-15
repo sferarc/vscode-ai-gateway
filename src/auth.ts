@@ -30,7 +30,7 @@ const ACTIVE_SESSION_KEY = `${VERCEL_AI_AUTH_PROVIDER_ID}.activeSession`;
  */
 const LEGACY_ACCOUNT_IDS = new Set(["vercel-ai-user", "vercel-oidc-user"]);
 
-type AuthenticationMethod = "api-key" | "oidc";
+export type AuthenticationMethod = "api-key" | "oidc";
 
 interface SessionData {
 	id: string;
