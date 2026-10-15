@@ -16,7 +16,7 @@ Check Connection runs `runConnectionCheck` in `src/diagnostics.ts`. It reads the
 
 Show Logs calls `logger.show()`, which reveals the `Vercel AI Gateway` output channel without taking focus.
 
-Everything is pushed onto `context.subscriptions`. `activate()` returns `{ authProvider }`; no known consumer uses it. `deactivate()` only logs.
+Everything is pushed onto `context.subscriptions`. `activate()` returns nothing, so the extension exposes no API to other extensions. `deactivate()` only logs.
 
 ## Manifest contributions
 

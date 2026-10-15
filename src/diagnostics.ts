@@ -11,7 +11,7 @@ export interface DiagnosticsSession {
 	oidcData?: { expiresAt: number };
 }
 
-export interface ConnectionCheckResult {
+interface ConnectionCheckResult {
 	ok: boolean;
 	endpoint: string;
 	session?: { label: string; method: AuthenticationMethod; expiresAt?: number };
@@ -23,7 +23,10 @@ export interface ConnectionCheckResult {
 
 const SHOW_LOGS = "Show Logs";
 
-/** Sends its own request so the result never comes from the models cache. */
+/**
+ * Sends its own request so the result never comes from the models cache.
+ * @internal Exported so tests can assert on the result without the notification UI.
+ */
 export async function checkConnection(
 	session: DiagnosticsSession | null,
 	endpoint: string,

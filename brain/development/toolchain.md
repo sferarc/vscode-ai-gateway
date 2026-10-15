@@ -13,7 +13,7 @@ pnpm install --frozen-lockfile
 pnpm check       # every CI Check step below, in CI's order, stopping at the first failure
 pnpm lint        # biome check, read-only
 pnpm fix         # biome check --write
-pnpm knip        # unused files, exports and dependencies
+pnpm knip        # unused files, exports and dependencies, then a production pass that ignores tests
 pnpm typecheck   # tsc --noEmit
 pnpm test        # vitest run
 pnpm build       # bunchee bundles src/extension.ts to out/ as CommonJS, dependencies inlined

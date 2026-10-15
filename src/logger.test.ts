@@ -12,15 +12,16 @@ vi.mock("vscode", () => ({
 	},
 }));
 
-import { _resetLoggerForTesting, extractErrorMessage, initializeLogger, logger } from "./logger";
+import { extractErrorMessage } from "./logger";
 
 describe("Logger", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		_resetLoggerForTesting();
+		vi.resetModules();
 	});
 
-	it("does not throw when logging before initialization or after dispose", () => {
+	it("does not throw when logging before initialization or after dispose", async () => {
+		const { initializeLogger, logger } = await import("./logger");
 		expect(() => logger.info("test")).not.toThrow();
 		const disposable = initializeLogger();
 		expect(() => disposable.dispose()).not.toThrow();

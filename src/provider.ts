@@ -57,7 +57,7 @@ function isSignInCancellation(error: unknown): boolean {
 	return error.message === "User did not consent to login." || error.name === "Canceled";
 }
 
-export function isValidMimeType(mimeType: string): boolean {
+function isValidMimeType(mimeType: string): boolean {
 	return MIME_TYPE_PATTERN.test(mimeType);
 }
 
@@ -413,13 +413,14 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 // Message conversion utilities
 
-export interface ConvertedMessages {
+interface ConvertedMessages {
 	/** Conversation messages, for the `messages` field. Never contains `system` role messages. */
 	messages: ModelMessage[];
 	/** System prompt extracted from the messages preceding the first user message. */
 	instructions: string | undefined;
 }
 
+/** @internal Exported as the seam that message conversion tests drive directly. */
 export function convertMessages(messages: readonly LanguageModelChatMessage[]): ConvertedMessages {
 	const toolNameMap: Record<string, string> = {};
 	for (const msg of messages) {
@@ -446,7 +447,7 @@ type ToolResultContent = Extract<ToolResultOutput, { type: "content" }>["value"]
  * and all tool results go in a single tool message, because OpenAI-style APIs require an assistant
  * message with tool calls to be followed directly by the results for every one of them.
  */
-export function convertSingleMessage(
+function convertSingleMessage(
 	msg: LanguageModelChatMessage,
 	toolNameMap: Record<string, string>,
 ): ModelMessage[] {

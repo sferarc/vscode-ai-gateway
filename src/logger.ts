@@ -31,15 +31,6 @@ export function initializeLogger(): vscode.Disposable {
 	};
 }
 
-/**
- * Reset the logger singleton (for testing only).
- * @internal
- */
-export function _resetLoggerForTesting(): void {
-	_logChannel?.dispose();
-	_logChannel = null;
-}
-
 export const logger = {
 	error(message: string, ...args: unknown[]): void {
 		_logChannel?.error(message, ...args);
