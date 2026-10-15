@@ -10,5 +10,6 @@ Vitest, no config file: `pnpm test` runs every `src/**/*.test.ts`. On 2026-10-08
 | `src/models.test.ts` | the models client, its cache and in-flight sharing, and capability detection |
 | `src/models/identity.test.ts` | `parseModelIdentity` |
 | `src/logger.test.ts` | the logger and `extractErrorMessage` |
+| `src/diagnostics.test.ts` | Check Connection: success, rejected credentials, network failure, no session, and that the token never reaches the message or the log |
 
 There are no integration tests that launch VS Code (`.vscode-test/` is only in `.gitignore` and `.vscodeignore`). The `pnpm package` step in [[ci]] is the only check of the manifest as VS Code sees it.
