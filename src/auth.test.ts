@@ -23,15 +23,25 @@ vi.mock("vscode", () => ({
 	},
 }));
 
+vi.mock("./logger", () => ({
+	logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
 vi.mock("./vercel-auth", () => ({
 	checkVercelCliAvailable: vi.fn(() => false),
 	createInteractiveOidcSession: vi.fn(),
 	refreshOidcToken: vi.fn(),
 }));
 
-import type { ExtensionContext } from "vscode";
+import { type ExtensionContext, window } from "vscode";
 import { VercelAIAuthenticationProvider } from "./auth";
-import { checkVercelCliAvailable, refreshOidcToken } from "./vercel-auth";
+import { AuthCancelledError } from "./errors";
+import { logger } from "./logger";
+import {
+	checkVercelCliAvailable,
+	createInteractiveOidcSession,
+	refreshOidcToken,
+} from "./vercel-auth";
 
 const SESSIONS_KEY = "vercelAiGateway.sessions";
 const ACTIVE_KEY = "vercelAiGateway.activeSession";
@@ -402,6 +412,78 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			const options = hoisted.mockShowQuickPick.mock.calls[0][0] as Array<{ value: string }>;
 			expect(options.map((o) => o.value)).not.toContain("switch");
+		});
+	});
+
+	describe("cancelling a prompt", () => {
+		const pickApiKey = { label: "API Key", value: "api-key" } as never;
+		const pickOidc = { label: "Vercel OIDC", value: "oidc" } as never;
+		const pickAdd = { label: "Add new authentication", value: "add" } as never;
+
+		function expectSilent() {
+			expect(window.showErrorMessage).not.toHaveBeenCalled();
+			expect(logger.error).not.toHaveBeenCalled();
+		}
+
+		it("stays silent when the authentication method picker is dismissed", async () => {
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(undefined as never);
+
+			await provider.manageAuthentication();
+
+			expectSilent();
+		});
+
+		it("stays silent when the session name prompt is dismissed", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(pickAdd).mockResolvedValueOnce(pickApiKey);
+			hoisted.mockShowInputBox.mockResolvedValueOnce(undefined);
+
+			await provider.manageAuthentication();
+
+			expectSilent();
+		});
+
+		it("stays silent when the API key prompt is dismissed", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(pickAdd).mockResolvedValueOnce(pickApiKey);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("Name").mockResolvedValueOnce(undefined);
+
+			await provider.manageAuthentication();
+
+			expectSilent();
+			expect(JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]")).toHaveLength(1);
+		});
+
+		it.each(["Team selection cancelled", "Project selection is required"])(
+			"stays silent when the OIDC picker is dismissed (%s)",
+			async (message) => {
+				vi.mocked(checkVercelCliAvailable).mockReturnValue(true);
+				vi.mocked(createInteractiveOidcSession).mockRejectedValueOnce(
+					new AuthCancelledError(message),
+				);
+				hoisted.mockShowQuickPick.mockResolvedValueOnce(pickOidc);
+
+				await provider.manageAuthentication();
+
+				expectSilent();
+			},
+		);
+
+		it("still reports a failure to load teams", async () => {
+			vi.mocked(checkVercelCliAvailable).mockReturnValue(true);
+			vi.mocked(createInteractiveOidcSession).mockRejectedValueOnce(
+				new Error("Failed to load teams: Failed to fetch teams: 500"),
+			);
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(pickAdd).mockResolvedValueOnce(pickOidc);
+
+			await provider.manageAuthentication();
+
+			expect(window.showErrorMessage).toHaveBeenCalledTimes(1);
+			expect(window.showErrorMessage).toHaveBeenCalledWith(
+				"Failed to add session: Failed to load teams: Failed to fetch teams: 500",
+			);
+			expect(logger.error).toHaveBeenCalledTimes(1);
 		});
 	});
 

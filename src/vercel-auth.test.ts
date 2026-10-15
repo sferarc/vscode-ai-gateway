@@ -452,5 +452,30 @@ describe("vercel-auth", () => {
 				"Failed to load projects: Failed to fetch projects: 403",
 			);
 		});
+
+		it("reports a dismissed team picker as a cancellation", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [], pagination: { next: null } }));
+			vi.mocked(vscode.window.showQuickPick).mockResolvedValue(undefined as never);
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				name: "AuthCancelledError",
+				message: "Team selection cancelled",
+			});
+		});
+
+		it("reports a dismissed project picker as a cancellation", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [], pagination: { next: null } }))
+				.mockResolvedValueOnce(projectsPage(["a"], null));
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				name: "AuthCancelledError",
+			});
+		});
 	});
 });
