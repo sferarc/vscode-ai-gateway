@@ -941,3 +941,39 @@ describe("instruction extraction", () => {
 		expect(messages.some((msg) => msg.role === "system")).toBe(false);
 	});
 });
+
+describe("provideTokenCount", () => {
+	const model = {} as never;
+	const token = {} as never;
+	const count = (content: unknown[]) =>
+		createProvider().provideTokenCount(
+			model,
+			{ role: 1, content } as unknown as LanguageModelChatMessage,
+			token,
+		);
+
+	it("estimates a string at four characters a token", async () => {
+		expect(await createProvider().provideTokenCount(model, "a".repeat(10), token)).toBe(3);
+	});
+
+	it("counts the text inside tool results", async () => {
+		const result = new hoisted.MockLanguageModelToolResultPart("call_1", [
+			new hoisted.MockLanguageModelTextPart("a".repeat(400)),
+			hoisted.MockLanguageModelDataPart.text("b".repeat(400), "text/plain"),
+		]);
+
+		expect(await count([result])).toBe(200);
+	});
+
+	it("counts the name and input of tool calls", async () => {
+		const call = new hoisted.MockLanguageModelToolCallPart("call_1", "read", { path: "a.ts" });
+
+		expect(await count([call])).toBe(Math.ceil('read{"path":"a.ts"}'.length / 4));
+	});
+
+	it("counts textual data parts", async () => {
+		expect(
+			await count([hoisted.MockLanguageModelDataPart.text("c".repeat(40), "text/plain")]),
+		).toBe(10);
+	});
+});

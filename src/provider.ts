@@ -217,13 +217,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			return Math.ceil(text.length / 4);
 		}
 
-		let total = 0;
+		let characters = 0;
 		for (const part of text.content) {
-			if (part instanceof LanguageModelTextPart) {
-				total += Math.ceil(part.value.length / 4);
-			}
+			characters += countableText(part).length;
 		}
-		return total;
+		return Math.ceil(characters / 4);
 	}
 
 	private buildToolSet(
@@ -592,6 +590,26 @@ function isTextualMimeType(mimeType: string): boolean {
 		mimeType.endsWith("+json") ||
 		mimeType === "application/xml"
 	);
+}
+
+/**
+ * The text a message part sends to the model, for token estimates. Tool results usually carry the
+ * bulk of an agent's prompt (file contents, terminal output), so leaving them out makes VS Code
+ * budget its prompt against a count far below what the gateway receives.
+ */
+function countableText(part: unknown): string {
+	if (typeof part !== "object" || part === null) return "";
+	if (isTextPart(part)) return part.value;
+	if (part instanceof LanguageModelToolCallPart) {
+		return part.name + JSON.stringify(part.input ?? {});
+	}
+	if (part instanceof LanguageModelToolResultPart) {
+		return part.content.map(countableText).join("");
+	}
+	if (part instanceof LanguageModelDataPart && isTextualMimeType(part.mimeType)) {
+		return new TextDecoder().decode(part.data);
+	}
+	return "";
 }
 
 function isValidMessage(msg: ModelMessage): boolean {
