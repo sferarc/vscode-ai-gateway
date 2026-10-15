@@ -11,6 +11,7 @@ import {
 	window,
 } from "vscode";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
+import { AuthCancelledError } from "./errors";
 import { logger } from "./logger";
 import {
 	checkVercelCliAvailable,
@@ -319,7 +320,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	async createSession(_scopes: readonly string[]): Promise<AuthenticationSession> {
 		const authMethod = await this.promptForAuthMethod();
 		if (!authMethod) {
-			throw new Error("Authentication method required");
+			throw new AuthCancelledError("Authentication method required");
 		}
 
 		return authMethod === "oidc" ? this.createOidcSession() : this.createApiKeySession();
@@ -328,12 +329,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private async createApiKeySession(): Promise<AuthenticationSession> {
 		const sessionName = await this.promptForSessionName();
 		if (!sessionName) {
-			throw new Error("Session name required");
+			throw new AuthCancelledError("Session name required");
 		}
 
 		const apiKey = await this.promptForApiKey();
 		if (!apiKey) {
-			throw new Error("API key required");
+			throw new AuthCancelledError("API key required");
 		}
 
 		// The account id must be unique per session, otherwise VS Code treats every session as
@@ -496,6 +497,10 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			const action = await this.promptForAction(sessions);
 			await this.executeAction(action, sessions);
 		} catch (error) {
+			if (error instanceof AuthCancelledError) {
+				logger.debug(`Authentication management cancelled: ${error.message}`);
+				return;
+			}
 			logger.error("Error in manage authentication:", error);
 			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 			window.showErrorMessage(`Authentication management failed: ${errorMessage}`);
@@ -569,16 +574,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 					window.showWarningMessage(`Unknown action: ${action}`);
 			}
 		} catch (error) {
-			logger.error(`Error executing action ${action}:`, error);
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-
-			if (
-				errorMessage.includes("OIDC authentication failed") ||
-				errorMessage.includes("No valid Vercel CLI authentication")
-			) {
+			if (error instanceof AuthCancelledError) {
+				logger.debug(`Action ${action} cancelled: ${error.message}`);
 				return;
 			}
-
+			logger.error(`Error executing action ${action}:`, error);
+			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 			window.showErrorMessage(`Failed to ${action} session: ${errorMessage}`);
 		}
 	}

@@ -2,7 +2,7 @@
 
 ## Node and pnpm
 
-`mise.toml` pins Node `26.10.0` and pnpm `12.10.1`, with `lockfile = true`; `mise.lock` records their checksums. `package.json` `packageManager` names the same pnpm. After changing a version in `mise.toml`, run `mise lock` and commit both files.
+`mise.toml` pins Node `26.10.0` and pnpm `12.10.1`, with `lockfile = true`; `mise.lock` records their checksums. A fresh clone needs `mise trust` before `mise install`, or mise refuses to read the config. `package.json` `packageManager` names the same pnpm. After changing a version in `mise.toml`, run `mise lock` and commit both files.
 
 ## Commands
 
@@ -10,6 +10,7 @@ From `package.json` `scripts`:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm check       # every CI Check step below, in CI's order, stopping at the first failure
 pnpm lint        # biome check, read-only
 pnpm fix         # biome check --write
 pnpm knip        # unused files, exports and dependencies

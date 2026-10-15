@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const getConfiguration = vi.hoisted(() =>
+	vi.fn(() => ({ get: vi.fn((_: string, d: unknown) => d) })),
+);
+
 vi.mock("vscode", () => ({
-	workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn((_, d) => d) })) },
+	workspace: { getConfiguration },
 	EventEmitter: class {
 		event = vi.fn();
 		fire = vi.fn();
@@ -10,7 +14,7 @@ vi.mock("vscode", () => ({
 }));
 
 import { MODELS_CACHE_TTL_MS } from "./constants";
-import { type Model, ModelsClient } from "./models";
+import { type Model, ModelsClient, ModelsFetchError } from "./models";
 
 describe("ModelsClient", () => {
 	let originalFetch: typeof fetch;
@@ -21,6 +25,20 @@ describe("ModelsClient", () => {
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+	});
+
+	it("requests {endpoint}/v1/models when the endpoint setting ends with a slash", async () => {
+		getConfiguration.mockReturnValueOnce({
+			get: vi.fn((key: string, d: unknown) =>
+				key === "endpoint" ? "https://gateway.example.com//" : d,
+			),
+		});
+		const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) });
+		globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+		await new ModelsClient().getModels("test-key");
+
+		expect(fetchMock.mock.calls[0][0]).toBe("https://gateway.example.com/v1/models");
 	});
 
 	it("parses models with correct family, version, and capabilities", async () => {
@@ -337,5 +355,77 @@ describe("models cache", () => {
 
 		expect(ids(await forB)).toEqual(["b:model"]);
 		expect(ids(await forA)).toEqual(["a:model"]);
+	});
+
+	describe("fetch failures", () => {
+		function mockResponse(response: Partial<Response>) {
+			globalThis.fetch = vi.fn().mockResolvedValue(response) as unknown as typeof fetch;
+		}
+
+		it("names the endpoint, status and gateway error message for a non-ok JSON reply", async () => {
+			mockResponse({
+				ok: false,
+				status: 401,
+				statusText: "Unauthorized",
+				text: async () => JSON.stringify({ error: { message: "Invalid API key" } }),
+			});
+
+			const error = await new ModelsClient().getModels("bad-key").catch((e: unknown) => e);
+
+			expect(error).toBeInstanceOf(ModelsFetchError);
+			expect((error as ModelsFetchError).status).toBe(401);
+			expect((error as Error).message).toBe(
+				"HTTP 401 Unauthorized from https://ai-gateway.vercel.sh/v1/models: Invalid API key",
+			);
+		});
+
+		it("includes a truncated raw body for a non-ok reply that is not JSON", async () => {
+			mockResponse({
+				ok: false,
+				status: 502,
+				statusText: "Bad Gateway",
+				text: async () => `<html>${"x".repeat(1000)}</html>`,
+			});
+
+			const error = (await new ModelsClient().getModels("key").catch((e: unknown) => e)) as Error;
+
+			expect(error.message).toContain("HTTP 502 Bad Gateway from https://ai-gateway.vercel.sh");
+			expect(error.message).toContain("<html>xxx");
+			expect(error.message.endsWith("...")).toBe(true);
+			expect(error.message.length).toBeLessThan(700);
+		});
+
+		it("reports a successful reply whose body is not JSON", async () => {
+			mockResponse({
+				ok: true,
+				status: 200,
+				json: async () => {
+					throw new SyntaxError("Unexpected token '<'");
+				},
+			});
+
+			await expect(new ModelsClient().getModels("key")).rejects.toThrow(
+				/Invalid JSON from https:\/\/ai-gateway\.vercel\.sh\/v1\/models: Unexpected token/,
+			);
+		});
+
+		it("reports a reply without a data array instead of returning undefined", async () => {
+			mockResponse({ ok: true, status: 200, json: async () => ({ models: [] }) });
+
+			await expect(new ModelsClient().getModels("key")).rejects.toThrow(/expected a "data" array/);
+		});
+
+		it("does not cache a failure", async () => {
+			const fetchMock = vi
+				.fn()
+				.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) })
+				.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: [] }) });
+			globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+			const client = new ModelsClient();
+			await expect(client.getModels("key")).rejects.toThrow();
+			await expect(client.getModels("key")).resolves.toEqual([]);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		});
 	});
 });
