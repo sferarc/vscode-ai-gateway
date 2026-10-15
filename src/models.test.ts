@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const getConfiguration = vi.hoisted(() =>
+	vi.fn(() => ({ get: vi.fn((_: string, d: unknown) => d) })),
+);
+
 vi.mock("vscode", () => ({
-	workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn((_, d) => d) })) },
+	workspace: { getConfiguration },
 	EventEmitter: class {
 		event = vi.fn();
 		fire = vi.fn();
@@ -21,6 +25,20 @@ describe("ModelsClient", () => {
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+	});
+
+	it("requests {endpoint}/v1/models when the endpoint setting ends with a slash", async () => {
+		getConfiguration.mockReturnValueOnce({
+			get: vi.fn((key: string, d: unknown) =>
+				key === "endpoint" ? "https://gateway.example.com//" : d,
+			),
+		});
+		const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) });
+		globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+		await new ModelsClient().getModels("test-key");
+
+		expect(fetchMock.mock.calls[0][0]).toBe("https://gateway.example.com/v1/models");
 	});
 
 	it("parses models with correct family, version, and capabilities", async () => {
