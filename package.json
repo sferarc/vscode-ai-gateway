@@ -55,6 +55,16 @@
 				"command": "vercelAiGateway.manage",
 				"title": "Manage Authentication",
 				"category": "Vercel AI Gateway"
+			},
+			{
+				"command": "vercelAiGateway.checkConnection",
+				"title": "Check Connection",
+				"category": "Vercel AI Gateway"
+			},
+			{
+				"command": "vercelAiGateway.showLogs",
+				"title": "Show Logs",
+				"category": "Vercel AI Gateway"
 			}
 		],
 		"configuration": {

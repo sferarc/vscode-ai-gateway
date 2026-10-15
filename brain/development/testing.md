@@ -12,5 +12,6 @@ Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/ver
 | `src/models.test.ts` | `ModelsClient`, with `capability detection`. `models cache`: freshness, in-flight sharing per key, invalidation, failed fetches |
 | `src/models/identity.test.ts` | `parseModelIdentity` |
 | `src/logger.test.ts` | `Logger` and `extractErrorMessage` |
+| `src/diagnostics.test.ts` | Check Connection: success, rejected credentials, network failure, no session, and that the token never reaches the message or the log |
 
 There are no integration tests that launch VS Code (`.vscode-test/` is only in `.gitignore` and `.vscodeignore`). The `pnpm package` step in [[ci]] is the only check of the manifest as VS Code sees it.
