@@ -38,7 +38,7 @@ Errors, timeouts included, are reported into the chat as a `**Error:**` text par
 
 ## Token counting
 
-`provideTokenCount` estimates `ceil(characters / 4)` over text parts only, as it has since the extension moved into the monorepo (SferaDev/SferaDev#20). It is not a tokenizer.
+`provideTokenCount` estimates `ceil(characters / 4)` over the text a message sends: text parts, a tool call's name and JSON input, the text inside tool results, and data parts with a textual MIME type (`countableText` in `src/provider.ts`). Images count as zero. Until the `provideTokenCount` tests in `src/provider.test.ts` were added it counted top-level text parts only, so tool results, usually the bulk of an agent prompt, counted as zero and VS Code budgeted its prompt against an undercount. It is not a tokenizer.
 
 ## Tests
 
