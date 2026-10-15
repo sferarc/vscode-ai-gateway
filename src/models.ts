@@ -45,8 +45,38 @@ export interface Model {
 	};
 }
 
-interface ModelsResponse {
-	data: Model[];
+const ERROR_BODY_LIMIT = 500;
+
+/** A failed model-list request, carrying the HTTP status when the gateway answered. */
+export class ModelsFetchError extends Error {
+	constructor(
+		message: string,
+		readonly status?: number,
+	) {
+		super(message);
+		this.name = "ModelsFetchError";
+	}
+}
+
+async function readBody(response: Response): Promise<string> {
+	try {
+		return await response.text();
+	} catch {
+		return "";
+	}
+}
+
+function describeErrorBody(body: string): string {
+	let detail = body.trim();
+	try {
+		const message = (JSON.parse(body) as { error?: { message?: unknown } })?.error?.message;
+		if (typeof message === "string" && message) {
+			detail = message;
+		}
+	} catch {
+		// Not JSON; keep the raw text.
+	}
+	return detail.length > ERROR_BODY_LIMIT ? `${detail.slice(0, ERROR_BODY_LIMIT)}...` : detail;
 }
 
 interface ModelsCache {
@@ -153,11 +183,32 @@ export class ModelsClient {
 		});
 
 		if (!response.ok) {
-			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+			const detail = describeErrorBody(await readBody(response));
+			const statusLine = `HTTP ${response.status} ${response.statusText}`.trim();
+			throw new ModelsFetchError(
+				`${statusLine} from ${url}${detail ? `: ${detail}` : ""}`,
+				response.status,
+			);
 		}
 
-		const { data } = (await response.json()) as ModelsResponse;
-		return data;
+		let payload: unknown;
+		try {
+			payload = await response.json();
+		} catch (error) {
+			throw new ModelsFetchError(
+				`Invalid JSON from ${url}: ${error instanceof Error ? error.message : String(error)}`,
+				response.status,
+			);
+		}
+
+		const data = (payload as { data?: unknown } | null)?.data;
+		if (!Array.isArray(data)) {
+			throw new ModelsFetchError(
+				`Unexpected response from ${url}: expected a "data" array of models`,
+				response.status,
+			);
+		}
+		return data as Model[];
 	}
 
 	private transformToVSCodeModels(data: Model[]): LanguageModelChatInformation[] {
