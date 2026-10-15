@@ -684,6 +684,78 @@ describe("VercelAIAuthenticationProvider", () => {
 			expect(stored).toEqual([expect.objectContaining({ id: "s2", method: "api-key" })]);
 		});
 
+		it("logs, warns once and deletes stored sessions that are not valid JSON", async () => {
+			const warn = vi.spyOn(logger, "warn");
+			const blob = '[{"id":"s1","accessToken":"secret-value"';
+			await ctx.secrets.store(SESSIONS_KEY, blob);
+
+			await expect(provider.getSessions()).resolves.toEqual([]);
+			await provider.getSessions();
+			await provider.removeSession("none");
+
+			expect(ctx.secrets.delete).toHaveBeenCalledWith(SESSIONS_KEY);
+			expect(warn).toHaveBeenCalledWith(
+				`Stored sessions are not valid JSON (SyntaxError, length ${blob.length})`,
+			);
+			expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-value");
+			expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
+			expect(window.showWarningMessage).toHaveBeenCalledWith(
+				expect.stringContaining("must be added again"),
+				"Manage Authentication",
+			);
+		});
+
+		it("does not delete sessions stored after the unreadable value was read", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			vi.mocked(ctx.secrets.get).mockResolvedValueOnce("invalid{");
+
+			await expect(provider.getSessions()).resolves.toEqual([]);
+			await provider.removeSession("none");
+
+			expect(ctx.secrets.delete).not.toHaveBeenCalled();
+			const sessions = await provider.getSessions();
+			expect(sessions.map((s) => s.id)).toEqual(["s1"]);
+		});
+
+		it("opens authentication management from the warning", async () => {
+			vi.mocked(window.showWarningMessage).mockResolvedValueOnce("Manage Authentication" as never);
+			const manage = vi.spyOn(provider, "manageAuthentication").mockResolvedValue();
+			await ctx.secrets.store(SESSIONS_KEY, "invalid{");
+
+			await provider.getSessions();
+			await vi.waitFor(() => expect(manage).toHaveBeenCalledTimes(1));
+		});
+
+		it("warns when the stored value is not an array", async () => {
+			const warn = vi.spyOn(logger, "warn");
+			await ctx.secrets.store(SESSIONS_KEY, '{"id":"s1"}');
+
+			await provider.getSessions();
+
+			expect(warn).toHaveBeenCalledWith("Stored sessions are not an array (object)");
+			expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
+		});
+
+		it("warns about one bad entry and keeps the good ones", async () => {
+			await ctx.secrets.store(
+				SESSIONS_KEY,
+				JSON.stringify([createSession("s1"), { id: "bad" }, createSession("s2")]),
+			);
+
+			const sessions = await provider.getSessions();
+
+			expect(sessions.map((s) => s.id)).toEqual(["s1", "s2"]);
+			expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
+		});
+
+		it("does not warn when every stored session is valid", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+
+			await provider.getSessions();
+
+			expect(window.showWarningMessage).not.toHaveBeenCalled();
+		});
+
 		it("keeps the other valid session when removing one next to a bad entry", async () => {
 			await ctx.secrets.store(
 				SESSIONS_KEY,
