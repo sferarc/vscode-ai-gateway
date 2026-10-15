@@ -35,6 +35,7 @@ import { checkVercelCliAvailable, refreshOidcToken } from "./vercel-auth";
 
 const SESSIONS_KEY = "vercelAiGateway.sessions";
 const ACTIVE_KEY = "vercelAiGateway.activeSession";
+const NOW = new Date("2026-01-01T00:00:00Z").getTime();
 
 function createMockContext(): ExtensionContext {
 	const secrets = new Map<string, string>();
@@ -81,7 +82,7 @@ function createSession(id: string, method: "api-key" | "oidc" = "api-key", expir
 					projectName: "P",
 					teamId: "t1",
 					teamName: "T",
-					expiresAt: expiresAt ?? Date.now() + 3600000,
+					expiresAt: expiresAt ?? NOW + 3600000,
 				},
 			}
 		: base;
@@ -92,9 +93,15 @@ describe("VercelAIAuthenticationProvider", () => {
 	let provider: VercelAIAuthenticationProvider;
 
 	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(NOW);
 		vi.clearAllMocks();
 		ctx = createMockContext();
 		provider = new VercelAIAuthenticationProvider(ctx);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it("returns empty sessions when none exist", async () => {
@@ -109,12 +116,12 @@ describe("VercelAIAuthenticationProvider", () => {
 	});
 
 	it("refreshes near-expiry OIDC tokens and fires change event", async () => {
-		const session = createSession("s1", "oidc", Date.now() + 5 * 60 * 1000);
+		const session = createSession("s1", "oidc", NOW + 5 * 60 * 1000);
 		await ctx.secrets.store("vercelAiGateway.sessions", JSON.stringify([session]));
 
 		vi.mocked(refreshOidcToken).mockResolvedValueOnce({
 			token: "new_token",
-			expiresAt: Date.now() + 3600000,
+			expiresAt: NOW + 3600000,
 			projectId: "p1",
 			projectName: "P",
 			teamId: "t1",
@@ -128,7 +135,7 @@ describe("VercelAIAuthenticationProvider", () => {
 	});
 
 	it("returns original session when refresh fails", async () => {
-		const session = createSession("s1", "oidc", Date.now() + 5 * 60 * 1000);
+		const session = createSession("s1", "oidc", NOW + 5 * 60 * 1000);
 		await ctx.secrets.store("vercelAiGateway.sessions", JSON.stringify([session]));
 		vi.mocked(refreshOidcToken).mockRejectedValueOnce(new Error("fail"));
 
@@ -214,11 +221,11 @@ describe("VercelAIAuthenticationProvider", () => {
 		it("persists a refreshed OIDC token so later reads see it", async () => {
 			await ctx.secrets.store(
 				SESSIONS_KEY,
-				JSON.stringify([createSession("s1", "oidc", Date.now() + 60 * 1000)]),
+				JSON.stringify([createSession("s1", "oidc", NOW + 60 * 1000)]),
 			);
 			vi.mocked(refreshOidcToken).mockResolvedValueOnce({
 				token: "fresh",
-				expiresAt: Date.now() + 3600000,
+				expiresAt: NOW + 3600000,
 				projectId: "p1",
 				projectName: "P",
 				teamId: "t1",
@@ -234,7 +241,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		it("keeps other sessions when one OIDC refresh fails", async () => {
 			await ctx.secrets.store(
 				SESSIONS_KEY,
-				JSON.stringify([createSession("s1", "oidc", Date.now() + 60 * 1000), createSession("s2")]),
+				JSON.stringify([createSession("s1", "oidc", NOW + 60 * 1000), createSession("s2")]),
 			);
 			vi.mocked(refreshOidcToken).mockRejectedValueOnce(new Error("boom"));
 
@@ -254,7 +261,7 @@ describe("VercelAIAuthenticationProvider", () => {
 				await gate;
 				return {
 					token: "fresh",
-					expiresAt: Date.now() + 3600000,
+					expiresAt: NOW + 3600000,
 					projectId: "p1",
 					projectName: "P",
 					teamId: "t1",
@@ -264,7 +271,7 @@ describe("VercelAIAuthenticationProvider", () => {
 			return resolve;
 		}
 
-		const flush = () => new Promise((r) => setTimeout(r, 0));
+		const refreshStarted = () => vi.waitFor(() => expect(refreshOidcToken).toHaveBeenCalled());
 		const storedSessions = async () =>
 			JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]") as Array<{
 				id: string;
@@ -274,7 +281,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		beforeEach(async () => {
 			await ctx.secrets.store(
 				SESSIONS_KEY,
-				JSON.stringify([createSession("s1", "oidc", Date.now() + 60 * 1000)]),
+				JSON.stringify([createSession("s1", "oidc", NOW + 60 * 1000)]),
 			);
 			hoisted.mockEventEmitterFire.mockClear();
 		});
@@ -288,7 +295,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 			const sessions = provider.getSessions();
 			const active = provider.getActiveSession();
-			await flush();
+			await refreshStarted();
 			release();
 
 			expect((await sessions)[0].accessToken).toBe("fresh");
@@ -303,7 +310,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		it("keeps a session created during a slow refresh", async () => {
 			const release = deferredRefresh();
 			const sessions = provider.getSessions();
-			await flush();
+			await refreshStarted();
 
 			hoisted.mockShowQuickPick.mockResolvedValueOnce({
 				label: "API Key",
@@ -323,7 +330,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		it("does not bring back a session removed during a slow refresh", async () => {
 			const release = deferredRefresh();
 			const sessions = provider.getSessions();
-			await flush();
+			await refreshStarted();
 
 			await provider.removeSession("s1");
 
