@@ -186,7 +186,10 @@ describe("active session", () => {
 		const TOKEN = "tok_secret_value";
 
 		async function setup(getActiveSession: () => Promise<{ accessToken: string } | null>) {
-			hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+			hoisted.mockGetConfiguration.mockReturnValue({
+				get: (_: string, d?: unknown) => d,
+				inspect: () => undefined,
+			});
 			const vscode = await import("vscode");
 			const getSession = vi.mocked(vscode.authentication.getSession);
 			getSession.mockReset();
@@ -485,7 +488,10 @@ describe("model list failures", () => {
 
 describe("provideLanguageModelChatResponse", () => {
 	it("sends the system prompt via instructions, not inside messages", async () => {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 
 		const vscode = await import("vscode");
 		const getSession = vi.mocked(vscode.authentication.getSession);
@@ -516,7 +522,10 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 
 	async function requestOptions(model: object, modelOptions?: Record<string, unknown>) {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 
 		const vscode = await import("vscode");
 		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
@@ -557,7 +566,10 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 
 	async function respondWithTimeout(isCancellationRequested: boolean, textBeforeStall?: string) {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 
 		const vscode = await import("vscode");
 		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
@@ -614,7 +626,10 @@ describe("provideLanguageModelChatResponse", () => {
 
 describe("file chunk MIME validation", () => {
 	beforeEach(() => {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 	});
 
 	function reportsFile(mediaType: string): boolean {
@@ -637,7 +652,10 @@ describe("file chunk MIME validation", () => {
 
 describe("handleStreamChunk", () => {
 	beforeEach(() => {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 	});
 
 	it("ignores lifecycle events without reporting", () => {

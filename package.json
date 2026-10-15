@@ -72,8 +72,9 @@
 			"properties": {
 				"vercelAiGateway.endpoint": {
 					"type": "string",
+					"scope": "machine",
 					"default": "https://ai-gateway.vercel.sh",
-					"description": "AI Gateway endpoint URL. Change for self-hosted or regional deployments."
+					"description": "AI Gateway endpoint URL. Change for self-hosted or regional deployments. Only read from user settings, since requests to it carry your credentials."
 				},
 				"vercelAiGateway.timeout": {
 					"type": "number",

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getConfiguration = vi.hoisted(() =>
-	vi.fn(() => ({ get: vi.fn((_: string, d: unknown) => d) })),
+	vi.fn(() => ({ get: vi.fn((_: string, d: unknown) => d), inspect: vi.fn() })),
 );
 
 vi.mock("vscode", () => ({
@@ -29,9 +29,8 @@ describe("ModelsClient", () => {
 
 	it("requests {endpoint}/v1/models when the endpoint setting ends with a slash", async () => {
 		getConfiguration.mockReturnValueOnce({
-			get: vi.fn((key: string, d: unknown) =>
-				key === "endpoint" ? "https://gateway.example.com//" : d,
-			),
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn(() => ({ globalValue: "https://gateway.example.com//" })),
 		});
 		const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) });
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
