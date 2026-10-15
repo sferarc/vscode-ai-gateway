@@ -8,7 +8,7 @@ const { showInformationMessage, showErrorMessage, logInfo, logShow } = vi.hoiste
 }));
 
 vi.mock("vscode", () => ({
-	workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn((_, d) => d) })) },
+	workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn((_, d) => d), inspect: vi.fn() })) },
 	window: { showInformationMessage, showErrorMessage },
 }));
 
