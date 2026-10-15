@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelChatMessage } from "vscode";
 import { ERROR_MESSAGES } from "./constants";
-import {
-	convertMessages,
-	convertSingleMessage,
-	isValidMimeType,
-	VercelAIChatModelProvider,
-} from "./provider";
+import { convertMessages, VercelAIChatModelProvider } from "./provider";
 
 const hoisted = vi.hoisted(() => {
 	class MockEventEmitter {
@@ -66,6 +61,7 @@ const hoisted = vi.hoisted(() => {
 vi.mock("vscode", () => ({
 	EventEmitter: hoisted.MockEventEmitter,
 	authentication: { getSession: vi.fn(), onDidChangeSessions: vi.fn(() => ({ dispose: vi.fn() })) },
+	commands: { executeCommand: vi.fn() },
 	window: {
 		showErrorMessage: vi.fn(),
 		createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
@@ -80,9 +76,24 @@ vi.mock("vscode", () => ({
 }));
 
 vi.mock("./auth", () => ({ VERCEL_AI_AUTH_PROVIDER_ID: "vercelAiGateway" }));
-vi.mock("@ai-sdk/gateway", () => ({ createGatewayProvider: vi.fn(() => () => ({})) }));
-vi.mock("ai", () => ({ jsonSchema: vi.fn((schema) => schema), streamText: vi.fn() }));
+vi.mock("@ai-sdk/gateway", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@ai-sdk/gateway")>()),
+	createGatewayProvider: vi.fn(() => () => ({})),
+}));
+vi.mock("ai", async (importOriginal) => ({
+	...(await importOriginal<typeof import("ai")>()),
+	jsonSchema: vi.fn((schema) => schema),
+	streamText: vi.fn(),
+}));
 vi.mock("./models", () => ({
+	ModelsFetchError: class extends Error {
+		constructor(
+			message: string,
+			readonly status?: number,
+		) {
+			super(message);
+		}
+	},
 	ModelsClient: class {
 		getModels = vi.fn();
 		invalidateCache = vi.fn();
@@ -182,7 +193,10 @@ describe("active session", () => {
 		const TOKEN = "tok_secret_value";
 
 		async function setup(getActiveSession: () => Promise<{ accessToken: string } | null>) {
-			hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+			hoisted.mockGetConfiguration.mockReturnValue({
+				get: (_: string, d?: unknown) => d,
+				inspect: () => undefined,
+			});
 			const vscode = await import("vscode");
 			const getSession = vi.mocked(vscode.authentication.getSession);
 			getSession.mockReset();
@@ -387,9 +401,104 @@ describe("active session", () => {
 	});
 });
 
+describe("model list failures", () => {
+	async function setup(error: Error, choice?: string) {
+		const vscode = await import("vscode");
+		const showErrorMessage = vi.mocked(vscode.window.showErrorMessage);
+		showErrorMessage.mockReset();
+		showErrorMessage.mockResolvedValue(choice as never);
+		const executeCommand = vi.mocked(vscode.commands.executeCommand);
+		executeCommand.mockReset();
+		const { logger } = await import("./logger");
+		const showLogs = vi.spyOn(logger, "show").mockImplementation(() => {});
+		showLogs.mockClear();
+
+		const provider = new VercelAIChatModelProvider(async () => ({ accessToken: "key" }));
+		vi.mocked(
+			(provider as unknown as { modelsClient: { getModels: (key: string) => unknown } })
+				.modelsClient.getModels,
+		).mockRejectedValue(error);
+		return { provider, showErrorMessage, executeCommand, showLogs };
+	}
+
+	async function flush() {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	it("shows the reason with a Show Logs action when not silent", async () => {
+		const { ModelsFetchError } = await import("./models");
+		const { provider, showErrorMessage, showLogs } = await setup(
+			new ModelsFetchError("HTTP 500 from https://gw/v1/models: boom", 500),
+			"Show Logs",
+		);
+
+		const models = await provider.provideLanguageModelChatInformation(
+			{ silent: false },
+			{} as never,
+		);
+		await flush();
+
+		expect(models).toEqual([]);
+		expect(showErrorMessage).toHaveBeenCalledWith(
+			"Failed to fetch models from Vercel AI Gateway: HTTP 500 from https://gw/v1/models: boom",
+			"Show Logs",
+		);
+		expect(showLogs).toHaveBeenCalledTimes(1);
+	});
+
+	it("offers Manage Authentication for a 401 or 403", async () => {
+		const { ModelsFetchError } = await import("./models");
+		for (const status of [401, 403]) {
+			const { provider, showErrorMessage, executeCommand } = await setup(
+				new ModelsFetchError(`HTTP ${status}`, status),
+				"Manage Authentication",
+			);
+
+			await provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+			await flush();
+
+			expect(showErrorMessage).toHaveBeenCalledWith(
+				expect.stringContaining(`HTTP ${status}`),
+				"Manage Authentication",
+				"Show Logs",
+			);
+			expect(executeCommand).toHaveBeenCalledWith("vercelAiGateway.manage");
+		}
+	});
+
+	it("reports non-JSON and malformed replies the same way", async () => {
+		const { ModelsFetchError } = await import("./models");
+		for (const message of [
+			"Invalid JSON from https://gw/v1/models: Unexpected token '<'",
+			'Unexpected response from https://gw/v1/models: expected a "data" array of models',
+		]) {
+			const { provider, showErrorMessage } = await setup(new ModelsFetchError(message, 200));
+
+			await provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+
+			expect(showErrorMessage).toHaveBeenCalledWith(expect.stringContaining(message), "Show Logs");
+		}
+	});
+
+	it("stays notification-free on silent calls", async () => {
+		const { provider, showErrorMessage } = await setup(new Error("network down"));
+
+		const models = await provider.provideLanguageModelChatInformation(
+			{ silent: true },
+			{} as never,
+		);
+
+		expect(models).toEqual([]);
+		expect(showErrorMessage).not.toHaveBeenCalled();
+	});
+});
+
 describe("provideLanguageModelChatResponse", () => {
 	it("sends the system prompt via instructions, not inside messages", async () => {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 
 		const vscode = await import("vscode");
 		const getSession = vi.mocked(vscode.authentication.getSession);
@@ -422,7 +531,10 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 
 	async function requestOptions(model: object, modelOptions?: Record<string, unknown>) {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 
 		const vscode = await import("vscode");
 		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
@@ -465,7 +577,10 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 
 	async function respondWithTimeout(isCancellationRequested: boolean, textBeforeStall?: string) {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 
 		const vscode = await import("vscode");
 		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
@@ -522,23 +637,80 @@ describe("provideLanguageModelChatResponse", () => {
 		const { report } = await respondWithTimeout(true);
 		expect(report).not.toHaveBeenCalled();
 	});
+
+	it("logs the status of a rejected request without its body and points to sign-in", async () => {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+
+		const { APICallError, streamText } = await import("ai");
+		const { GatewayAuthenticationError } = await import("@ai-sdk/gateway");
+		const cause = new APICallError({
+			message: "Unauthorized",
+			url: "https://ai-gateway.vercel.sh/v1/ai/language-model",
+			requestBodyValues: { prompt: "private prompt" },
+			statusCode: 401,
+		});
+		vi.mocked(streamText).mockReturnValue({
+			fullStream: [{ type: "error", error: new GatewayAuthenticationError({ cause }) }],
+		} as never);
+
+		const { logger } = await import("./logger");
+		const logError = vi.spyOn(logger, "error").mockImplementation(() => {});
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+
+		const line = logError.mock.calls.find(([message]) => message.startsWith("Chat request failed"));
+		expect(line?.[0]).toMatch(
+			/model=openai\/gpt-4o status=401 url=https:\/\/ai-gateway\.vercel\.sh\/v1\/ai\/language-model retryable=false elapsedMs=\d+/,
+		);
+		expect(JSON.stringify(logError.mock.calls)).not.toContain("private prompt");
+		expect(report.mock.calls[0][0].value).toContain("Vercel AI Gateway: Manage Authentication");
+		logError.mockRestore();
+	});
 });
 
-describe("isValidMimeType", () => {
+describe("file chunk MIME validation", () => {
+	beforeEach(() => {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
+	});
+
+	function reportsFile(mediaType: string): boolean {
+		const progress = { report: vi.fn() };
+		const file = { uint8Array: new TextEncoder().encode("{}"), mediaType };
+		createProvider().handleStreamChunk({ type: "file", file } as any, progress);
+		return progress.report.mock.calls.length > 0;
+	}
+
 	it("accepts valid MIME types", () => {
 		const valid = ["text/plain", "image/png", "application/json", "audio/mpeg", "model/gltf+json"];
-		for (const mime of valid) expect(isValidMimeType(mime)).toBe(true);
+		for (const mime of valid) expect(reportsFile(mime)).toBe(true);
 	});
 
 	it("rejects invalid MIME types", () => {
 		const invalid = ["cache_control", "textplain", "text/", "", "invalid", "a/b/c"];
-		for (const mime of invalid) expect(isValidMimeType(mime)).toBe(false);
+		for (const mime of invalid) expect(reportsFile(mime)).toBe(false);
 	});
 });
 
 describe("handleStreamChunk", () => {
 	beforeEach(() => {
-		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
 	});
 
 	it("ignores lifecycle events without reporting", () => {
@@ -648,7 +820,7 @@ describe("convertMessages", () => {
 		];
 		contents.forEach((content) => {
 			const msg = { role: 1, content } as unknown as LanguageModelChatMessage;
-			expect(() => convertSingleMessage(msg, {})).not.toThrow();
+			expect(() => convertMessages([msg])).not.toThrow();
 		});
 	});
 

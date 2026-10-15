@@ -11,6 +11,7 @@ import {
 	window,
 } from "vscode";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
+import { AuthCancelledError } from "./errors";
 import { logger } from "./logger";
 import {
 	checkVercelCliAvailable,
@@ -67,6 +68,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private _disposable: Disposable;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private inflightRefresh = new Map<string, Promise<SessionData>>();
+	private unreadableSessionsNotified = false;
 
 	constructor(private readonly context: ExtensionContext) {
 		this._disposable = authentication.registerAuthenticationProvider(
@@ -254,18 +256,24 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		let parsed: unknown;
 		try {
 			parsed = JSON.parse(stored);
-		} catch {
-			// Unreadable JSON holds nothing recoverable; dropping it lets the user sign in again.
-			await this.context.secrets.delete(SESSIONS_SECRET_KEY);
+		} catch (error) {
+			const errorName = error instanceof Error ? error.name : typeof error;
+			logger.warn(`Stored sessions are not valid JSON (${errorName}, length ${stored.length})`);
+			this.notifyUnreadableSessions();
+			// Not awaited: callers already inside the write queue would wait on themselves.
+			void this.discardUnreadableSessions(stored);
 			return [];
 		}
 		if (!Array.isArray(parsed)) {
+			logger.warn(`Stored sessions are not an array (${typeof parsed})`);
+			this.notifyUnreadableSessions();
 			return [];
 		}
 
 		const sessions = parsed.filter(isStoredSession);
 		if (sessions.length < parsed.length) {
 			logger.warn(`Ignoring ${parsed.length - sessions.length} malformed stored session(s)`);
+			this.notifyUnreadableSessions();
 		}
 		return sessions.map((session) => ({
 			...session,
@@ -278,10 +286,39 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		}));
 	}
 
+	/** Deletes the secret only if it still holds the unreadable value, so a newer store survives. */
+	private discardUnreadableSessions(unreadable: string): Promise<void> {
+		return this.withLock(async () => {
+			if ((await this.context.secrets.get(SESSIONS_SECRET_KEY)) === unreadable) {
+				await this.context.secrets.delete(SESSIONS_SECRET_KEY);
+			}
+		}).catch((error) => {
+			logger.error("Failed to delete unreadable stored sessions:", error);
+		});
+	}
+
+	private notifyUnreadableSessions(): void {
+		if (this.unreadableSessionsNotified) {
+			return;
+		}
+		this.unreadableSessionsNotified = true;
+		const action = "Manage Authentication";
+		void Promise.resolve(
+			window.showWarningMessage(
+				"Some stored Vercel AI Gateway sessions could not be read and must be added again.",
+				action,
+			),
+		).then((choice) => {
+			if (choice === action) {
+				return this.manageAuthentication();
+			}
+		});
+	}
+
 	async createSession(_scopes: readonly string[]): Promise<AuthenticationSession> {
 		const authMethod = await this.promptForAuthMethod();
 		if (!authMethod) {
-			throw new Error("Authentication method required");
+			throw new AuthCancelledError("Authentication method required");
 		}
 
 		return authMethod === "oidc" ? this.createOidcSession() : this.createApiKeySession();
@@ -290,12 +327,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private async createApiKeySession(): Promise<AuthenticationSession> {
 		const sessionName = await this.promptForSessionName();
 		if (!sessionName) {
-			throw new Error("Session name required");
+			throw new AuthCancelledError("Session name required");
 		}
 
 		const apiKey = await this.promptForApiKey();
 		if (!apiKey) {
-			throw new Error("API key required");
+			throw new AuthCancelledError("API key required");
 		}
 
 		// The account id must be unique per session, otherwise VS Code treats every session as
@@ -459,6 +496,10 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			const action = await this.promptForAction(sessions);
 			await this.executeAction(action, sessions);
 		} catch (error) {
+			if (error instanceof AuthCancelledError) {
+				logger.debug(`Authentication management cancelled: ${error.message}`);
+				return;
+			}
 			logger.error("Error in manage authentication:", error);
 			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 			window.showErrorMessage(`Authentication management failed: ${errorMessage}`);
@@ -532,16 +573,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 					window.showWarningMessage(`Unknown action: ${action}`);
 			}
 		} catch (error) {
-			logger.error(`Error executing action ${action}:`, error);
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-
-			if (
-				errorMessage.includes("OIDC authentication failed") ||
-				errorMessage.includes("No valid Vercel CLI authentication")
-			) {
+			if (error instanceof AuthCancelledError) {
+				logger.debug(`Action ${action} cancelled: ${error.message}`);
 				return;
 			}
-
+			logger.error(`Error executing action ${action}:`, error);
+			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 			window.showErrorMessage(`Failed to ${action} session: ${errorMessage}`);
 		}
 	}

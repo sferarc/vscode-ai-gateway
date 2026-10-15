@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { TOKEN_REFRESH_MARGIN } from "./constants";
+import { AuthCancelledError } from "./errors";
 import { logger } from "./logger";
 
 interface VercelTokenResponse {
@@ -258,12 +259,12 @@ async function selectTeam(authToken: string): Promise<Team | null> {
 		});
 
 		if (!selected) {
-			throw new VercelOidcTokenError("Team selection cancelled");
+			throw new AuthCancelledError("Team selection cancelled");
 		}
 
 		return selected.value;
 	} catch (error) {
-		if (error instanceof VercelOidcTokenError) {
+		if (error instanceof VercelOidcTokenError || error instanceof AuthCancelledError) {
 			throw error;
 		}
 		throw new VercelOidcTokenError(
@@ -295,12 +296,12 @@ async function selectProject(
 		});
 
 		if (!selected) {
-			throw new VercelOidcTokenError("Project selection is required");
+			throw new AuthCancelledError("Project selection is required");
 		}
 
 		return selected.value;
 	} catch (error) {
-		if (error instanceof VercelOidcTokenError) {
+		if (error instanceof VercelOidcTokenError || error instanceof AuthCancelledError) {
 			throw error;
 		}
 		throw new VercelOidcTokenError(
@@ -330,7 +331,7 @@ export async function createInteractiveOidcSession(): Promise<StoredOidcToken> {
 
 		return createStoredToken(newToken, project.id, project.name, team?.id, team?.name || undefined);
 	} catch (error) {
-		if (error instanceof VercelOidcTokenError) {
+		if (error instanceof VercelOidcTokenError || error instanceof AuthCancelledError) {
 			throw error;
 		}
 		throw new VercelOidcTokenError(

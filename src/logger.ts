@@ -31,15 +31,6 @@ export function initializeLogger(): vscode.Disposable {
 	};
 }
 
-/**
- * Reset the logger singleton (for testing only).
- * @internal
- */
-export function _resetLoggerForTesting(): void {
-	_logChannel?.dispose();
-	_logChannel = null;
-}
-
 export const logger = {
 	error(message: string, ...args: unknown[]): void {
 		_logChannel?.error(message, ...args);
@@ -53,6 +44,9 @@ export const logger = {
 	debug(message: string, ...args: unknown[]): void {
 		_logChannel?.debug(message, ...args);
 	},
+	show(): void {
+		_logChannel?.show(true);
+	},
 };
 
 /**
@@ -60,7 +54,8 @@ export const logger = {
  */
 export function extractErrorMessage(error: unknown): string {
 	if (error instanceof Error) {
-		return error.message;
+		const causes = describeCauseChain(error);
+		return causes.length > 0 ? `${error.message} (${causes.join(": ")})` : error.message;
 	}
 	if (typeof error === "string") {
 		return error;
@@ -69,4 +64,37 @@ export function extractErrorMessage(error: unknown): string {
 		return String((error as { message: unknown }).message);
 	}
 	return "An unexpected error occurred";
+}
+
+const MAX_CAUSE_DEPTH = 3;
+
+// Node's fetch rejects with TypeError("fetch failed") and keeps the real reason in `cause`.
+function describeCauseChain(error: Error): string[] {
+	const parts: string[] = [];
+	const seen = new Set<unknown>([error]);
+	let cause: unknown = error.cause;
+	while (parts.length < MAX_CAUSE_DEPTH && cause != null && !seen.has(cause)) {
+		seen.add(cause);
+		const part = describeCause(cause);
+		if (part && part !== error.message && !parts.includes(part)) {
+			parts.push(part);
+		}
+		cause = typeof cause === "object" && "cause" in cause ? cause.cause : undefined;
+	}
+	return parts;
+}
+
+function describeCause(cause: unknown): string | undefined {
+	if (typeof cause === "string") {
+		return cause || undefined;
+	}
+	if (typeof cause !== "object" || cause === null) {
+		return undefined;
+	}
+	const message = "message" in cause && typeof cause.message === "string" ? cause.message : "";
+	const code = "code" in cause && typeof cause.code === "string" ? cause.code : "";
+	if (code && !message.includes(code)) {
+		return message ? `${message} [${code}]` : code;
+	}
+	return message || undefined;
 }

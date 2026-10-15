@@ -31,9 +31,10 @@ import {
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
 import { getConfig } from "./config";
-import { ERROR_MESSAGES } from "./constants";
+import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
+import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
-import { ModelsClient } from "./models";
+import { ModelsClient, ModelsFetchError } from "./models";
 
 type StreamChunk = TextStreamPart<ToolSet>;
 
@@ -47,6 +48,12 @@ interface ActiveSession {
 	accessToken: string;
 }
 
+/** Identifies a chat request in failure logs. */
+export interface ChatRequestContext {
+	modelId: string;
+	startedAt: number;
+}
+
 function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | undefined {
 	return model.maxOutputTokens > 0 ? model.maxOutputTokens : undefined;
 }
@@ -57,7 +64,7 @@ function isSignInCancellation(error: unknown): boolean {
 	return error.message === "User did not consent to login." || error.name === "Canceled";
 }
 
-export function isValidMimeType(mimeType: string): boolean {
+function isValidMimeType(mimeType: string): boolean {
 	return MIME_TYPE_PATTERN.test(mimeType);
 }
 
@@ -100,7 +107,29 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			return models;
 		} catch (error) {
 			logger.error(ERROR_MESSAGES.MODELS_FETCH_FAILED, error);
+			if (!options.silent) {
+				this.showModelsFetchError(error).catch((notifyError: unknown) =>
+					logger.error("Failed to show the model list error", notifyError),
+				);
+			}
 			return [];
+		}
+	}
+
+	private async showModelsFetchError(error: unknown): Promise<void> {
+		const showLogs = "Show Logs";
+		const manageAuth = "Manage Authentication";
+		const status = error instanceof ModelsFetchError ? error.status : undefined;
+		const actions = status === 401 || status === 403 ? [manageAuth, showLogs] : [showLogs];
+
+		const choice = await window.showErrorMessage(
+			`${ERROR_MESSAGES.MODELS_FETCH_FAILED}: ${extractErrorMessage(error)}`,
+			...actions,
+		);
+		if (choice === showLogs) {
+			logger.show();
+		} else if (choice === manageAuth) {
+			await vscode.commands.executeCommand(`${EXTENSION_ID}.manage`);
 		}
 	}
 
@@ -112,6 +141,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		token: CancellationToken,
 	): Promise<void> {
 		logger.info(`Chat request to ${model.id} with ${chatMessages.length} messages`);
+		const request: ChatRequestContext = { modelId: model.id, startedAt: Date.now() };
 
 		const abortController = new AbortController();
 		const abortSubscription = token.onCancellationRequested(() => abortController.abort());
@@ -126,7 +156,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			const config = getConfig();
 			const gateway = createGatewayProvider({
 				apiKey,
-				baseURL: `${config.endpoint.replace(/\/+$/, "")}/v1/ai`,
+				baseURL: `${config.endpoint}/v1/ai`,
 			});
 
 			const tools = this.buildToolSet(options.tools);
@@ -155,7 +185,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					}
 					return;
 				}
-				const emitted = this.handleStreamChunk(chunk, progress);
+				const emitted = this.handleStreamChunk(chunk, progress, request);
 				if (emitted) responseSent = true;
 			}
 
@@ -173,13 +203,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return;
 			}
 
-			logger.error("Exception during streaming:", error);
 			if (this.isAbortError(error)) {
+				logger.error("Exception during streaming:", error);
 				this.reportTimeout(progress);
 			} else {
-				progress.report(
-					new LanguageModelTextPart(`\n\n**Error:** ${extractErrorMessage(error)}\n\n`),
-				);
+				this.reportError(error, progress, request);
 			}
 		} finally {
 			abortSubscription.dispose();
@@ -273,7 +301,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		}
 	}
 
-	handleStreamChunk(chunk: StreamChunk, progress: Progress<LanguageModelResponsePart>): boolean {
+	handleStreamChunk(
+		chunk: StreamChunk,
+		progress: Progress<LanguageModelResponsePart>,
+		request?: ChatRequestContext,
+	): boolean {
 		switch (chunk.type) {
 			case "text-delta": {
 				if (chunk.text) {
@@ -290,7 +322,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return this.handleFileChunk(chunk.file, progress);
 
 			case "error":
-				this.reportError(chunk.error, progress);
+				this.reportError(chunk.error, progress, request);
 				return true;
 
 			case "tool-call": {
@@ -303,7 +335,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 			case "tool-error": {
 				logger.error(`Tool error in ${chunk.toolName}:`, chunk.error);
-				this.reportError(chunk.error, progress);
+				this.reportError(chunk.error, progress, request);
 				return true;
 			}
 
@@ -382,22 +414,36 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		}
 	}
 
-	private reportError(error: unknown, progress: Progress<LanguageModelResponsePart>): void {
-		logger.error("Stream error:", error);
-		const message = extractErrorMessage(error);
-		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${message}\n\n`));
+	private reportError(
+		error: unknown,
+		progress: Progress<LanguageModelResponsePart>,
+		request?: ChatRequestContext,
+	): void {
+		const { statusCode, url, isRetryable, userMessage } = describeGatewayError(error);
+		// The error object is not logged: an APICallError carries the request body and headers.
+		const fields = [
+			`model=${request?.modelId ?? "unknown"}`,
+			`status=${statusCode ?? "none"}`,
+			`url=${url ?? "none"}`,
+			`retryable=${isRetryable ?? "unknown"}`,
+			`elapsedMs=${request ? Date.now() - request.startedAt : "unknown"}`,
+		];
+		logger.error(`Chat request failed: ${fields.join(" ")}: ${userMessage}`);
+		if (error instanceof Error && error.stack) logger.debug(error.stack);
+		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${userMessage}\n\n`));
 	}
 }
 
 // Message conversion utilities
 
-export interface ConvertedMessages {
+interface ConvertedMessages {
 	/** Conversation messages, for the `messages` field. Never contains `system` role messages. */
 	messages: ModelMessage[];
 	/** System prompt extracted from the messages preceding the first user message. */
 	instructions: string | undefined;
 }
 
+/** @internal Exported as the seam that message conversion tests drive directly. */
 export function convertMessages(messages: readonly LanguageModelChatMessage[]): ConvertedMessages {
 	const toolNameMap: Record<string, string> = {};
 	for (const msg of messages) {
@@ -424,7 +470,7 @@ type ToolResultContent = Extract<ToolResultOutput, { type: "content" }>["value"]
  * and all tool results go in a single tool message, because OpenAI-style APIs require an assistant
  * message with tool calls to be followed directly by the results for every one of them.
  */
-export function convertSingleMessage(
+function convertSingleMessage(
 	msg: LanguageModelChatMessage,
 	toolNameMap: Record<string, string>,
 ): ModelMessage[] {

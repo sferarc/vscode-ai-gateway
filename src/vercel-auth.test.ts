@@ -12,6 +12,7 @@ vi.mock("vscode", () => ({
 }));
 
 const originalFetch = globalThis.fetch;
+const NOW = new Date("2026-01-01T00:00:00Z").getTime();
 
 function createJwt(payload: Record<string, unknown>): string {
 	const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
@@ -21,12 +22,15 @@ function createJwt(payload: Record<string, unknown>): string {
 
 describe("vercel-auth", () => {
 	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(NOW);
 		vi.resetAllMocks();
 		vi.mocked(os.platform).mockReturnValue("darwin");
 		vi.mocked(os.homedir).mockReturnValue("/Users/test");
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		globalThis.fetch = originalFetch;
 	});
 
@@ -59,20 +63,20 @@ describe("vercel-auth", () => {
 			globalThis.fetch = vi.fn();
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() + 3600000 });
+			const result = await refreshOidcToken({ ...storedToken, expiresAt: NOW + 3600000 });
 			expect(globalThis.fetch).not.toHaveBeenCalled();
 			expect(result.token).toBe("old");
 		});
 
 		it("refreshes expired token and parses JWT exp", async () => {
-			const exp = Math.floor(Date.now() / 1000) + 3600;
+			const exp = NOW / 1000 + 3600;
 			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () => Promise.resolve({ token: createJwt({ exp }) }),
 			});
 
 			const { refreshOidcToken } = await import("./vercel-auth");
-			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 });
+			const result = await refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 });
 
 			expect(globalThis.fetch).toHaveBeenCalled();
 			expect(result.expiresAt).toBe(exp * 1000);
@@ -85,41 +89,39 @@ describe("vercel-auth", () => {
 			});
 
 			const { refreshOidcToken } = await import("./vercel-auth");
-			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 });
+			const result = await refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 });
 
-			expect(Number.isNaN(result.expiresAt)).toBe(false);
-			expect(result.expiresAt).toBeGreaterThan(Date.now());
+			expect(result.expiresAt).toBe(NOW + 60 * 60 * 1000);
 		});
 
 		it("throws when CLI not logged in", async () => {
 			vi.mocked(fs.existsSync).mockReturnValue(false);
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			await expect(
-				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
-			).rejects.toThrow("Vercel CLI not logged in");
+			await expect(refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 })).rejects.toThrow(
+				"Vercel CLI not logged in",
+			);
 		});
 
 		it("throws on API error", async () => {
 			globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, statusText: "Unauthorized" });
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			await expect(
-				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
-			).rejects.toThrow("Failed to refresh OIDC token");
+			await expect(refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 })).rejects.toThrow(
+				"Failed to refresh OIDC token",
+			);
 		});
 
 		it("preserves the team across a refresh", async () => {
 			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
-				json: () =>
-					Promise.resolve({ token: createJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }) }),
+				json: () => Promise.resolve({ token: createJwt({ exp: NOW / 1000 + 3600 }) }),
 			});
 			const { refreshOidcToken } = await import("./vercel-auth");
 
 			const result = await refreshOidcToken({
 				...storedToken,
-				expiresAt: Date.now() - 1000,
+				expiresAt: NOW - 1000,
 				teamId: "t1",
 				teamName: "Team One",
 			});
@@ -130,13 +132,12 @@ describe("vercel-auth", () => {
 		it("scopes the refresh request to the team when one is set", async () => {
 			const fetchMock = vi.fn().mockResolvedValue({
 				ok: true,
-				json: () =>
-					Promise.resolve({ token: createJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }) }),
+				json: () => Promise.resolve({ token: createJwt({ exp: NOW / 1000 + 3600 }) }),
 			});
 			globalThis.fetch = fetchMock;
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000, teamId: "team_abc" });
+			await refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000, teamId: "team_abc" });
 
 			expect(String(fetchMock.mock.calls[0]?.[0])).toContain("teamId=team_abc");
 		});
@@ -148,18 +149,18 @@ describe("vercel-auth", () => {
 			});
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			await expect(
-				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
-			).rejects.toThrow("Invalid JWT token");
+			await expect(refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 })).rejects.toThrow(
+				"Invalid JWT token",
+			);
 		});
 
 		it("rejects a response with no token field", async () => {
 			globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			await expect(
-				refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 }),
-			).rejects.toThrow("Invalid token response");
+			await expect(refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 })).rejects.toThrow(
+				"Invalid token response",
+			);
 		});
 
 		it("falls back to a one-hour expiry when exp is not a number", async () => {
@@ -169,11 +170,9 @@ describe("vercel-auth", () => {
 			});
 			const { refreshOidcToken } = await import("./vercel-auth");
 
-			const before = Date.now();
-			const result = await refreshOidcToken({ ...storedToken, expiresAt: Date.now() - 1000 });
+			const result = await refreshOidcToken({ ...storedToken, expiresAt: NOW - 1000 });
 
-			expect(result.expiresAt).toBeGreaterThan(before);
-			expect(result.expiresAt).toBeLessThanOrEqual(before + 60 * 60 * 1000 + 1000);
+			expect(result.expiresAt).toBe(NOW + 60 * 60 * 1000);
 		});
 
 		it("reports the CLI as unavailable when auth.json has no token", async () => {
@@ -291,29 +290,22 @@ describe("vercel-auth", () => {
 	});
 
 	describe("refresh margin", () => {
-		const now = new Date("2026-01-01T00:00:00Z").getTime();
 		const storedToken = { token: "old", projectId: "p1", projectName: "P" };
 
 		beforeEach(() => {
-			vi.useFakeTimers();
-			vi.setSystemTime(now);
 			vi.mocked(fs.existsSync).mockReturnValue(true);
 			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ token: "cli" }));
 			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
-				json: () => Promise.resolve({ token: createJwt({ exp: now / 1000 + 3600 }) }),
+				json: () => Promise.resolve({ token: createJwt({ exp: NOW / 1000 + 3600 }) }),
 			});
-		});
-
-		afterEach(() => {
-			vi.useRealTimers();
 		});
 
 		it("keeps a token that expires exactly TOKEN_REFRESH_MARGIN from now", async () => {
 			const { refreshOidcToken } = await import("./vercel-auth");
 			const result = await refreshOidcToken({
 				...storedToken,
-				expiresAt: now + TOKEN_REFRESH_MARGIN,
+				expiresAt: NOW + TOKEN_REFRESH_MARGIN,
 			});
 			expect(globalThis.fetch).not.toHaveBeenCalled();
 			expect(result.token).toBe("old");
@@ -321,13 +313,13 @@ describe("vercel-auth", () => {
 
 		it("refreshes a token that expires one millisecond inside the margin", async () => {
 			const { refreshOidcToken } = await import("./vercel-auth");
-			await refreshOidcToken({ ...storedToken, expiresAt: now + TOKEN_REFRESH_MARGIN - 1 });
+			await refreshOidcToken({ ...storedToken, expiresAt: NOW + TOKEN_REFRESH_MARGIN - 1 });
 			expect(globalThis.fetch).toHaveBeenCalledOnce();
 		});
 
 		it("refreshes a token that has already expired", async () => {
 			const { refreshOidcToken } = await import("./vercel-auth");
-			await refreshOidcToken({ ...storedToken, expiresAt: now - 1 });
+			await refreshOidcToken({ ...storedToken, expiresAt: NOW - 1 });
 			expect(globalThis.fetch).toHaveBeenCalledOnce();
 		});
 	});
@@ -459,6 +451,31 @@ describe("vercel-auth", () => {
 			await expect(createInteractiveOidcSession()).rejects.toThrow(
 				"Failed to load projects: Failed to fetch projects: 403",
 			);
+		});
+
+		it("reports a dismissed team picker as a cancellation", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [], pagination: { next: null } }));
+			vi.mocked(vscode.window.showQuickPick).mockResolvedValue(undefined as never);
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				name: "AuthCancelledError",
+				message: "Team selection cancelled",
+			});
+		});
+
+		it("reports a dismissed project picker as a cancellation", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse({ teams: [], pagination: { next: null } }))
+				.mockResolvedValueOnce(projectsPage(["a"], null));
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				name: "AuthCancelledError",
+			});
 		});
 	});
 });

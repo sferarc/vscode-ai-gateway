@@ -44,16 +44,25 @@ Run **Vercel AI Gateway: Manage Authentication** again once a session exists. Th
 
 Chat requests and the model list always use the active session.
 
+## Commands
+
+Run these from the Command Palette:
+
+- **Vercel AI Gateway: Manage Authentication**: add, switch or remove sessions.
+- **Vercel AI Gateway: Check Connection**: checks the active session against the gateway. It shows the endpoint, the active session and its method, when an OIDC token expires, and the result of a fresh request for the model list: HTTP status, latency and model count. The same details are written to the log; the key or token never is.
+- **Vercel AI Gateway: Show Logs**: opens the extension's log.
+
 ## Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `vercelAiGateway.endpoint` | `https://ai-gateway.vercel.sh` | AI Gateway endpoint URL. Change it for self-hosted or regional deployments. |
+| `vercelAiGateway.endpoint` | `https://ai-gateway.vercel.sh` | AI Gateway endpoint URL. Change it for self-hosted or regional deployments. Read from user settings only: a workspace `.vscode/settings.json` cannot change it, because requests to it carry your key or token. |
 | `vercelAiGateway.timeout` | `30000` | Longest time, in milliseconds, the model may stay silent before its first chunk or between any two chunks. Allowed range is 5000 to 300000. When it runs out, the request stops and the chat shows an error saying it timed out. It does not limit the total length of an answer. |
 
 ## Troubleshooting
 
-- **Logs.** Open the Output panel and select the **Vercel AI Gateway** channel. Model fetches, chat requests and errors are logged there.
+- **Logs.** Run **Vercel AI Gateway: Show Logs**, or open the Output panel and select the **Vercel AI Gateway** channel. Model fetches, chat requests and errors are logged there.
+- **Check your setup.** Run **Vercel AI Gateway: Check Connection**. A 401 or 403 means the gateway rejected the key or token; no status means the endpoint could not be reached.
 - **No models in the model picker.** Either there is no active session (sign in with Manage Authentication) or fetching the model list failed; the failure is logged in the output channel. Check that `vercelAiGateway.endpoint` points at a reachable gateway.
 - **Vercel OIDC is not offered.** The Vercel CLI is not logged in. Run `vercel login` and try again.
 - **Request timed out.** The model sent nothing for longer than `vercelAiGateway.timeout`. Raise the setting for slow models.
@@ -63,10 +72,13 @@ Chat requests and the model list always use the active session.
 The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
 
 ```bash
+mise trust
 mise install
 pnpm install
-pnpm lint && pnpm typecheck && pnpm test && pnpm package
+pnpm check
 ```
+
+`mise trust` is needed once per clone: mise refuses to read a `mise.toml` it has not been told to trust. `pnpm check` runs the same steps as CI's `Check` job, in the same order, and stops at the first failure.
 
 `@types/vscode` stays a literal version equal to the `engines.vscode` floor: `vsce` cannot read the catalog protocol and refuses to package when the types are newer than the engine. Add a changeset with `pnpm changeset` for any change that should be released.
 
