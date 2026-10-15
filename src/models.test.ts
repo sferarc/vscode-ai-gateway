@@ -37,7 +37,7 @@ describe("ModelsClient", () => {
 
 		await new ModelsClient().getModels("test-key");
 
-		expect(fetchMock.mock.calls[0][0]).toBe("https://gateway.example.com/v1/models");
+		expect(fetchMock.mock.calls[0]?.[0]).toBe("https://gateway.example.com/v1/models");
 	});
 
 	it("parses models with correct family, version, and capabilities", async () => {

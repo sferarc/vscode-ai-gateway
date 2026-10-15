@@ -308,11 +308,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 				"Some stored Vercel AI Gateway sessions could not be read and must be added again.",
 				action,
 			),
-		).then((choice) => {
-			if (choice === action) {
-				return this.manageAuthentication();
-			}
-		});
+		).then((choice) => (choice === action ? this.manageAuthentication() : undefined));
 	}
 
 	async createSession(_scopes: readonly string[]): Promise<AuthenticationSession> {

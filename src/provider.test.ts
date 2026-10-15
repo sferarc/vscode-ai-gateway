@@ -674,7 +674,7 @@ describe("provideLanguageModelChatResponse", () => {
 			/model=openai\/gpt-4o status=401 url=https:\/\/ai-gateway\.vercel\.sh\/v1\/ai\/language-model retryable=false elapsedMs=\d+/,
 		);
 		expect(JSON.stringify(logError.mock.calls)).not.toContain("private prompt");
-		expect(report.mock.calls[0][0].value).toContain("Vercel AI Gateway: Manage Authentication");
+		expect(report.mock.calls[0]?.[0].value).toContain("Vercel AI Gateway: Manage Authentication");
 		logError.mockRestore();
 	});
 });
