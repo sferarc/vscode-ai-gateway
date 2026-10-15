@@ -32,6 +32,7 @@ import {
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
 import { getConfig } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
+import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
 import { ModelsClient, ModelsFetchError } from "./models";
 
@@ -45,6 +46,12 @@ const OUTPUT_LIMIT_NOTE =
 /** The part of an authentication session the chat provider needs to talk to the gateway. */
 interface ActiveSession {
 	accessToken: string;
+}
+
+/** Identifies a chat request in failure logs. */
+export interface ChatRequestContext {
+	modelId: string;
+	startedAt: number;
 }
 
 function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | undefined {
@@ -134,6 +141,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		token: CancellationToken,
 	): Promise<void> {
 		logger.info(`Chat request to ${model.id} with ${chatMessages.length} messages`);
+		const request: ChatRequestContext = { modelId: model.id, startedAt: Date.now() };
 
 		const abortController = new AbortController();
 		const abortSubscription = token.onCancellationRequested(() => abortController.abort());
@@ -177,7 +185,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					}
 					return;
 				}
-				const emitted = this.handleStreamChunk(chunk, progress);
+				const emitted = this.handleStreamChunk(chunk, progress, request);
 				if (emitted) responseSent = true;
 			}
 
@@ -195,13 +203,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return;
 			}
 
-			logger.error("Exception during streaming:", error);
 			if (this.isAbortError(error)) {
+				logger.error("Exception during streaming:", error);
 				this.reportTimeout(progress);
 			} else {
-				progress.report(
-					new LanguageModelTextPart(`\n\n**Error:** ${extractErrorMessage(error)}\n\n`),
-				);
+				this.reportError(error, progress, request);
 			}
 		} finally {
 			abortSubscription.dispose();
@@ -295,7 +301,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		}
 	}
 
-	handleStreamChunk(chunk: StreamChunk, progress: Progress<LanguageModelResponsePart>): boolean {
+	handleStreamChunk(
+		chunk: StreamChunk,
+		progress: Progress<LanguageModelResponsePart>,
+		request?: ChatRequestContext,
+	): boolean {
 		switch (chunk.type) {
 			case "text-delta": {
 				if (chunk.text) {
@@ -312,7 +322,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return this.handleFileChunk(chunk.file, progress);
 
 			case "error":
-				this.reportError(chunk.error, progress);
+				this.reportError(chunk.error, progress, request);
 				return true;
 
 			case "tool-call": {
@@ -325,7 +335,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 			case "tool-error": {
 				logger.error(`Tool error in ${chunk.toolName}:`, chunk.error);
-				this.reportError(chunk.error, progress);
+				this.reportError(chunk.error, progress, request);
 				return true;
 			}
 
@@ -404,10 +414,23 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		}
 	}
 
-	private reportError(error: unknown, progress: Progress<LanguageModelResponsePart>): void {
-		logger.error("Stream error:", error);
-		const message = extractErrorMessage(error);
-		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${message}\n\n`));
+	private reportError(
+		error: unknown,
+		progress: Progress<LanguageModelResponsePart>,
+		request?: ChatRequestContext,
+	): void {
+		const { statusCode, url, isRetryable, userMessage } = describeGatewayError(error);
+		// The error object is not logged: an APICallError carries the request body and headers.
+		const fields = [
+			`model=${request?.modelId ?? "unknown"}`,
+			`status=${statusCode ?? "none"}`,
+			`url=${url ?? "none"}`,
+			`retryable=${isRetryable ?? "unknown"}`,
+			`elapsedMs=${request ? Date.now() - request.startedAt : "unknown"}`,
+		];
+		logger.error(`Chat request failed: ${fields.join(" ")}: ${userMessage}`);
+		if (error instanceof Error && error.stack) logger.debug(error.stack);
+		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${userMessage}\n\n`));
 	}
 }
 

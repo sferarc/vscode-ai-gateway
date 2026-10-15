@@ -76,8 +76,15 @@ vi.mock("vscode", () => ({
 }));
 
 vi.mock("./auth", () => ({ VERCEL_AI_AUTH_PROVIDER_ID: "vercelAiGateway" }));
-vi.mock("@ai-sdk/gateway", () => ({ createGatewayProvider: vi.fn(() => () => ({})) }));
-vi.mock("ai", () => ({ jsonSchema: vi.fn((schema) => schema), streamText: vi.fn() }));
+vi.mock("@ai-sdk/gateway", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@ai-sdk/gateway")>()),
+	createGatewayProvider: vi.fn(() => () => ({})),
+}));
+vi.mock("ai", async (importOriginal) => ({
+	...(await importOriginal<typeof import("ai")>()),
+	jsonSchema: vi.fn((schema) => schema),
+	streamText: vi.fn(),
+}));
 vi.mock("./models", () => ({
 	ModelsFetchError: class extends Error {
 		constructor(
@@ -621,6 +628,43 @@ describe("provideLanguageModelChatResponse", () => {
 	it("stays silent when the user cancelled", async () => {
 		const { report } = await respondWithTimeout(true);
 		expect(report).not.toHaveBeenCalled();
+	});
+
+	it("logs the status of a rejected request without its body and points to sign-in", async () => {
+		hoisted.mockGetConfiguration.mockReturnValue({ get: (_: string, d?: unknown) => d });
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+
+		const { APICallError, streamText } = await import("ai");
+		const { GatewayAuthenticationError } = await import("@ai-sdk/gateway");
+		const cause = new APICallError({
+			message: "Unauthorized",
+			url: "https://ai-gateway.vercel.sh/v1/ai/language-model",
+			requestBodyValues: { prompt: "private prompt" },
+			statusCode: 401,
+		});
+		vi.mocked(streamText).mockReturnValue({
+			fullStream: [{ type: "error", error: new GatewayAuthenticationError({ cause }) }],
+		} as never);
+
+		const { logger } = await import("./logger");
+		const logError = vi.spyOn(logger, "error").mockImplementation(() => {});
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+
+		const line = logError.mock.calls.find(([message]) => message.startsWith("Chat request failed"));
+		expect(line?.[0]).toMatch(
+			/model=openai\/gpt-4o status=401 url=https:\/\/ai-gateway\.vercel\.sh\/v1\/ai\/language-model retryable=false elapsedMs=\d+/,
+		);
+		expect(JSON.stringify(logError.mock.calls)).not.toContain("private prompt");
+		expect(report.mock.calls[0][0].value).toContain("Vercel AI Gateway: Manage Authentication");
+		logError.mockRestore();
 	});
 });
 
