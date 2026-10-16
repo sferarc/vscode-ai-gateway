@@ -9,4 +9,4 @@ Two settings, declared in `package.json` `contributes.configuration` and read by
 
 The model list cache is not cleared when `endpoint` changes, so a new endpoint's models can take up to 5 minutes to appear (inferred from `src/models.ts`; no test covers it).
 
-Constants that are not settings live in `src/constants.ts`: the models path, the 5 minute cache TTL, a 15 minute `TOKEN_REFRESH_MARGIN` (an OIDC token counts as expired that long before it expires, `isExpired` in `src/vercel-auth.ts`), and the user-facing error strings.
+Constants that are not settings live in `src/constants.ts`: the models path, the 5 minute cache TTL, a 15 minute `TOKEN_REFRESH_MARGIN` (an OIDC token counts as expired that long before it expires, `isExpired` in `src/vercel-auth.ts`), a 15 second `VERCEL_API_TIMEOUT_MS` for each `api.vercel.com` request in the OIDC flow (fixed, unlike the `timeout` setting, which covers gateway requests), and the user-facing error strings.

@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { TOKEN_REFRESH_MARGIN } from "./constants";
+import { TOKEN_REFRESH_MARGIN, VERCEL_API_TIMEOUT_MS } from "./constants";
 
 vi.mock("node:fs", () => ({ existsSync: vi.fn(), readFileSync: vi.fn() }));
 vi.mock("node:os", () => ({ platform: vi.fn(), homedir: vi.fn() }));
@@ -476,6 +476,94 @@ describe("vercel-auth", () => {
 			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
 				name: "AuthCancelledError",
 			});
+		});
+	});
+
+	describe("Vercel API timeout", () => {
+		const timeoutMessage = `Timed out contacting Vercel after ${VERCEL_API_TIMEOUT_MS} ms`;
+		const stalled = () => new Promise<never>(() => undefined);
+
+		beforeEach(() => {
+			vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+			vi.setSystemTime(NOW);
+			vi.mocked(fs.existsSync).mockReturnValue(true);
+			vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ token: "cli" }));
+		});
+
+		it("rejects an OIDC refresh whose request never answers and aborts it", async () => {
+			const fetchMock = vi.fn((_input: URL | string, _init?: RequestInit) => stalled());
+			globalThis.fetch = fetchMock as unknown as typeof fetch;
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			const refresh = refreshOidcToken({
+				token: "old",
+				expiresAt: NOW - 1000,
+				projectId: "p1",
+				projectName: "P",
+			});
+			const outcome = expect(refresh).rejects.toMatchObject({
+				name: "VercelOidcTokenError",
+				message: timeoutMessage,
+			});
+
+			await vi.advanceTimersByTimeAsync(VERCEL_API_TIMEOUT_MS);
+			await outcome;
+
+			expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+		});
+
+		it("does not time out a refresh that answers just inside the limit", async () => {
+			globalThis.fetch = vi.fn(
+				() =>
+					new Promise<Response>((resolve) => {
+						setTimeout(
+							() =>
+								resolve({
+									ok: true,
+									json: () => Promise.resolve({ token: createJwt({ exp: NOW / 1000 + 3600 }) }),
+								} as Response),
+							VERCEL_API_TIMEOUT_MS - 1,
+						);
+					}),
+			);
+			const { refreshOidcToken } = await import("./vercel-auth");
+
+			const refresh = refreshOidcToken({
+				token: "old",
+				expiresAt: NOW - 1000,
+				projectId: "p1",
+				projectName: "P",
+			});
+			await vi.advanceTimersByTimeAsync(VERCEL_API_TIMEOUT_MS - 1);
+
+			expect((await refresh).expiresAt).toBe(NOW + 3600 * 1000);
+			expect(vi.getTimerCount()).toBe(0);
+		});
+
+		it("rejects the team picker when a later page stalls", async () => {
+			globalThis.fetch = vi
+				.fn()
+				.mockResolvedValueOnce({
+					ok: true,
+					json: () =>
+						Promise.resolve({
+							teams: [{ id: "t1", name: "One", slug: "one" }],
+							pagination: { next: 5 },
+						}),
+				})
+				.mockImplementationOnce(stalled);
+			const { createInteractiveOidcSession } = await import("./vercel-auth");
+
+			const session = createInteractiveOidcSession();
+			const outcome = expect(session).rejects.toMatchObject({
+				name: "VercelOidcTokenError",
+				message: timeoutMessage,
+			});
+
+			await vi.advanceTimersByTimeAsync(VERCEL_API_TIMEOUT_MS);
+			await outcome;
+			expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+			expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
 		});
 	});
 });
