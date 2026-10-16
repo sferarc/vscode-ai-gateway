@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { TOKEN_REFRESH_MARGIN } from "./constants";
+import { TOKEN_REFRESH_MARGIN, VERCEL_API_TIMEOUT_MS } from "./constants";
 import { AuthCancelledError } from "./errors";
 import { logger } from "./logger";
 
@@ -149,6 +149,26 @@ function vercelApiUrl(pathname: string, teamId?: string): URL {
 	return url;
 }
 
+// Races the request against the timer so a mock or runtime that ignores the abort still settles.
+async function withVercelTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+	const controller = new AbortController();
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timedOut = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			const error = new VercelOidcTokenError(
+				`Timed out contacting Vercel after ${VERCEL_API_TIMEOUT_MS} ms`,
+			);
+			controller.abort(error);
+			reject(error);
+		}, VERCEL_API_TIMEOUT_MS);
+	});
+	try {
+		return await Promise.race([run(controller.signal), timedOut]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 async function fetchAllPages<T>(
 	authToken: string,
 	url: URL,
@@ -164,17 +184,20 @@ async function fetchAllPages<T>(
 			pageUrl.searchParams.set("until", String(until));
 		}
 
-		const response = await fetch(pageUrl, {
-			headers: {
-				Authorization: `Bearer ${authToken}`,
-			},
+		const data = await withVercelTimeout(async (signal) => {
+			const response = await fetch(pageUrl, {
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				},
+				signal,
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to fetch ${key}: ${response.status} ${response.statusText}`.trim());
+			}
+
+			return (await response.json()) as PaginatedResponse;
 		});
-
-		if (!response.ok) {
-			throw new Error(`Failed to fetch ${key}: ${response.status} ${response.statusText}`.trim());
-		}
-
-		const data = (await response.json()) as PaginatedResponse;
 		const pageItems = data[key];
 		if (Array.isArray(pageItems)) {
 			items.push(...(pageItems as T[]));
@@ -198,20 +221,23 @@ async function getVercelOidcToken(
 	try {
 		const url = vercelApiUrl(`/v1/projects/${encodeURIComponent(projectId)}/token`, teamId);
 		url.searchParams.set("source", "vercel-oidc-refresh");
-		const res = await fetch(url, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${authToken}`,
-			},
+		const tokenRes = await withVercelTimeout(async (signal) => {
+			const res = await fetch(url, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				},
+				signal,
+			});
+
+			if (!res.ok) {
+				throw new VercelOidcTokenError(
+					`Failed to refresh OIDC token: ${res.status} ${res.statusText}`.trim(),
+				);
+			}
+
+			return (await res.json()) as { token?: string };
 		});
-
-		if (!res.ok) {
-			throw new VercelOidcTokenError(
-				`Failed to refresh OIDC token: ${res.status} ${res.statusText}`.trim(),
-			);
-		}
-
-		const tokenRes = (await res.json()) as { token?: string };
 
 		if (!tokenRes || typeof tokenRes.token !== "string") {
 			throw new VercelOidcTokenError("Invalid token response from Vercel API");

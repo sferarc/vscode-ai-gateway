@@ -317,6 +317,30 @@ describe("VercelAIAuthenticationProvider", () => {
 			expect(hoisted.mockEventEmitterFire).toHaveBeenCalledTimes(1);
 		});
 
+		it("starts a new OIDC refresh after a shared one times out", async () => {
+			let fail: (error: Error) => void = () => undefined;
+			vi.mocked(refreshOidcToken).mockImplementationOnce(
+				() =>
+					new Promise((_, reject) => {
+						fail = reject;
+					}),
+			);
+
+			const sessions = provider.getSessions();
+			const active = provider.getActiveSession();
+			await refreshStarted();
+			fail(new Error("Timed out contacting Vercel after 15000 ms"));
+
+			expect((await sessions)[0]?.accessToken).not.toBe("fresh");
+			expect((await active)?.accessToken).not.toBe("fresh");
+			expect(refreshOidcToken).toHaveBeenCalledTimes(1);
+
+			const release = deferredRefresh();
+			release();
+			expect((await provider.getSessions())[0]?.accessToken).toBe("fresh");
+			expect(refreshOidcToken).toHaveBeenCalledTimes(2);
+		});
+
 		it("keeps a session created during a slow refresh", async () => {
 			const release = deferredRefresh();
 			const sessions = provider.getSessions();
