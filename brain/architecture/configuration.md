@@ -5,7 +5,7 @@ Two settings, declared in `package.json` `contributes.configuration` and read by
 | Setting | Default | Used by |
 | --- | --- | --- |
 | `vercelAiGateway.endpoint` | `https://ai-gateway.vercel.sh` | model list (`{endpoint}/v1/models`) and chat (`{endpoint}/v1/ai`); `getConfig()` strips trailing slashes, so both URLs come from one normalised value |
-| `vercelAiGateway.timeout` | `30000` ms, range 5000 to 300000 | idle limit for the model's first chunk and for each next chunk (`firstChunkMs` and `chunkMs` in the `streamText` timeout, since #8), not a cap on the whole response |
+| `vercelAiGateway.timeout` | `30000` ms, range 5000 to 300000 | idle limit for the model's first chunk and for each next chunk (`firstChunkMs` and `chunkMs` in the `streamText` timeout, since #8), not a cap on the whole response; also the total limit for the model list request |
 
 The model list cache is not cleared when `endpoint` changes, so a new endpoint's models can take up to 5 minutes to appear (inferred from `src/models.ts`; no test covers it).
 

@@ -13,7 +13,7 @@ vi.mock("vscode", () => ({
 	},
 }));
 
-import { MODELS_CACHE_TTL_MS } from "./constants";
+import { DEFAULT_TIMEOUT_MS, MODELS_CACHE_TTL_MS } from "./constants";
 import { type Model, ModelsClient, ModelsFetchError } from "./models";
 
 describe("ModelsClient", () => {
@@ -270,8 +270,9 @@ describe("models cache", () => {
 		originalFetch = globalThis.fetch;
 		pending = [];
 		globalThis.fetch = vi.fn(
-			(_url: string, init?: { headers?: Record<string, string> }) =>
-				new Promise((resolve) => {
+			(_url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) =>
+				new Promise((resolve, reject) => {
+					init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
 					pending.push({
 						authorization: init?.headers?.Authorization,
 						resolve: (modelIds) =>
@@ -340,6 +341,55 @@ describe("models cache", () => {
 		expect(pending).toHaveLength(2);
 		pending[1]?.resolve(["new:model"]);
 		expect(ids(await fresh)).toEqual(["new:model"]);
+	});
+
+	it("gives up on a gateway that does not answer within the timeout setting", async () => {
+		const client = new ModelsClient();
+		const hanging = client.getModels("keyA");
+		const outcome = expect(hanging).rejects.toThrow(
+			`Timed out after ${DEFAULT_TIMEOUT_MS} ms waiting for https://ai-gateway.vercel.sh/v1/models`,
+		);
+
+		await vi.advanceTimersByTimeAsync(DEFAULT_TIMEOUT_MS);
+		await outcome;
+
+		const retry = client.getModels("keyA");
+		expect(pending).toHaveLength(2);
+		pending[1]?.resolve(["a:one"]);
+		expect(ids(await retry)).toEqual(["a:one"]);
+	});
+
+	it("keeps serving the last good list when a refresh fails", async () => {
+		const client = new ModelsClient();
+		const initial = client.getModels("keyA");
+		pending[0]?.resolve(["a:one"]);
+		await initial;
+
+		vi.advanceTimersByTime(MODELS_CACHE_TTL_MS);
+		const refresh = client.getModels("keyA");
+		pending[1]?.reject(503);
+		expect(ids(await refresh)).toEqual(["a:one"]);
+
+		const next = client.getModels("keyA");
+		expect(pending).toHaveLength(3);
+		pending[2]?.resolve(["a:two"]);
+		expect(ids(await next)).toEqual(["a:two"]);
+	});
+
+	it("does not serve another key's or a previous session's list when a fetch fails", async () => {
+		const client = new ModelsClient();
+		const initial = client.getModels("keyA");
+		pending[0]?.resolve(["a:one"]);
+		await initial;
+
+		const otherKey = client.getModels("keyB");
+		pending[1]?.reject(503);
+		await expect(otherKey).rejects.toThrow("HTTP 503");
+
+		client.invalidateCache();
+		const afterSwitch = client.getModels("keyA");
+		pending[2]?.reject(503);
+		await expect(afterSwitch).rejects.toThrow("HTTP 503");
 	});
 
 	it("does not hand one key's in-flight fetch to a call with another key", async () => {
