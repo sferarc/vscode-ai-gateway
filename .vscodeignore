@@ -23,6 +23,8 @@ yarn.lock
 package-lock.json
 *.vsix
 .claude/
+CLAUDE.md
+brain/**
 CHANGELOG.md
 .changeset/**
 .github/**
