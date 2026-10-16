@@ -12,6 +12,8 @@
 
 The list is cached for 5 minutes (`MODELS_CACHE_TTL_MS`, `src/constants.ts`). Both the cache and the in-flight request are keyed by the API key they were fetched with: concurrent calls with the same key share one request, and a call with a different key starts its own and never sees another key's list. A failed fetch is not cached. When a refresh fails and the cache still holds a list fetched with the same key in the current generation, expired or not, `getModels` returns that list and logs a warning with the time it was fetched, so a network blip does not empty the model picker. The request, body included, is aborted after the `timeout` setting ([[configuration]]) and fails with "Timed out after N ms waiting for {url}", so a gateway that never answers cannot leave the in-flight request pending. Any session change on the `vercelAiGateway` provider calls `invalidateCache` and fires `onDidChangeLanguageModelChatInformation` (SferaDev/SferaDev#344). `invalidateCache` drops the cache and the in-flight request and bumps a generation counter so a fetch started before the switch cannot write its result into the cache when it lands. The `models cache` tests in `src/models.test.ts` cover sharing, expiry, failures, the stale fallback, the timeout, invalidation during a fetch and a key change during a fetch.
 
+A failed fetch throws `ModelsFetchError` with the status when there was one. Its message names the URL and the status, plus the gateway's `error.message` from a JSON body or the raw body cut to 500 characters; a reply that is not JSON or has no `data` array fails the same way instead of yielding an empty or undefined list (#21). `provideLanguageModelChatInformation` logs every failure, and on a non-silent call also shows an error message with "Show Logs", plus "Manage Authentication" first for a 401 or 403. Silent calls show nothing. Tests: `fetch failures` in `src/models.test.ts` and `model list failures` in `src/provider.test.ts`.
+
 ## Getting a key
 
 `getApiKey` is the only place a model-list or chat request gets credentials. It reads the active session from this extension's own provider ([[decisions/2026-08-09-active-session-from-own-provider]]) and falls back to `authentication.getSession` with `createIfNone` only when there is no session and the request may prompt. Without a key the model list is `[]` with no fetch, and a chat request reports `**Error:** Vercel AI Gateway API key not found` in the chat without building a gateway provider.
@@ -24,7 +26,7 @@ The list is cached for 5 minutes (`MODELS_CACHE_TTL_MS`, `src/constants.ts`). Bo
 | Sign-in fails otherwise | Not reached | Error logged, `AUTH_FAILED` toast |
 | Sign-in resolves no session | Not reached | No key, no toast |
 
-A cancel is recognised by what VS Code rejects with: `User did not consent to login.` when the consent prompt is dismissed, or an error named `Canceled` (`mainThreadAuthentication.ts` in the VS Code repository). Dismissing a picker inside this extension's own `createSession` (`src/auth.ts`) throws its own messages and still counts as a failure. No log line on these paths carries the token. Covered by the `sign-in fallback` tests in `src/provider.test.ts`.
+A cancel is recognised by what VS Code rejects with: `User did not consent to login.` when the consent prompt is dismissed, or an error named `Canceled` (`mainThreadAuthentication.ts` in the VS Code repository). Dismissing a picker inside this extension's own `createSession` (`src/auth.ts`) throws `AuthCancelledError` ([[authentication]]), which `isSignInCancellation` does not check, so on this path it still counts as a failure. Whether the error's name survives the trip through VS Code's `authentication.getSession` is unknown. No log line on these paths carries the token. Covered by the `sign-in fallback` tests in `src/provider.test.ts`.
 
 ## Chat requests
 
@@ -42,4 +44,4 @@ Errors, timeouts included, are reported into the chat as a `**Error:**` text par
 
 ## Tests
 
-`src/provider.test.ts`, `src/models.test.ts` and `src/models/identity.test.ts` ([[development/testing]]).
+`src/provider.test.ts`, `src/models.test.ts`, `src/models/identity.test.ts` and `src/errors.test.ts` ([[development/testing]]).

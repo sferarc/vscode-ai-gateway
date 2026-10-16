@@ -23,10 +23,12 @@
 
 `createSession` in `src/auth.ts` is what VS Code calls on sign-in, and what the manage command's add action calls.
 
-1. `promptForAuthMethod` always offers "API Key" and offers "Vercel OIDC" only when `checkVercelCliAvailable()` is true. Dismissing the pick throws `Authentication method required`. Tests: `authentication method options` in `src/auth.test.ts`.
-2. API key: an input box asks for a session name (required, `validateSessionName`), then a second one asks for the key (masked, `vck_` prefix). Either one dismissed throws `Session name required` or `API key required`. The account label is the session name.
+1. `promptForAuthMethod` always offers "API Key" and offers "Vercel OIDC" only when `checkVercelCliAvailable()` is true. Dismissing the pick throws `AuthCancelledError` (`src/errors.ts`) `Authentication method required`. Tests: `authentication method options` in `src/auth.test.ts`.
+2. API key: an input box asks for a session name (required, `validateSessionName`), then a second one asks for the key (masked, `vck_` prefix). Either one dismissed throws `AuthCancelledError` `Session name required` or `API key required`. The account label is the session name.
 3. Vercel OIDC: `createOidcSession` checks the CLI login again and, if it is gone, shows `ERROR_MESSAGES.VERCEL_CLI_NOT_LOGGED_IN` (`src/constants.ts`) and throws it. Otherwise it runs the team and project pickers above. The account label is `{projectName} ({teamName})`, or just `{projectName}` when there is no team name (a personal account).
 4. `storeSession` appends the session inside `withLock` and makes it the active session, then fires an `added` change event.
+
+Dismissing the team or project picker also throws `AuthCancelledError` (`Team selection cancelled`, `Project selection is required`), which `src/vercel-auth.ts` passes through rather than wrapping as `VercelOidcTokenError`. The manage command catches it, logs it at debug and shows nothing; any other error is logged and shown as `Failed to {action} session: ...` (#31). Before #31 a cancel was told apart by string checks that matched no current message, so it surfaced as a failure toast. Tests: `cancelling a prompt` in `src/auth.test.ts`.
 
 Only "creates API key session" in `src/auth.test.ts` drives this end to end; the OIDC label and the active-session switch on add have no direct test (unknown whether covered indirectly).
 
