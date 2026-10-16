@@ -153,6 +153,17 @@ export class ModelsClient {
 				}
 				return models;
 			})
+			.catch((error: unknown) => {
+				const stale = this.modelsCache;
+				if (generation !== this.generation || stale?.apiKey !== apiKey) {
+					throw error;
+				}
+				logger.warn(
+					`Model list refresh failed, keeping the list fetched at ${new Date(stale.fetchedAt).toISOString()}`,
+					error,
+				);
+				return stale.models;
+			})
 			.finally(() => {
 				if (this.inflightFetch?.promise === promise) {
 					this.inflightFetch = undefined;
@@ -164,22 +175,35 @@ export class ModelsClient {
 	}
 
 	private async fetchAndTransform(apiKey: string): Promise<LanguageModelChatInformation[]> {
-		const { endpoint } = getConfig();
+		const { endpoint, timeout } = getConfig();
 		const url = `${endpoint}${MODELS_ENDPOINT}`;
 
 		const startTime = Date.now();
 		logger.info(`Fetching models from ${url}`);
 
-		const data = await this.fetchModels(apiKey, url);
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), timeout);
+		let data: Model[];
+		try {
+			data = await this.fetchModels(apiKey, url, controller.signal);
+		} catch (error) {
+			if (controller.signal.aborted) {
+				throw new ModelsFetchError(`Timed out after ${timeout} ms waiting for ${url}`);
+			}
+			throw error;
+		} finally {
+			clearTimeout(timer);
+		}
 		const models = this.transformToVSCodeModels(data);
 
 		logger.info(`Models fetched in ${Date.now() - startTime}ms, count: ${models.length}`);
 		return models;
 	}
 
-	private async fetchModels(apiKey: string, url: string): Promise<Model[]> {
+	private async fetchModels(apiKey: string, url: string, signal: AbortSignal): Promise<Model[]> {
 		const response = await fetch(url, {
 			headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+			signal,
 		});
 
 		if (!response.ok) {

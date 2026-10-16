@@ -57,7 +57,7 @@ Run these from the Command Palette:
 | Setting | Default | Description |
 | --- | --- | --- |
 | `vercelAiGateway.endpoint` | `https://ai-gateway.vercel.sh` | AI Gateway endpoint URL. Change it for self-hosted or regional deployments. Read from user settings only: a workspace `.vscode/settings.json` cannot change it, because requests to it carry your key or token. |
-| `vercelAiGateway.timeout` | `30000` | Longest time, in milliseconds, the model may stay silent before its first chunk or between any two chunks. Allowed range is 5000 to 300000. When it runs out, the request stops and the chat shows an error saying it timed out. It does not limit the total length of an answer. |
+| `vercelAiGateway.timeout` | `30000` | Longest time, in milliseconds, the model may stay silent before its first chunk or between any two chunks. Allowed range is 5000 to 300000. When it runs out, the request stops and the chat shows an error saying it timed out. It does not limit the total length of an answer. Loading the model list also gives up after this long. |
 
 ## Troubleshooting
 
