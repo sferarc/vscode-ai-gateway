@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelChatMessage } from "vscode";
 import { ERROR_MESSAGES } from "./constants";
+import { AuthCancelledError } from "./errors";
 import { convertMessages, VercelAIChatModelProvider } from "./provider";
 
 const hoisted = vi.hoisted(() => {
@@ -311,6 +312,16 @@ describe("active session", () => {
 			const cancelled = new Error("Canceled");
 			cancelled.name = "Canceled";
 			t.getSession.mockRejectedValue(cancelled);
+
+			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+			expect(t.errorLog).not.toHaveBeenCalled();
+		});
+
+		it("shows no error toast when the extension's own sign-in picker is dismissed", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockRejectedValue(new AuthCancelledError("API key required"));
 
 			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
 

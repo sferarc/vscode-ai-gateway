@@ -32,7 +32,7 @@ import {
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
 import { getConfig } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
-import { describeGatewayError } from "./errors";
+import { AuthCancelledError, describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
 import { ModelsClient, ModelsFetchError } from "./models";
 
@@ -58,8 +58,10 @@ function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | u
 	return model.maxOutputTokens > 0 ? model.maxOutputTokens : undefined;
 }
 
-// The errors VS Code's mainThreadAuthentication.ts rejects getSession with when sign-in is dismissed.
+// The errors VS Code's mainThreadAuthentication.ts rejects getSession with when sign-in is dismissed,
+// plus the one this extension's own createSession throws when a picker is dismissed.
 function isSignInCancellation(error: unknown): boolean {
+	if (error instanceof AuthCancelledError) return true;
 	if (!(error instanceof Error)) return false;
 	return error.message === "User did not consent to login." || error.name === "Canceled";
 }
