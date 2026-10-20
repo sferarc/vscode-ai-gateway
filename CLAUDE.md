@@ -37,4 +37,4 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the extensi
 - Credentials live only in `SecretStorage` (`src/auth.ts`). Never log a key or token.
 - Add a changeset (`pnpm changeset`) for a change users should see.
 - No em or en dashes in prose. Commit subjects in the imperative, with a conventional prefix.
-- Never publish, tag, bump the version or set `RELEASE_ENABLED`: releases are the owner's step (`brain/development/release.md`).
+- Never bump the version or tag by hand: the "Version Packages" pull request from `changesets/action` is the only version bump, and merging it publishes to the Marketplace. Merge it only once `VSCE_PAT` is known to be valid (`brain/development/release.md`).
