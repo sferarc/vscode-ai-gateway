@@ -2,7 +2,7 @@
 
 `.github/workflows/release.yml` runs only when the repository variable `RELEASE_ENABLED` is `true` ([[decisions/2026-10-08-release-gated-on-variable]]). It was set to `true` on 2026-10-20 after the publish path was checked (below). Do not tag, publish or bump the version by hand; the version pull request does it.
 
-## The flow once enabled
+## The flow
 
 On a push to `main` (or a manual dispatch), `changesets/action`:
 
@@ -19,6 +19,8 @@ Secrets the workflow reads (both exist as of 2026-10-20: `GIT_TOKEN` as an organ
 
 Read 2026-10-20: the Marketplace lists `SferaDev.vscode-extension-vercel-ai` at `0.4.1`; `package.json` is `0.4.1`. The repository has no tags. `pnpm package` produces a valid VSIX at `0.4.1` (11 files). A manual `Release` dispatch on `main` after `RELEASE_ENABLED` was set opened the "Version Packages" pull request (#48), which bumps `0.4.1` to `0.5.0` and writes `CHANGELOG.md`.
 
-Whether `VSCE_PAT` is valid and carries the Marketplace `Manage` scope is unknown: a secret cannot be read back, and the first publish is the first real use. Merging the version pull request publishes, so merge it only after the token is confirmed.
+Whether `VSCE_PAT` is valid and carries the Marketplace `Manage` scope is unknown: a secret cannot be read back, and the first publish is the first real use. Merging the version pull request publishes, so merge it only after the token is confirmed. The repository has `HQ_AUTOMERGE=true` and the pull request author is in HQ's author list, so only the `needs-human` label on #48 keeps HQ from landing it. The owner removes the label once the token is confirmed.
+
+If the token turns out to be bad, the publish fails after the merge: `main` stays at `0.5.0` while the Marketplace shows `0.4.1`. No changesets remain, so `scripts/release.sh` publishes on the next push to `main` or manual dispatch once `VSCE_PAT` is fixed.
 
 To add a release note to a change, run `pnpm changeset` and commit the file it writes.
