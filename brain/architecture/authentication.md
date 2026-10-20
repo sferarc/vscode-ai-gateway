@@ -30,7 +30,7 @@
 
 Dismissing the team or project picker also throws `AuthCancelledError` (`Team selection cancelled`, `Project selection is required`), which `src/vercel-auth.ts` passes through rather than wrapping as `VercelOidcTokenError`. The manage command catches it, logs it at debug and shows nothing; any other error is logged and shown as `Failed to {action} session: ...` (#31). Before #31 a cancel was told apart by string checks that matched no current message, so it surfaced as a failure toast. Tests: `cancelling a prompt` in `src/auth.test.ts`.
 
-Only "creates API key session" in `src/auth.test.ts` drives this end to end; the OIDC label and the active-session switch on add have no direct test (unknown whether covered indirectly).
+"creates API key session", "makes a newly added session the active one" and the `OIDC session label` tests in `src/auth.test.ts` drive this end to end, covering the OIDC label with and without a team name and the active-session switch on add.
 
 ## Vercel CLI login location
 

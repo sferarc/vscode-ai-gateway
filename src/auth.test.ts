@@ -178,6 +178,58 @@ describe("VercelAIAuthenticationProvider", () => {
 		expect(session.accessToken).toBe("vck_key");
 	});
 
+	it("makes a newly added session the active one", async () => {
+		await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+		await ctx.globalState.update(ACTIVE_KEY, "s1");
+		hoisted.mockShowQuickPick.mockResolvedValueOnce({
+			label: "API Key",
+			value: "api-key",
+		} as never);
+		hoisted.mockShowInputBox.mockResolvedValueOnce("Second").mockResolvedValueOnce("vck_second");
+
+		const session = await provider.createSession([]);
+
+		expect(ctx.globalState.get(ACTIVE_KEY)).toBe(session.id);
+		expect(session.id).not.toBe("s1");
+		expect((await provider.getSessions()).map((s) => s.id)).toEqual([session.id, "s1"]);
+	});
+
+	describe("OIDC session label", () => {
+		const token = {
+			token: "oidc_token",
+			expiresAt: NOW + 3600000,
+			projectId: "p1",
+			projectName: "My Project",
+			teamId: "t1",
+			teamName: "My Team",
+		};
+
+		async function addOidc(overrides: Partial<typeof token>) {
+			vi.mocked(checkVercelCliAvailable).mockReturnValue(true);
+			vi.mocked(createInteractiveOidcSession).mockResolvedValueOnce({ ...token, ...overrides });
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "Vercel OIDC",
+				value: "oidc",
+			} as never);
+			return provider.createSession([]);
+		}
+
+		it("labels the account with the project and team", async () => {
+			const session = await addOidc({});
+			expect(session.account.label).toBe("My Project (My Team)");
+		});
+
+		it("labels the account with the project alone when there is no team name", async () => {
+			const session = await addOidc({ teamName: undefined });
+			expect(session.account.label).toBe("My Project");
+		});
+
+		it("makes the new OIDC session the active one", async () => {
+			const session = await addOidc({});
+			expect(ctx.globalState.get(ACTIVE_KEY)).toBe(session.id);
+		});
+	});
+
 	it("handles corrupted session data gracefully", async () => {
 		await ctx.secrets.store("vercelAiGateway.sessions", "invalid{");
 		const sessions = await provider.getSessions();

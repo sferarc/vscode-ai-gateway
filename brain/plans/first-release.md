@@ -16,5 +16,4 @@ All of these wait on the owner ([[decisions/2026-10-08-release-gated-on-variable
 
 - Open VSX is not published to, and no record says whether it is wanted ([[decisions/2026-10-08-release-gated-on-variable]]).
 - No test launches VS Code; `pnpm package` is the only check of the manifest as VS Code sees it ([[development/testing]]).
-- The OIDC session label and the active-session switch on add have no direct test ([[architecture/authentication]]).
-- It is unknown whether the `Canceled` error name survives `authentication.getSession`, and `AuthCancelledError` is not recognised by `isSignInCancellation`, so that path still counts as a failure ([[architecture/chat-provider]]).
+- It is unknown whether the `Canceled` and `AuthCancelledError` names survive `authentication.getSession`; verify in a real VS Code ([[architecture/chat-provider]]).

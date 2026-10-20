@@ -318,6 +318,18 @@ describe("active session", () => {
 			expect(t.errorLog).not.toHaveBeenCalled();
 		});
 
+		it("shows no error toast when the extension's own sign-in picker is dismissed", async () => {
+			const t = await setup(async () => null);
+			t.getSession.mockRejectedValue(
+				Object.assign(new Error("API key required"), { name: "AuthCancelledError" }),
+			);
+
+			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
+
+			expect(t.showErrorMessage).not.toHaveBeenCalled();
+			expect(t.errorLog).not.toHaveBeenCalled();
+		});
+
 		it("still shows AUTH_FAILED when sign-in fails for another reason", async () => {
 			const t = await setup(async () => null);
 			t.getSession.mockRejectedValue(new Error("Dynamic authentication provider not found"));

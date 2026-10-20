@@ -58,10 +58,14 @@ function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | u
 	return model.maxOutputTokens > 0 ? model.maxOutputTokens : undefined;
 }
 
-// The errors VS Code's mainThreadAuthentication.ts rejects getSession with when sign-in is dismissed.
+// What VS Code's mainThreadAuthentication.ts rejects getSession with when sign-in is dismissed, plus our AuthCancelledError by name.
 function isSignInCancellation(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
-	return error.message === "User did not consent to login." || error.name === "Canceled";
+	return (
+		error.message === "User did not consent to login." ||
+		error.name === "Canceled" ||
+		error.name === "AuthCancelledError"
+	);
 }
 
 function isValidMimeType(mimeType: string): boolean {

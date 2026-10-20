@@ -26,7 +26,7 @@ A failed fetch throws `ModelsFetchError` with the status when there was one. Its
 | Sign-in fails otherwise | Not reached | Error logged, `AUTH_FAILED` toast |
 | Sign-in resolves no session | Not reached | No key, no toast |
 
-A cancel is recognised by what VS Code rejects with: `User did not consent to login.` when the consent prompt is dismissed, or an error named `Canceled` (`mainThreadAuthentication.ts` in the VS Code repository). Dismissing a picker inside this extension's own `createSession` (`src/auth.ts`) throws `AuthCancelledError` ([[authentication]]), which `isSignInCancellation` does not check, so on this path it still counts as a failure. Whether the error's name survives the trip through VS Code's `authentication.getSession` is unknown. No log line on these paths carries the token. Covered by the `sign-in fallback` tests in `src/provider.test.ts`.
+A cancel is recognised by what VS Code rejects with: `User did not consent to login.` when the consent prompt is dismissed, or an error named `Canceled` (`mainThreadAuthentication.ts` in the VS Code repository). Dismissing a picker inside this extension's own `createSession` (`src/auth.ts`) throws `AuthCancelledError` ([[authentication]]), which `isSignInCancellation` also recognises by name, so it is logged at info like the others. Whether an error's name survives the trip through VS Code's `authentication.getSession` is unknown, so this holds only if the name survives; the test rejects with a plain `Error` carrying that name to match. No log line on these paths carries the token. Covered by the `sign-in fallback` tests in `src/provider.test.ts`.
 
 ## Chat requests
 
