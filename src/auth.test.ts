@@ -191,10 +191,7 @@ describe("VercelAIAuthenticationProvider", () => {
 
 		expect(ctx.globalState.get(ACTIVE_KEY)).toBe(session.id);
 		expect(session.id).not.toBe("s1");
-		expect((await provider.getSessions()).map((s) => s.id)).toEqual([
-			expect.any(String),
-			expect.any(String),
-		]);
+		expect((await provider.getSessions()).map((s) => s.id)).toEqual([session.id, "s1"]);
 	});
 
 	describe("OIDC session label", () => {

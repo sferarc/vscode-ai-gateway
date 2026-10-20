@@ -16,4 +16,4 @@ All of these wait on the owner ([[decisions/2026-10-08-release-gated-on-variable
 
 - Open VSX is not published to, and no record says whether it is wanted ([[decisions/2026-10-08-release-gated-on-variable]]).
 - No test launches VS Code; `pnpm package` is the only check of the manifest as VS Code sees it ([[development/testing]]).
-- It is unknown whether the `Canceled` error name survives `authentication.getSession` ([[architecture/chat-provider]]).
+- It is unknown whether the `Canceled` and `AuthCancelledError` names survive `authentication.getSession`; verify in a real VS Code ([[architecture/chat-provider]]).
