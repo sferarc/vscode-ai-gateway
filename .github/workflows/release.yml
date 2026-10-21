@@ -33,10 +33,10 @@ jobs:
         env:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          [ -n "$GIT_TOKEN" ] || echo "::warning::GIT_TOKEN is not set; a merged version PR will not trigger a publish, dispatch the workflow by hand."
+          [ -n "$GIT_TOKEN" ] || echo "::warning::GIT_TOKEN is not set; the version PR and its branch push trigger no pull_request workflows, so the required Check never runs on it until CI is triggered by hand."
 
-      # Prefer GIT_TOKEN: a version PR merged by the Actions token pushes to main
-      # without triggering this workflow, so it would never publish.
+      # Prefer GIT_TOKEN: pushes and pull requests made by the Actions token
+      # trigger no workflows, so the version PR would never get its Check.
       # The extension goes to the VS Code Marketplace only; nothing is published to npm.
       - name: Create version PR or publish
         id: changesets
@@ -50,7 +50,7 @@ jobs:
       # privatePackages.tag is false, so changesets/action creates no tag or release.
       # Only without pending changesets: otherwise this push published nothing.
       - name: Tag and create GitHub release
-        if: steps.changesets.outputs.hasChangesets == 'false'
+        if: github.ref == 'refs/heads/main' && steps.changesets.outputs.hasChangesets == 'false'
         env:
           GH_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
         run: |
