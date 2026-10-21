@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.1
+
+### Patch Changes
+
+- 5f4959e: Ship `CHANGELOG.md` inside the installed extension, so the Marketplace page shows the changelog.
+
 ## 0.5.0
 
 ### Minor Changes
