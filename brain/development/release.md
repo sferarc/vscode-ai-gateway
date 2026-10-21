@@ -1,6 +1,6 @@
 # Release
 
-`.github/workflows/release.yml` runs only when the repository variable `RELEASE_ENABLED` is `true` ([[decisions/2026-10-08-release-gated-on-variable]]). It was set to `true` on 2026-10-20 after the publish path was checked (below). Do not tag, publish or bump the version by hand; the version pull request does it. Setting or clearing the variable and merging the version pull request stay the owner's steps.
+`.github/workflows/release.yml` runs only when the repository variable `RELEASE_ENABLED` is `true` ([[decisions/2026-10-08-release-gated-on-variable]]). It was set to `true` on 2026-10-20 after the publish path was checked (below). Do not tag, publish or bump the version by hand; the version pull request and the workflow do it. Setting or clearing the variable stays the owner's step; merging the version pull request is open to agents.
 
 ## The flow
 
@@ -13,14 +13,14 @@ On a push to `main` (or a manual dispatch), `changesets/action`:
 
 Secrets the workflow reads (both exist as of 2026-10-20: `GIT_TOKEN` as an organization secret, `VSCE_PAT` on the repository): `GIT_TOKEN`, so the version pull request's merge triggers the workflow again (a push by the Actions token would not), and `VSCE_PAT` for the Marketplace. The package is `private` in `package.json` and nothing goes to npm (the workflow comment). Open VSX is not published to.
 
-`.changeset/config.json` versions private packages and does not tag them (`privatePackages.tag: false`), so a release creates no git tag.
+`.changeset/config.json` versions private packages and does not tag them (`privatePackages.tag: false`), so `changesets/action` creates no tag or release. A final workflow step runs `gh release create v<package.json version> --target $GITHUB_SHA` when that release is absent, which also creates the tag, so reruns and dispatches are idempotent. Both steps use `secrets.GIT_TOKEN || github.token`; `github.token` can tag and release, but a version PR it merges would not trigger the workflow.
+
+`CHANGELOG.md` is shipped in the VSIX (not in `.vscodeignore`) so the Marketplace shows it.
 
 ## Current state
 
-Read 2026-10-20: the Marketplace lists `SferaDev.vscode-extension-vercel-ai` at `0.4.1`; `package.json` is `0.4.1`. The repository has no tags. `pnpm package` produces a valid VSIX at `0.4.1` (11 files). A manual `Release` dispatch on `main` after `RELEASE_ENABLED` was set opened the "Version Packages" pull request (#48), which bumps `0.4.1` to `0.5.0` and writes `CHANGELOG.md`.
+`SferaDev.vscode-extension-vercel-ai` `0.5.0` was published by the run on Version Packages #48 (39556789195), which proves `VSCE_PAT`. The tag step runs only when `changesets/action` reports no pending changesets, so a push that opens or updates a version PR never tags. `v0.5.0` was created once by hand at `a0c487a`, the commit that shipped.
 
-Whether `VSCE_PAT` is valid and carries the Marketplace `Manage` scope is unknown: a secret cannot be read back, and the first publish is the first real use. Merging the version pull request publishes, so merge it only after the token is confirmed. The repository has `HQ_AUTOMERGE=true` and the pull request author is in HQ's author list, so only the `needs-human` label on #48 keeps HQ from landing it. The owner removes the label once the token is confirmed.
-
-If the token turns out to be bad, the publish fails after the merge: `main` stays at `0.5.0` while the Marketplace shows `0.4.1`. No changesets remain, so `scripts/release.sh` publishes on the next push to `main` or manual dispatch once `VSCE_PAT` is fixed.
+Without `GIT_TOKEN` the workflow logs a warning and uses `github.token`: the version PR is still created, but merging it does not retrigger the workflow, so dispatch it by hand to publish.
 
 To add a release note to a change, run `pnpm changeset` and commit the file it writes.

@@ -25,7 +25,6 @@ package-lock.json
 .claude/
 CLAUDE.md
 brain/**
-CHANGELOG.md
 .changeset/**
 .github/**
 scripts/**
