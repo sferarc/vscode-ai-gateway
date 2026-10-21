@@ -12,4 +12,4 @@ vsce reads the version straight from `package.json` and cannot parse pnpm's `cat
 
 ## Consequence
 
-Raising `@types/vscode` means raising `engines.vscode` in the same change, which drops users on older VS Code. A dependency bump must not move the types alone.
+Raising `@types/vscode` means raising `engines.vscode` in the same change, which drops users on older VS Code. A dependency bump must not move the types alone; `scripts/update-dependencies.sh` enforces this in the weekly refresh ([[development/ci]]).
