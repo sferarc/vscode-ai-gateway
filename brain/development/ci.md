@@ -18,6 +18,10 @@
 
 Actions are pinned to full commit SHAs with the version in a trailing comment, which the sferarc organisation requires. Update both together.
 
+## Weekly dependency refresh
+
+sferarc/hq's `update-dependencies.yml` opens the weekly `chore(deps)` pull request. It runs the `deps:update` task in `mise.toml` in place of its default package steps, and that task (`scripts/update-dependencies.sh`) writes `@types/vscode` back to the `engines.vscode` floor after `pnpm update --latest`. Without it the refresh moved the types to `catalog:` and a newer version (issue #6), which fails `pnpm package`. `src/package.test.ts` fails when the two drift. The rendered `hq-stack.yml` names only this repository since #3, because the repository is public.
+
 ## Branch rules on `main`
 
 Read from the GitHub API on 2026-10-08 (rulesets `main-default` and `force-push`): changes through pull requests, merged by squash or rebase; required status check `Check`; linear history; no force pushes; no deletion.
