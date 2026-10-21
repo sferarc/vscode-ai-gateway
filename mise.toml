@@ -4,3 +4,7 @@ pnpm = "12.14.0"
 
 [settings]
 lockfile = true
+
+# HQ's weekly updater runs this in place of its default package steps.
+[tasks."deps:update"]
+run = "bash scripts/update-dependencies.sh"
