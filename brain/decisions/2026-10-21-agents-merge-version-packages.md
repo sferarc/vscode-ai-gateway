@@ -1,6 +1,6 @@
 # Agents merge the Version Packages pull request
 
-Recorded 2026-10-21, from the owner's decision on #51.
+Recorded 2026-10-21 in #51. Basis: the owner's standing delegation of merges in this organization (2026-10-19) under green required checks and a clean independent review. No comment on #51 records the owner deciding this case separately; the earlier hold (86a41ac, 6597887) was lifted by 67baba6 without a stated reason.
 
 ## Decision
 
