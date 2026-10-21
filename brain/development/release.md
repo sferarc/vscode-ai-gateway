@@ -1,6 +1,6 @@
 # Release
 
-`.github/workflows/release.yml` runs only when the repository variable `RELEASE_ENABLED` is `true` ([[decisions/2026-10-08-release-gated-on-variable]]). It was set to `true` on 2026-10-20 after the publish path was checked (below). Do not tag, publish or bump the version by hand; the version pull request and the workflow do it. Setting or clearing the variable and merging the version pull request stay the owner's steps.
+`.github/workflows/release.yml` runs only when the repository variable `RELEASE_ENABLED` is `true` ([[decisions/2026-10-08-release-gated-on-variable]]). It was set to `true` on 2026-10-20 after the publish path was checked (below). Do not tag, publish or bump the version by hand; the version pull request and the workflow do it. Setting or clearing the variable stays the owner's step. Agents may merge the version pull request under the normal bar ([[decisions/2026-10-21-agents-merge-version-packages]]).
 
 ## The flow
 
@@ -19,7 +19,7 @@ Secrets the workflow reads (both exist as of 2026-10-20: `GIT_TOKEN` as an organ
 
 ## Current state
 
-`SferaDev.vscode-extension-vercel-ai` `0.5.0` was published by the run on Version Packages #48 (39556789195), which proves `VSCE_PAT`. The version PR's author is on HQ's automerge list and merging it publishes, so the `needs-human` label (added by the owner, `changesets/action` does not add it) or an HQ skip rule is what keeps HQ from landing it. The tag step runs only when `changesets/action` reports no pending changesets, so a push that opens or updates a version PR never tags. `v0.5.0` was created once by hand at `a0c487a`, the commit that shipped.
+`SferaDev.vscode-extension-vercel-ai` `0.5.0` was published by the run on Version Packages #48 (39556789195), which proves `VSCE_PAT`. The version pull request goes through the same gate as any other: required checks green and an independent review clean. The tag step runs only when `changesets/action` reports no pending changesets, so a push that opens or updates a version PR never tags. `v0.5.0` was created once by hand at `a0c487a`, the commit that shipped.
 
 Without `GIT_TOKEN` the workflow logs a warning and uses `github.token`: the version PR is still created, but the required `Check` never runs on it, so trigger CI by hand before it can merge.
 
