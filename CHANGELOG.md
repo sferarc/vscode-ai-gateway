@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.2
+
+### Patch Changes
+
+- 9ecad2f: Dismissing the sign-in picker no longer shows an error when VS Code starts the sign-in.
+
 ## 0.5.1
 
 ### Patch Changes
