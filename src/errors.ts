@@ -63,10 +63,7 @@ function userMessageFor(statusCode: number | undefined, detail: string): string 
 	return detail;
 }
 
-/**
- * The user dismissed a prompt in the sign-in flow. VS Code treats an error whose name and message are both
- * "Canceled" as a cancellation and shows nothing; `reason` keeps the detail for logs.
- */
+/** Name and message are "Canceled" so VS Code's isCancellationError ignores a dismissed prompt; `reason` holds the detail. */
 export class AuthCancelledError extends Error {
 	readonly reason: string;
 
