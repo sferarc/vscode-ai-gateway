@@ -13,5 +13,5 @@ Written 2026-10-20 from `b615407`. This is the only plan so far; the repository 
 ## Known gaps
 
 - Open VSX is not published to, and no record says whether it is wanted ([[decisions/2026-10-08-release-gated-on-variable]]).
-- No test launches VS Code; `pnpm package` is the only check of the manifest as VS Code sees it ([[development/testing]]).
+- No test launches VS Code; `pnpm package` and the `manifest` tests in [[development/testing]] are the only checks of the manifest.
 - It is unknown whether the `Canceled` and `AuthCancelledError` names survive `authentication.getSession`; verify in a real VS Code ([[architecture/chat-provider]]).
