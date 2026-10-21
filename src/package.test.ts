@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listFiles, PackageManager } from "@vscode/vsce";
 import { describe, expect, it } from "vitest";
@@ -12,5 +14,13 @@ describe("VSIX contents", () => {
 		expect(files).toContain("README.md");
 		expect(files).not.toContain("CLAUDE.md");
 		expect(files.filter((file) => file.startsWith("brain/"))).toEqual([]);
+	});
+});
+
+describe("manifest", () => {
+	it("pins @types/vscode to the engines.vscode floor", async () => {
+		const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+
+		expect(pkg.devDependencies["@types/vscode"]).toBe(pkg.engines.vscode.replace(/^\^/, ""));
 	});
 });
