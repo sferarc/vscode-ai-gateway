@@ -15,7 +15,7 @@ Secrets the workflow reads (both exist as of 2026-10-20: `GIT_TOKEN` as an organ
 
 `.changeset/config.json` versions private packages and does not tag them (`privatePackages.tag: false`), so versioning itself creates no tag. `release.sh` does not pass `CHANGESETS_OUTPUT`, so every publish logs "Failed to read changesets output ... GitHub releases and git tags cannot be created without this output" and the action creates no tag or release. `v0.5.0` was not made by the action; the GitHub release was published by SferaDev 33 minutes after the publish run, so it was a manual step by the owner.
 
-The repository has `HQ_AUTOMERGE=true` and the changesets author is on HQ's author list, so HQ would land a "Version Packages" pull request, and landing it publishes. Every such pull request therefore carries `needs-human` until the owner merges it.
+The repository has `HQ_AUTOMERGE=true`, so HQ can land a "Version Packages" pull request once its checks and review pass, and landing it publishes to the Marketplace. Nothing adds a hold label automatically; the owner may add `needs-human` by hand to stop a given pull request. Agents may merge a "Version Packages" pull request under the normal bar: required checks green and an independent review clean.
 
 ## Current state
 
