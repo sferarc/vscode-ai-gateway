@@ -1,6 +1,6 @@
 # Testing
 
-Vitest, no config file: `pnpm test` runs every `src/**/*.test.ts`. On 2026-10-16 (`7177eaf`) that was 9 files and 207 tests. Each file that touches the editor API replaces it with `vi.mock("vscode", ...)`, so the tests run in Node without a VS Code instance.
+Vitest, no config file: `pnpm test` runs `vitest run src`, every `src/**/*.test.ts` (the filter keeps it out of the VS Code build that `.vscode-test/` holds). On 2026-10-16 (`7177eaf`) that was 9 files and 207 tests. Each file that touches the editor API replaces it with `vi.mock("vscode", ...)`, so the tests run in Node without a VS Code instance.
 
 Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/vercel-auth.test.ts` call `vi.useFakeTimers({ toFake: ["Date"] })` and `vi.setSystemTime(NOW)` in `beforeEach`, build every expiry from `NOW`, and restore real timers in `afterEach`. Only `Date` is faked, so promises and `setTimeout` behave as in production. To wait for async work to reach a point, wait on the observable effect (`vi.waitFor(() => expect(mock).toHaveBeenCalled())`) rather than a `setTimeout(0)` flush.
 
@@ -17,4 +17,10 @@ Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/ver
 | `src/package.test.ts` | `VSIX contents`: vsce's `listFiles` keeps `package.json` and `README.md` and leaves out `CLAUDE.md` and `brain/`. `manifest`: `@types/vscode` equals the `engines.vscode` floor, `contributes.commands` equals the `registerCommand` ids in `src/extension.ts`, and the chat provider vendor, authentication id and `activationEvents` agree with `EXTENSION_ID` and the register calls |
 | `src/diagnostics.test.ts` | Check Connection: success, rejected credentials, network failure, no session, and that the token never reaches the message or the log |
 
-There are no integration tests that launch VS Code (`.vscode-test/` is only in `.gitignore` and `.vscodeignore`). The manifest is guarded by the `manifest` tests above; the `pnpm package` step in [[ci]] is the only check of it as VS Code sees it.
+## Extension host smoke test
+
+`pnpm test:e2e` (`e2e/run.mjs`) downloads the VS Code build named by the `engines.vscode` floor into `.vscode-test/` with `@vscode/test-electron`, launches it with a throwaway user data dir and `--disable-extensions`, and runs `e2e/suite.cjs` inside the extension host against the built `out/extension.js`, so `pnpm build` must come first. The suite is plain CommonJS because VS Code `require`s it and the package is `"type": "module"`.
+
+It checks that the extension is inactive at start, that asking for the vendor's models (`vscode.lm.selectChatModels`) fires the contributed activation event and activates it, and that every command in `contributes.commands` is registered. VS Code rejects a chat provider registration for a vendor the manifest does not contribute, so an active extension has registered its provider. It makes no gateway request and needs no credentials. The first run needs network access to download VS Code.
+
+CI runs it under `xvfb-run` ([[ci]]). The `.vscodeignore` entry `e2e/**` keeps it out of the VSIX. `src/package.test.ts` still checks the manifest against `activate()` without a VS Code instance.

@@ -1,5 +1,6 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
-	"project": ["src/**/*.ts!"],
+	"entry": ["e2e/run.mjs", "e2e/suite.cjs"],
+	"project": ["src/**/*.ts!", "e2e/*"],
 	"ignoreDependencies": ["@types/json-schema", "@typescript/typescript6"]
 }

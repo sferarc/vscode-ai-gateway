@@ -14,6 +14,7 @@ catalog:
   typescript: 7.0.2
   '@typescript/typescript6': 6.0.2
   vitest: 5.0.5
+  '@vscode/test-electron': 3.1.0
 catalogMode: strict
 cleanupUnusedCatalogs: true
 saveExact: true

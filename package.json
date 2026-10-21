@@ -87,10 +87,11 @@
 		}
 	},
 	"scripts": {
-		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm package",
+		"check": "pnpm lint && pnpm exec lefthook validate && pnpm knip && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e && pnpm package",
 		"build": "NODE_ENV=production bunchee ./src/extension.ts --format cjs --no-external",
 		"dev": "bunchee ./src/extension.ts --format cjs --watch",
-		"test": "vitest run",
+		"test": "vitest run src",
+		"test:e2e": "node e2e/run.mjs",
 		"test:watch": "vitest",
 		"prepackage": "pnpm run build",
 		"package": "vsce package --no-dependencies",
@@ -108,6 +109,7 @@
 		"@types/node": "catalog:",
 		"@types/vscode": "1.137.0",
 		"@typescript/typescript6": "catalog:",
+		"@vscode/test-electron": "catalog:",
 		"@vscode/vsce": "catalog:",
 		"bunchee": "catalog:",
 		"knip": "catalog:",
