@@ -1,5 +1,37 @@
 # vscode-extension-vercel-ai
 
+## 0.5.0
+
+### Minor Changes
+
+- f3783a5: Add **Vercel AI Gateway: Check Connection**, which tests the active session against the gateway and reports the endpoint, session, HTTP status, latency and model count, and **Vercel AI Gateway: Show Logs**, which opens the extension's log.
+
+### Patch Changes
+
+- 279c7d6: Treat closing a sign-in prompt as a cancellation. Dismissing the method, name, API key, team or project picker no longer shows an error such as "Failed to add session: Team selection cancelled"; real failures still do.
+- d73403f: Stop showing an authentication error when you dismiss a picker or prompt while adding a session from the chat model sign-in. Real sign-in failures still show the error.
+- cfd0b90: Tell you what to do when a chat request fails: rejected credentials point to "Vercel AI Gateway: Manage Authentication", a rate limit says to wait, and a gateway or provider failure says it is usually temporary. The output log now records the model, HTTP status, URL, retryability and elapsed time of each failed request.
+- 4aa0fdb: Stop long chat responses from being cut off after 30 seconds. The timeout setting now limits how long the model may stay silent, and a timeout is reported as an error instead of ending the answer quietly.
+- 260fdc5: Accept an endpoint setting with a trailing slash when listing models.
+- 1b842e9: Read `vercelAiGateway.endpoint` from user settings only. A workspace `.vscode/settings.json` could point it at another server, and requests to the endpoint carry your API key or OIDC token. The setting is now machine scoped, so it is no longer synced between machines.
+- 215284f: Show the underlying cause of network errors, such as `connect ECONNREFUSED` or a certificate failure, instead of only "fetch failed".
+- fd70f91: Show the right models right after switching accounts. A model list still loading for the previous account no longer replaces the new account's list for the next five minutes.
+- b265815: Explain why the model picker is empty. When the model list cannot be loaded, an error now names the gateway URL and the gateway's reason, with a button to open the logs and, for a rejected key, one to manage authentication. Background refreshes stay quiet.
+- 28a0c5d: Keep the model picker usable when the gateway is slow or briefly unreachable. Loading the model list now gives up after the `timeout` setting instead of waiting forever, and a failed refresh keeps showing the last list that loaded instead of an empty picker.
+- 80f9cf0: Format the "No response received from model." message with the same bold `Error:` prefix as every other error.
+- 91a6221: List every team and project in the Vercel sign-in picker instead of only the first 20, and show the HTTP status when loading them fails.
+- 2ccb35b: Stop showing an authentication error when you cancel the Vercel AI Gateway sign-in prompt. Real sign-in failures still show the error.
+- f269c7b: Stop capping answers at 4096 tokens and forcing temperature 0.7. Requests now use each model's own output limit and default temperature, and an answer that hits the output limit says so.
+- ac04a7f: Keep valid sessions when one stored entry is malformed, instead of deleting every saved API key and Vercel sign-in.
+- 5d14640: Stop a session added or removed while an OIDC token refreshes from being lost or brought back, and refresh each token once when several callers ask for it at the same time.
+- aeff613: Count attached images and a small per message overhead when estimating a message's tokens, so prompts with screenshots no longer overflow the model's context window.
+- 7321f2e: Count tool calls, tool results and textual attachments when estimating a message's tokens, so VS Code no longer treats a long agent conversation as far smaller than it is.
+- 998230c: Stop follow-up requests failing after tools that return JSON or images, or after several tools run in parallel. Every tool call now gets its result, and parallel calls are sent together in the shape providers expect.
+- 5fe6760: Tell the user, once, when stored sessions cannot be read and have to be added again, with a shortcut to Manage Authentication, and log why without logging the stored content.
+- 7177eaf: Stop a stalled connection to Vercel from hanging chat or the OIDC sign-in pickers. Loading teams and projects and refreshing an OIDC token now give up after 15 seconds with "Timed out contacting Vercel", and the next request tries again.
+- a583214: Offer Vercel OIDC sign-in on Windows and on platforms other than macOS and Linux by reading the Vercel CLI login from the same folder the CLI writes it to, and ignore an `auth.json` whose token is not a string.
+- d7536f1: Stop shipping the repository's contributor notes (`CLAUDE.md` and `brain/`) inside the installed extension.
+
 ## 0.4.1
 
 ### Patch Changes
