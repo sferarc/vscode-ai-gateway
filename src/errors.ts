@@ -63,10 +63,13 @@ function userMessageFor(statusCode: number | undefined, detail: string): string 
 	return detail;
 }
 
-/** The user dismissed a prompt in the sign-in flow; callers stay quiet instead of reporting a failure. */
+/** Name and message are "Canceled" so VS Code's isCancellationError ignores a dismissed prompt; `reason` holds the detail. */
 export class AuthCancelledError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "AuthCancelledError";
+	readonly reason: string;
+
+	constructor(reason: string) {
+		super("Canceled");
+		this.name = "Canceled";
+		this.reason = reason;
 	}
 }

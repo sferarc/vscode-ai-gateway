@@ -545,6 +545,24 @@ describe("VercelAIAuthenticationProvider", () => {
 			},
 		);
 
+		it.each([
+			["method", [undefined], []],
+			["session name", [pickApiKey], [undefined]],
+			["API key", [pickApiKey], ["Name", undefined]],
+		])(
+			"rejects createSession with the cancellation VS Code ignores when the %s prompt is dismissed",
+			async (_prompt, picks, inputs) => {
+				for (const pick of picks) hoisted.mockShowQuickPick.mockResolvedValueOnce(pick as never);
+				for (const input of inputs) hoisted.mockShowInputBox.mockResolvedValueOnce(input);
+
+				const error = await provider.createSession([]).catch((e: unknown) => e);
+
+				expect(error).toBeInstanceOf(AuthCancelledError);
+				expect(error).toMatchObject({ name: "Canceled", message: "Canceled" });
+				expectSilent();
+			},
+		);
+
 		it("still reports a failure to load teams", async () => {
 			vi.mocked(checkVercelCliAvailable).mockReturnValue(true);
 			vi.mocked(createInteractiveOidcSession).mockRejectedValueOnce(

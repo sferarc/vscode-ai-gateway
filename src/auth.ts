@@ -493,7 +493,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			await this.executeAction(action, sessions);
 		} catch (error) {
 			if (error instanceof AuthCancelledError) {
-				logger.debug(`Authentication management cancelled: ${error.message}`);
+				logger.debug(`Authentication management cancelled: ${error.reason}`);
 				return;
 			}
 			logger.error("Error in manage authentication:", error);
@@ -570,7 +570,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			}
 		} catch (error) {
 			if (error instanceof AuthCancelledError) {
-				logger.debug(`Action ${action} cancelled: ${error.message}`);
+				logger.debug(`Action ${action} cancelled: ${error.reason}`);
 				return;
 			}
 			logger.error(`Error executing action ${action}:`, error);

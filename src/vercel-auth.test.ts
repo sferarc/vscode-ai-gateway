@@ -371,7 +371,9 @@ describe("vercel-auth", () => {
 			globalThis.fetch = fetchMock;
 			const { createInteractiveOidcSession } = await import("./vercel-auth");
 
-			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				reason: "Project selection is required",
+			});
 
 			expect(fetchMock).toHaveBeenCalledTimes(3);
 			expect(requestUrl(fetchMock, 1).searchParams.get("until")).toBeNull();
@@ -398,7 +400,9 @@ describe("vercel-auth", () => {
 				.mockResolvedValueOnce(projectsPage([], null));
 			const { createInteractiveOidcSession } = await import("./vercel-auth");
 
-			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				reason: "Project selection is required",
+			});
 
 			const teamItems = vi.mocked(vscode.window.showQuickPick).mock
 				.calls[0]?.[0] as unknown as QuickPickItems;
@@ -416,7 +420,9 @@ describe("vercel-auth", () => {
 			globalThis.fetch = fetchMock;
 			const { createInteractiveOidcSession } = await import("./vercel-auth");
 
-			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				reason: "Project selection is required",
+			});
 
 			expect(fetchMock).toHaveBeenCalledTimes(1 + 20);
 			expect(projectPickItems()).toHaveLength(20);
@@ -433,7 +439,9 @@ describe("vercel-auth", () => {
 				items[0]?.label === "Personal Account" ? items[1] : undefined) as never);
 			const { createInteractiveOidcSession } = await import("./vercel-auth");
 
-			await expect(createInteractiveOidcSession()).rejects.toThrow("Project selection is required");
+			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
+				reason: "Project selection is required",
+			});
 
 			const url = requestUrl(fetchMock, 1);
 			expect(url.search).toContain("teamId=team%26x%3D1");
@@ -461,8 +469,9 @@ describe("vercel-auth", () => {
 			const { createInteractiveOidcSession } = await import("./vercel-auth");
 
 			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
-				name: "AuthCancelledError",
-				message: "Team selection cancelled",
+				name: "Canceled",
+				message: "Canceled",
+				reason: "Team selection cancelled",
 			});
 		});
 
@@ -474,7 +483,8 @@ describe("vercel-auth", () => {
 			const { createInteractiveOidcSession } = await import("./vercel-auth");
 
 			await expect(createInteractiveOidcSession()).rejects.toMatchObject({
-				name: "AuthCancelledError",
+				name: "Canceled",
+				reason: "Project selection is required",
 			});
 		});
 	});
