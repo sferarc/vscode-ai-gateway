@@ -14,7 +14,7 @@ Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/ver
 | `src/errors.test.ts` | `describeGatewayError`: status, URL and retryability, `RetryError` unwrapping, credentials and query dropped from the URL |
 | `src/models/identity.test.ts` | `parseModelIdentity` |
 | `src/logger.test.ts` | `Logger` and `extractErrorMessage` |
-| `src/package.test.ts` | `VSIX contents`: vsce's `listFiles` keeps `package.json` and `README.md` and leaves out `CLAUDE.md` and `brain/` |
+| `src/package.test.ts` | `VSIX contents`: vsce's `listFiles` keeps `package.json` and `README.md` and leaves out `CLAUDE.md` and `brain/`. `manifest`: `@types/vscode` equals the `engines.vscode` floor, `contributes.commands` equals the `registerCommand` ids in `src/extension.ts`, and the chat provider vendor, authentication id and `activationEvents` agree with `EXTENSION_ID` and the register calls |
 | `src/diagnostics.test.ts` | Check Connection: success, rejected credentials, network failure, no session, and that the token never reaches the message or the log |
 
-There are no integration tests that launch VS Code (`.vscode-test/` is only in `.gitignore` and `.vscodeignore`). The `pnpm package` step in [[ci]] is the only check of the manifest as VS Code sees it.
+There are no integration tests that launch VS Code (`.vscode-test/` is only in `.gitignore` and `.vscodeignore`). The manifest is guarded by the `manifest` tests above; the `pnpm package` step in [[ci]] is the only check of it as VS Code sees it.

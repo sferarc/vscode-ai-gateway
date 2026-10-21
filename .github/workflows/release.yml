@@ -29,13 +29,34 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # GIT_TOKEN rather than github.token: a version PR merged by the Actions
-      # bot pushes to main without triggering this workflow, so it would never publish.
+      - name: Warn when GIT_TOKEN is missing
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          [ -n "$GIT_TOKEN" ] || echo "::warning::GIT_TOKEN is not set; the version PR and its branch push trigger no pull_request workflows, so the required Check never runs on it until CI is triggered by hand."
+
+      # Prefer GIT_TOKEN: pushes and pull requests made by the Actions token
+      # trigger no workflows, so the version PR would never get its Check.
       # The extension goes to the VS Code Marketplace only; nothing is published to npm.
       - name: Create version PR or publish
+        id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           publish-script: pnpm release
-          github-token: ${{ secrets.GIT_TOKEN }}
+          github-token: ${{ secrets.GIT_TOKEN || github.token }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      # privatePackages.tag is false, so changesets/action creates no tag or release.
+      # Only without pending changesets: otherwise this push published nothing.
+      - name: Tag and create GitHub release
+        if: github.ref == 'refs/heads/main' && steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if gh release view "v${version}" >/dev/null 2>&1; then
+            echo "Release v${version} exists"
+          else
+            gh release create "v${version}" --target "${GITHUB_SHA}" --title "v${version}" --generate-notes
+          fi
