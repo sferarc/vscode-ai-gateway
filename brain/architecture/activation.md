@@ -20,4 +20,4 @@ Everything is pushed onto `context.subscriptions`. `activate()` returns nothing,
 
 ## Manifest contributions
 
-All in `package.json` `contributes`: the `vercelAiGateway` authentication provider (declared since SferaDev/SferaDev#558, which removed an activation warning), the `vercelAiGateway` language model chat provider, the manage, check connection and show logs commands, and the settings in [[configuration]]. `package.json` is the extension manifest, so a change to any of these changes what users see.
+All in `package.json` `contributes`: the `vercelAiGateway` authentication provider (declared since SferaDev/SferaDev#558, which removed an activation warning), the `vercelAiGateway` language model chat provider, the manage, check connection and show logs commands, and the settings in [[configuration]]. `package.json` is the extension manifest, so a change to any of these changes what users see. `src/package.test.ts` checks the commands, provider ids and activation events against `activate()` and `EXTENSION_ID`.
