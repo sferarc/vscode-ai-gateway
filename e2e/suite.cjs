@@ -12,12 +12,10 @@ async function run() {
 	assert.ok(extension, `${EXTENSION_ID} is not installed in the extension host`);
 	assert.equal(extension.isActive, false, "the extension must wait for its activation event");
 
-	// Asking for the vendor's models fires the contributed activation event. VS Code rejects a
-	// registration for a vendor the manifest does not contribute, so an active extension has
-	// registered its chat provider.
+	// VS Code rejects a provider for an uncontributed vendor, so activation implies registration.
 	await vscode.lm.selectChatModels({ vendor: VENDOR });
-	await vscode.commands.executeCommand("vercelAiGateway.showLogs");
 	assert.equal(extension.isActive, true, "the chat provider activation event did not activate it");
+	await vscode.commands.executeCommand("vercelAiGateway.showLogs");
 
 	const registered = await vscode.commands.getCommands(true);
 	for (const command of COMMANDS) {

@@ -48,8 +48,7 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Launches VS Code and activates the built extension. The extension host needs a display,
-      # so xvfb provides one.
+      # The extension host needs a display, so xvfb provides one.
       - name: Extension host smoke test
         run: xvfb-run --auto-servernum pnpm test:e2e
 
