@@ -50,7 +50,7 @@ jobs:
       # privatePackages.tag is false, so changesets/action creates no tag or release.
       # Only without pending changesets: otherwise this push published nothing.
       - name: Tag and create GitHub release
-        if: github.ref == 'refs/heads/main' && steps.changesets.outputs.hasChangesets == 'false'
+        if: github.ref == 'refs/heads/main' && steps.changesets.outputs.has-changesets == 'false'
         env:
           GH_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
         run: |
