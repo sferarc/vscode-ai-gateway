@@ -6,4 +6,4 @@ Add a note here, one per plan, when work is planned that is too large for a sing
 
 Gaps left open after the first release:
 
-- It is unknown whether the `Canceled` and `AuthCancelledError` names survive `authentication.getSession`; verify in a real VS Code ([[architecture/chat-provider]]).
+- It is still unknown whether the `Canceled` and `AuthCancelledError` names survive `authentication.getSession`. The extension host test cannot reach the picker: `getSession` with `createIfNone` first asks consent through a modal dialog, which the test build refuses ([[architecture/chat-provider]]). A manual check in a normal VS Code window remains.
