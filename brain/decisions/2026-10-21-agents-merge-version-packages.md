@@ -10,7 +10,7 @@ The first publish (`0.5.0`, run 39556789195 on #48) proved `VSCE_PAT`, so the ea
 
 ## Scope
 
-The Marketplace is the only target. Nothing goes to Open VSX or npm. The owner confirmed on 2026-10-22 that Open VSX is a no.
+The Marketplace is the only target. Nothing goes to Open VSX or npm. Open VSX is a no ([[2026-10-22-backfill-release-tags]]).
 
 ## What would reopen it
 
