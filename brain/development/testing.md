@@ -24,3 +24,5 @@ Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/ver
 It checks that the extension is inactive at start, that asking for the vendor's models (`vscode.lm.selectChatModels`) fires the contributed activation event and activates it, and that every command in `contributes.commands` is registered. VS Code rejects a chat provider registration for a vendor the manifest does not contribute, so an active extension has registered its provider. It makes no gateway request and needs no credentials. The first run needs network access to download VS Code.
 
 CI runs it under `xvfb-run` ([[ci]]). The `.vscodeignore` entry `e2e/**` keeps it out of the VSIX. `src/package.test.ts` still checks the manifest against `activate()` without a VS Code instance.
+
+The suite does not call `authentication.getSession`: the consent dialog it opens is refused in the test build, so the name an error carries through it cannot be checked there ([[chat-provider]]).
