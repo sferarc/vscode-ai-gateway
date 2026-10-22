@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.3
+
+### Patch Changes
+
+- 3668204: Tag and create the GitHub release after each publish.
+
 ## 0.5.2
 
 ### Patch Changes
