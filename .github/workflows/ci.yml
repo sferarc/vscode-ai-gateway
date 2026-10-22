@@ -48,6 +48,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # The extension host needs a display, so xvfb provides one.
+      - name: Extension host smoke test
+        run: xvfb-run --auto-servernum pnpm test:e2e
+
       # vsce refuses to package when @types/vscode is newer than engines.vscode,
       # and only the release would otherwise find out.
       - name: Package extension

@@ -12,9 +12,10 @@
 6. `pnpm typecheck`
 7. `pnpm test`
 8. `pnpm build`
-9. `pnpm package`. vsce refuses to package when `@types/vscode` is newer than `engines.vscode`, and without this step only the release would find out ([[decisions/2026-07-28-types-vscode-literal]]).
+9. `xvfb-run --auto-servernum pnpm test:e2e`, the extension host smoke test ([[testing]]). It runs after the build because it loads `out/extension.js`.
+10. `pnpm package`. vsce refuses to package when `@types/vscode` is newer than `engines.vscode`, and without this step only the release would find out ([[decisions/2026-07-28-types-vscode-literal]]).
 
-`pnpm check` (`package.json`) runs steps 3 to 9 locally in the same order and stops at the first failure. Change both together.
+`pnpm check` (`package.json`) runs steps 3 to 10 locally (without `xvfb-run`, since a desktop has a display) in the same order and stops at the first failure. Change both together.
 
 Actions are pinned to full commit SHAs with the version in a trailing comment, which the sferarc organisation requires. Update both together.
 
