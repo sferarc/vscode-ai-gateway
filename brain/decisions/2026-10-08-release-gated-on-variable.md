@@ -10,6 +10,6 @@ The extension is published to the VS Code Marketplace only. The package is `priv
 
 ## What would reopen it
 
-Setting the variable opened the gate; clearing it closes it again. Publishing to Open VSX would need a new step and a token; no record says whether that is wanted (unknown).
+Setting the variable opened the gate; clearing it closes it again. Publishing to Open VSX is a no ([[2026-10-22-backfill-release-tags]]); it would need a new step and a token.
 
 See [[development/release]].
