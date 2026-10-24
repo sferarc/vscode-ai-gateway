@@ -2,7 +2,7 @@
 
 ## Node and pnpm
 
-`mise.toml` pins Node `26.11.1` and pnpm `12.11.2` (since #5), with `lockfile = true`; `mise.lock` records their checksums. A fresh clone needs `mise trust` before `mise install`, or mise refuses to read the config. `package.json` `packageManager` names the same pnpm. After changing a version in `mise.toml`, run `mise lock` and commit both files.
+`mise.toml` pins Node `26.12.0` and pnpm `12.14.0` (since #45), with `lockfile = true`; `mise.lock` records their checksums. A fresh clone needs `mise trust` before `mise install`, or mise refuses to read the config. `package.json` `packageManager` names the same pnpm. After changing a version in `mise.toml`, run `mise lock` and commit both files.
 
 ## Commands
 
@@ -16,6 +16,7 @@ pnpm fix         # biome check --write
 pnpm knip        # unused files, exports and dependencies, then a production pass that ignores tests
 pnpm typecheck   # tsc --noEmit
 pnpm test        # vitest run
+pnpm test:e2e    # extension host smoke test against out/, so build first
 pnpm build       # bunchee bundles src/extension.ts to out/ as CommonJS, dependencies inlined
 pnpm package     # prepackage runs build, then vsce package --no-dependencies
 pnpm changeset   # describe a change for the next release
