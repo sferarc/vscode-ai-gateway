@@ -445,7 +445,10 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		progress: Progress<LanguageModelResponsePart>,
 		request?: ChatRequestContext,
 	): void {
-		const { statusCode, url, isRetryable, userMessage } = describeGatewayError(error);
+		const { statusCode, url, isRetryable, modelNotFound, userMessage } =
+			describeGatewayError(error);
+		// A model the gateway dropped stays in the picker until the cached list expires.
+		if (modelNotFound) this.refreshModels();
 		// The error object is not logged: an APICallError carries the request body and headers.
 		const fields = [
 			`model=${request?.modelId ?? "unknown"}`,

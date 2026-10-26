@@ -764,6 +764,53 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(report.mock.calls[0]?.[0].value).toContain("Vercel AI Gateway: Manage Authentication");
 		logError.mockRestore();
 	});
+
+	async function respondWithError(error: Error) {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+		const { streamText } = await import("ai");
+		vi.mocked(streamText).mockReturnValue({ fullStream: [{ type: "error", error }] } as never);
+
+		const provider = createProvider();
+		const internals = provider as unknown as {
+			modelInfoChangeEmitter: { fire: () => void };
+			modelsClient: { invalidateCache: () => void };
+		};
+		const fire = vi.spyOn(internals.modelInfoChangeEmitter, "fire");
+		const invalidate = vi.spyOn(internals.modelsClient, "invalidateCache");
+		const report = vi.fn();
+		await provider.provideLanguageModelChatResponse(
+			{ id: "openai/gone" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+		return { report, fire, invalidate };
+	}
+
+	it("refreshes the model list when the gateway no longer serves the model", async () => {
+		const { GatewayModelNotFoundError } = await import("@ai-sdk/gateway");
+		const { report, fire, invalidate } = await respondWithError(
+			new GatewayModelNotFoundError({ modelId: "openai/gone" }),
+		);
+
+		expect(invalidate).toHaveBeenCalledTimes(1);
+		expect(fire).toHaveBeenCalledTimes(1);
+		expect(report.mock.calls[0]?.[0].value).toContain("pick another model");
+	});
+
+	it("keeps the model list on other failures", async () => {
+		const { GatewayInternalServerError } = await import("@ai-sdk/gateway");
+		const { fire, invalidate } = await respondWithError(new GatewayInternalServerError());
+
+		expect(invalidate).not.toHaveBeenCalled();
+		expect(fire).not.toHaveBeenCalled();
+	});
 });
 
 describe("file chunk MIME validation", () => {

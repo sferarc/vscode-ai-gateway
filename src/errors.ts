@@ -1,4 +1,4 @@
-import { GatewayError } from "@ai-sdk/gateway";
+import { GatewayError, GatewayModelNotFoundError } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
 import { extractErrorMessage } from "./logger";
 
@@ -10,6 +10,8 @@ export interface GatewayErrorDescription {
 	/** Request URL without credentials or query string. */
 	url?: string;
 	isRetryable?: boolean;
+	/** The gateway does not serve the requested model, so the cached model list is out of date. */
+	modelNotFound: boolean;
 	userMessage: string;
 }
 
@@ -19,11 +21,16 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 	const apiCall = findApiCallError(failure);
 	const gateway = GatewayError.isInstance(failure) ? failure : undefined;
 	const statusCode = gateway?.statusCode ?? apiCall?.statusCode;
+	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
+	const detail = extractErrorMessage(error);
 	return {
 		statusCode,
 		url: apiCall ? redactUrl(apiCall.url) : undefined,
 		isRetryable: gateway?.isRetryable ?? apiCall?.isRetryable,
-		userMessage: userMessageFor(statusCode, extractErrorMessage(error)),
+		modelNotFound,
+		userMessage: modelNotFound
+			? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
+			: userMessageFor(statusCode, detail),
 	};
 }
 
