@@ -73,6 +73,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	private readonly modelInfoChangeEmitter = new vscode.EventEmitter<void>();
 	readonly onDidChangeLanguageModelChatInformation = this.modelInfoChangeEmitter.event;
 	private readonly sessionChangeSubscription: vscode.Disposable;
+	private readonly configChangeSubscription: vscode.Disposable;
 
 	/**
 	 * @param getActiveSession Resolves the session the user has made active, read straight from the
@@ -82,13 +83,23 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	constructor(private readonly getActiveSession?: () => Promise<ActiveSession | null>) {
 		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
 			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
-			this.modelsClient.invalidateCache();
-			this.modelInfoChangeEmitter.fire();
+			this.refreshModels();
 		});
+		// The model cache is keyed by API key only, so a list from the old endpoint would outlive the switch.
+		this.configChangeSubscription = vscode.workspace.onDidChangeConfiguration((event) => {
+			if (!event.affectsConfiguration(`${EXTENSION_ID}.endpoint`)) return;
+			this.refreshModels();
+		});
+	}
+
+	private refreshModels(): void {
+		this.modelsClient.invalidateCache();
+		this.modelInfoChangeEmitter.fire();
 	}
 
 	dispose(): void {
 		this.sessionChangeSubscription.dispose();
+		this.configChangeSubscription.dispose();
 		this.modelInfoChangeEmitter.dispose();
 	}
 

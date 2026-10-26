@@ -67,7 +67,10 @@ vi.mock("vscode", () => ({
 		showErrorMessage: vi.fn(),
 		createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
 	},
-	workspace: { getConfiguration: hoisted.mockGetConfiguration },
+	workspace: {
+		getConfiguration: hoisted.mockGetConfiguration,
+		onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+	},
 	LanguageModelTextPart: hoisted.MockLanguageModelTextPart,
 	LanguageModelToolCallPart: hoisted.MockLanguageModelToolCallPart,
 	LanguageModelToolResultPart: hoisted.MockLanguageModelToolResultPart,
@@ -136,6 +139,47 @@ describe("session change refresh", () => {
 		handler({ provider: { id: "github" } });
 		expect(invalidateSpy).toHaveBeenCalledTimes(1);
 		expect(fireSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("invalidates cache and fires model info change when the endpoint setting changes", async () => {
+		const vscode = await import("vscode");
+		const onDidChangeConfiguration = vi.mocked(vscode.workspace.onDidChangeConfiguration);
+		onDidChangeConfiguration.mockClear();
+
+		const provider = createProvider();
+		const fireSpy = vi.spyOn(
+			(provider as unknown as { modelInfoChangeEmitter: { fire: () => void } })
+				.modelInfoChangeEmitter,
+			"fire",
+		);
+		const invalidateSpy = vi.spyOn(
+			(provider as unknown as { modelsClient: { invalidateCache: () => void } }).modelsClient,
+			"invalidateCache",
+		);
+
+		const handler = onDidChangeConfiguration.mock.calls.at(-1)?.[0] as unknown as (event: {
+			affectsConfiguration: (section: string) => boolean;
+		}) => void;
+		expect(handler).toBeTypeOf("function");
+
+		handler({ affectsConfiguration: (section) => section === "vercelAiGateway.timeout" });
+		expect(invalidateSpy).not.toHaveBeenCalled();
+		expect(fireSpy).not.toHaveBeenCalled();
+
+		handler({ affectsConfiguration: (section) => section === "vercelAiGateway.endpoint" });
+		expect(invalidateSpy).toHaveBeenCalledTimes(1);
+		expect(fireSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("stops listening for setting changes when disposed", async () => {
+		const vscode = await import("vscode");
+		const onDidChangeConfiguration = vi.mocked(vscode.workspace.onDidChangeConfiguration);
+		const subscription = { dispose: vi.fn() };
+		onDidChangeConfiguration.mockReturnValueOnce(subscription);
+
+		createProvider().dispose();
+
+		expect(subscription.dispose).toHaveBeenCalledTimes(1);
 	});
 });
 
