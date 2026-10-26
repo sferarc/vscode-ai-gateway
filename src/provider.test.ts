@@ -862,16 +862,73 @@ describe("handleStreamChunk", () => {
 		expect(reported.input).toEqual({ query: "test" });
 	});
 
-	it("reports tool-error chunks as errors", () => {
+	it("reports provider-executed tool errors as errors", () => {
 		const provider = createProvider();
 		const progress = { report: vi.fn() };
 		const result = provider.handleStreamChunk(
-			{ type: "tool-error", toolCallId: "c1", toolName: "search", error: new Error("fail") } as any,
+			{
+				type: "tool-error",
+				toolCallId: "c1",
+				toolName: "web_search",
+				providerExecuted: true,
+				error: new Error("fail"),
+			} as any,
 			progress,
 		);
 		expect(result).toBe(true);
 		expect(progress.report).toHaveBeenCalledTimes(1);
 		expect(progress.report.mock.calls[0]?.[0].value).toContain("fail");
+	});
+
+	it("hands an invalid tool call to VS Code with object input and no chat error", () => {
+		const provider = createProvider();
+		const progress = { report: vi.fn() };
+		const error = new Error("Invalid input for tool search: JSON parse failed");
+		const call = {
+			type: "tool-call",
+			toolCallId: "c1",
+			toolName: "search",
+			input: '{"query": "te',
+			dynamic: true,
+			invalid: true,
+			error,
+		};
+		const toolError = {
+			type: "tool-error",
+			toolCallId: "c1",
+			toolName: "search",
+			input: call.input,
+			error: error.message,
+			dynamic: true,
+		};
+
+		expect(provider.handleStreamChunk(call as any, progress)).toBe(true);
+		expect(provider.handleStreamChunk(toolError as any, progress)).toBe(false);
+
+		expect(progress.report).toHaveBeenCalledTimes(1);
+		const reported = progress.report.mock.calls[0]?.[0];
+		expect(reported).toBeInstanceOf(hoisted.MockLanguageModelToolCallPart);
+		expect(reported.callId).toBe("c1");
+		expect(reported.input).toEqual({});
+	});
+
+	it("keeps the parsed input of a call to an unknown tool", () => {
+		const provider = createProvider();
+		const progress = { report: vi.fn() };
+		provider.handleStreamChunk(
+			{
+				type: "tool-call",
+				toolCallId: "c2",
+				toolName: "missing_tool",
+				input: { path: "a" },
+				dynamic: true,
+				invalid: true,
+				error: new Error("Model tried to call unavailable tool 'missing_tool'"),
+			} as any,
+			progress,
+		);
+		expect(progress.report).toHaveBeenCalledTimes(1);
+		expect(progress.report.mock.calls[0]?.[0].input).toEqual({ path: "a" });
 	});
 
 	it("handles file chunks with valid MIME types, skips invalid", () => {
