@@ -123,6 +123,22 @@ function detectReasoning(model: Model, tags: string[]): boolean {
 	return hasTag(tags, REASONING_TAGS);
 }
 
+/**
+ * Splits the gateway's `context_window`, which covers input and output together, so that a prompt
+ * filled to `maxInputTokens` still leaves room for `maxOutputTokens`. Many models report `max_tokens`
+ * equal to the whole window, so the output share is capped at half of it.
+ */
+function splitContextWindow(
+	contextWindow: number,
+	maxTokens: number,
+): { maxInputTokens: number; maxOutputTokens: number } {
+	if (!(contextWindow > 0) || !(maxTokens > 0)) {
+		return { maxInputTokens: contextWindow, maxOutputTokens: maxTokens };
+	}
+	const maxOutputTokens = Math.min(maxTokens, Math.floor(contextWindow / 2));
+	return { maxInputTokens: contextWindow - maxOutputTokens, maxOutputTokens };
+}
+
 export class ModelsClient {
 	private modelsCache?: ModelsCache;
 	private inflightFetch?: { apiKey: string; promise: Promise<LanguageModelChatInformation[]> };
@@ -250,8 +266,7 @@ export class ModelsClient {
 					detail: "Vercel AI Gateway",
 					family: identity.family,
 					version: identity.version,
-					maxInputTokens: model.context_window,
-					maxOutputTokens: model.max_tokens,
+					...splitContextWindow(model.context_window, model.max_tokens),
 					tooltip: model.description || "No description available.",
 					capabilities: {
 						imageInput: detectImageInput(model, tags),

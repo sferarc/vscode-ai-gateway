@@ -82,7 +82,8 @@ describe("ModelsClient", () => {
 		expect(result[0]).toMatchObject({
 			family: "gpt-4o",
 			version: "2024-11-20",
-			maxInputTokens: 128000,
+			maxInputTokens: 123904,
+			maxOutputTokens: 4096,
 		});
 		expect(result[0]?.capabilities).toMatchObject({ imageInput: true, toolCalling: true });
 		expect(result[1]?.capabilities).toMatchObject({ reasoning: true, webSearch: true });
@@ -140,6 +141,53 @@ describe("ModelsClient", () => {
 		const result = await client.getModels("test-key");
 
 		expect(result.map((m) => m.id)).toEqual(["a:chat", "c:undef"]);
+	});
+
+	describe("token limits", () => {
+		async function limitsOf(context_window: number, max_tokens: number) {
+			const model: Model = {
+				id: "vendor:model",
+				object: "model",
+				created: 0,
+				owned_by: "vendor",
+				name: "Model",
+				description: "",
+				context_window,
+				max_tokens,
+				type: "language",
+				pricing: { input: "0", output: "0" },
+			};
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({ data: [model] }),
+			}) as unknown as typeof fetch;
+
+			const [result] = await new ModelsClient().getModels("test-key");
+			return { maxInputTokens: result?.maxInputTokens, maxOutputTokens: result?.maxOutputTokens };
+		}
+
+		it("leaves room in the context window for the output limit", async () => {
+			expect(await limitsOf(400000, 128000)).toEqual({
+				maxInputTokens: 272000,
+				maxOutputTokens: 128000,
+			});
+		});
+
+		it("caps the output share at half a window that max_tokens fills", async () => {
+			expect(await limitsOf(131072, 131072)).toEqual({
+				maxInputTokens: 65536,
+				maxOutputTokens: 65536,
+			});
+			expect(await limitsOf(32768, 65535)).toEqual({
+				maxInputTokens: 16384,
+				maxOutputTokens: 16384,
+			});
+		});
+
+		it("passes unknown limits through unchanged", async () => {
+			expect(await limitsOf(0, 4096)).toEqual({ maxInputTokens: 0, maxOutputTokens: 4096 });
+			expect(await limitsOf(128000, 0)).toEqual({ maxInputTokens: 128000, maxOutputTokens: 0 });
+		});
 	});
 
 	describe("capability detection", () => {
