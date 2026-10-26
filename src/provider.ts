@@ -1,5 +1,6 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
 import {
+	type FinishReason,
 	type ImagePart,
 	jsonSchema,
 	type ModelMessage,
@@ -42,6 +43,15 @@ const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
 const OUTPUT_LIMIT_NOTE =
 	"\n\n*The answer was cut off because it reached the model's output token limit.*";
+
+const CONTENT_FILTER_NOTE =
+	"\n\n*The model provider's content filter stopped this answer. Rephrase the request or try another model.*";
+
+// Finish reasons that end an answer early with no error part of their own.
+const FINISH_NOTES: Partial<Record<FinishReason, string>> = {
+	length: OUTPUT_LIMIT_NOTE,
+	"content-filter": CONTENT_FILTER_NOTE,
+};
 
 /** The part of an authentication session the chat provider needs to talk to the gateway. */
 interface ActiveSession {
@@ -349,8 +359,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			}
 
 			case "finish": {
-				if (chunk.finishReason !== "length") return false;
-				progress.report(new LanguageModelTextPart(OUTPUT_LIMIT_NOTE));
+				const note = FINISH_NOTES[chunk.finishReason];
+				if (!note) return false;
+				progress.report(new LanguageModelTextPart(note));
 				return true;
 			}
 
