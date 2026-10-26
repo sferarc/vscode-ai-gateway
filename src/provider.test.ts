@@ -49,6 +49,10 @@ const hoisted = vi.hoisted(() => {
 		}
 	}
 
+	class MockLanguageModelThinkingPart {
+		constructor(public value: string | string[]) {}
+	}
+
 	return {
 		MockEventEmitter,
 		mockGetConfiguration: vi.fn(),
@@ -56,6 +60,7 @@ const hoisted = vi.hoisted(() => {
 		MockLanguageModelToolCallPart,
 		MockLanguageModelToolResultPart,
 		MockLanguageModelDataPart,
+		MockLanguageModelThinkingPart,
 	};
 });
 
@@ -75,6 +80,7 @@ vi.mock("vscode", () => ({
 	LanguageModelToolCallPart: hoisted.MockLanguageModelToolCallPart,
 	LanguageModelToolResultPart: hoisted.MockLanguageModelToolResultPart,
 	LanguageModelDataPart: hoisted.MockLanguageModelDataPart,
+	LanguageModelThinkingPart: hoisted.MockLanguageModelThinkingPart,
 	LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
 	LanguageModelChatToolMode: { Auto: "auto", Required: "required" },
 }));
@@ -849,6 +855,17 @@ describe("handleStreamChunk", () => {
 		expect(progress.report.mock.calls[0]?.[0]).toBeInstanceOf(hoisted.MockLanguageModelTextPart);
 	});
 
+	it("reports reasoning-delta chunks as thinking parts", () => {
+		const provider = createProvider();
+		const progress = { report: vi.fn() };
+		expect(
+			provider.handleStreamChunk({ type: "reasoning-delta", text: "hmm" } as any, progress),
+		).toBe(true);
+		expect(progress.report.mock.calls[0]?.[0]).toBeInstanceOf(
+			hoisted.MockLanguageModelThinkingPart,
+		);
+	});
+
 	it("reports tool-call chunks using chunk.input", () => {
 		const provider = createProvider();
 		const progress = { report: vi.fn() };
@@ -955,6 +972,33 @@ describe("convertMessages", () => {
 		expect(messages).toEqual([
 			{ role: "user", content: "Explain this" },
 			{ role: "assistant", content: "Sure." },
+		]);
+	});
+
+	it("drops thinking parts from earlier answers instead of sending the reasoning as text", () => {
+		const { messages } = convertMessages([
+			{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Fix the bug")] },
+			{
+				role: 2,
+				content: [
+					new hoisted.MockLanguageModelThinkingPart("I should read the file first."),
+					new hoisted.MockLanguageModelThinkingPart(["Then ", "edit it."]),
+					new hoisted.MockLanguageModelTextPart("Reading it."),
+					new hoisted.MockLanguageModelToolCallPart("c1", "read", { path: "a.ts" }),
+				],
+			},
+			{ role: 2, content: [new hoisted.MockLanguageModelThinkingPart("Only thinking.")] },
+		] as unknown as LanguageModelChatMessage[]);
+
+		expect(messages).toEqual([
+			{ role: "user", content: "Fix the bug" },
+			{
+				role: "assistant",
+				content: [
+					{ type: "text", text: "Reading it." },
+					{ type: "tool-call", toolCallId: "c1", toolName: "read", input: { path: "a.ts" } },
+				],
+			},
 		]);
 	});
 
@@ -1210,6 +1254,12 @@ describe("provideTokenCount", () => {
 
 		expect(await count([textOnly, image])).toBe(textOnlyCount + imageTokens);
 		expect(await count([textOnly, image, result])).toBe(textOnlyCount + 2 * imageTokens);
+	});
+
+	it("ignores thinking parts, which are not sent", async () => {
+		expect(
+			await count([textOnly, new hoisted.MockLanguageModelThinkingPart("r".repeat(400))]),
+		).toBe(textOnlyCount);
 	});
 
 	it("ignores binary and cache control data parts", async () => {
