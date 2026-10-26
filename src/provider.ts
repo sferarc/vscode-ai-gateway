@@ -78,6 +78,19 @@ function isValidMimeType(mimeType: string): boolean {
 	return MIME_TYPE_PATTERN.test(mimeType);
 }
 
+type ThinkingPartConstructor = new (value: string) => LanguageModelResponsePart;
+
+// A proposed API class, so it is missing from @types/vscode and may be missing at runtime.
+function thinkingPartConstructor(): ThinkingPartConstructor | undefined {
+	const ctor = (vscode as Record<string, unknown>).LanguageModelThinkingPart;
+	return typeof ctor === "function" ? (ctor as ThinkingPartConstructor) : undefined;
+}
+
+function isThinkingPart(part: object): boolean {
+	const ThinkingPart = thinkingPartConstructor();
+	return ThinkingPart !== undefined && part instanceof ThinkingPart;
+}
+
 export class VercelAIChatModelProvider implements LanguageModelChatProvider, vscode.Disposable {
 	private modelsClient = new ModelsClient();
 	private readonly modelInfoChangeEmitter = new vscode.EventEmitter<void>();
@@ -398,14 +411,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		text: string,
 		progress: Progress<LanguageModelResponsePart>,
 	): boolean {
-		// LanguageModelThinkingPart may not exist in older VS Code versions
-		const vsAny = vscode as Record<string, unknown>;
-		const ThinkingCtor = vsAny.LanguageModelThinkingPart as
-			| (new (
-					text: string,
-			  ) => LanguageModelResponsePart)
-			| undefined;
-
+		const ThinkingCtor = thinkingPartConstructor();
 		if (ThinkingCtor && text) {
 			progress.report(new ThinkingCtor(text));
 			return true;
@@ -508,6 +514,8 @@ function convertSingleMessage(
 
 	for (const part of msg.content) {
 		if (typeof part !== "object" || part === null) continue;
+		// A thinking part has a string value too, so it must be caught before isTextPart.
+		if (isThinkingPart(part)) continue;
 
 		if (isTextPart(part)) {
 			parts.push({ type: "text", text: part.value });
@@ -661,7 +669,7 @@ const IMAGE_TOKENS = 1600;
  * makes VS Code budget its prompt against a count far below what the gateway receives.
  */
 function tallyPart(part: unknown, tally: { characters: number; images: number }): void {
-	if (typeof part !== "object" || part === null) return;
+	if (typeof part !== "object" || part === null || isThinkingPart(part)) return;
 	if (isTextPart(part)) {
 		tally.characters += part.value.length;
 	} else if (part instanceof LanguageModelToolCallPart) {
