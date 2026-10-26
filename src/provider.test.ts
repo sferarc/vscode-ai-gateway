@@ -894,6 +894,46 @@ describe("convertMessages", () => {
 		expect(toolResult).toBeDefined();
 		expect((toolResult?.content as any)?.[0]?.toolName).toBe("searchDocs");
 	});
+
+	it("drops cache control parts instead of sending their marker as text", () => {
+		const { messages } = convertMessages([
+			{
+				role: 1,
+				content: [
+					new hoisted.MockLanguageModelTextPart("Explain this"),
+					hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control"),
+				],
+			},
+			{
+				role: 2,
+				content: [
+					new hoisted.MockLanguageModelTextPart("Sure."),
+					hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control"),
+				],
+			},
+		] as unknown as LanguageModelChatMessage[]);
+
+		expect(messages).toEqual([
+			{ role: "user", content: "Explain this" },
+			{ role: "assistant", content: "Sure." },
+		]);
+	});
+
+	it("decodes textual data parts and replaces binary ones with a placeholder", () => {
+		const { messages } = convertMessages([
+			{
+				role: 1,
+				content: [
+					hoisted.MockLanguageModelDataPart.json({ a: 1 }),
+					new hoisted.MockLanguageModelDataPart(new Uint8Array([0, 255, 1]), "application/pdf"),
+				],
+			},
+		] as unknown as LanguageModelChatMessage[]);
+
+		expect(messages).toEqual([
+			{ role: "user", content: '{"a":1}[Unsupported application/pdf content]' },
+		]);
+	});
 });
 
 describe("tool message conversion", () => {
