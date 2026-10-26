@@ -56,6 +56,7 @@ const hoisted = vi.hoisted(() => {
 	return {
 		MockEventEmitter,
 		mockGetConfiguration: vi.fn(),
+		mockAcceptsTemperature: vi.fn((_modelId: string) => true),
 		MockLanguageModelTextPart,
 		MockLanguageModelToolCallPart,
 		MockLanguageModelToolResultPart,
@@ -107,6 +108,7 @@ vi.mock("./models", () => ({
 	ModelsClient: class {
 		getModels = vi.fn();
 		invalidateCache = vi.fn();
+		acceptsTemperature = hoisted.mockAcceptsTemperature;
 	},
 }));
 
@@ -634,6 +636,14 @@ describe("provideLanguageModelChatResponse", () => {
 			{ temperature: 0.2, maxOutputTokens: 1000 },
 		);
 		expect(options.temperature).toBe(0.2);
+		expect(options.maxOutputTokens).toBe(1000);
+	});
+
+	it("drops the caller's temperature for a model the gateway lists as taking none", async () => {
+		hoisted.mockAcceptsTemperature.mockReturnValueOnce(false);
+		const options = await requestOptions({}, { temperature: 0, maxOutputTokens: 1000 });
+		expect(hoisted.mockAcceptsTemperature).toHaveBeenLastCalledWith("openai/gpt-4o");
+		expect(options.temperature).toBeUndefined();
 		expect(options.maxOutputTokens).toBe(1000);
 	});
 

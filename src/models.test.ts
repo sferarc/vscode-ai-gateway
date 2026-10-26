@@ -271,6 +271,36 @@ describe("ModelsClient", () => {
 			expect(capabilities).toMatchObject({ reasoning: true });
 		});
 
+		it("reads which models take a temperature from the temperature flag, then supported_parameters", async () => {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{ ...baseModel, id: "flag-false", temperature: false },
+						{
+							...baseModel,
+							id: "flag-true",
+							temperature: true,
+							supported_parameters: ["max_tokens"],
+						},
+						{ ...baseModel, id: "params-without", supported_parameters: ["max_tokens"] },
+						{ ...baseModel, id: "params-with", supported_parameters: ["temperature"] },
+						{ ...baseModel, id: "no-metadata" },
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const client = new ModelsClient();
+			await client.getModels("test-key");
+
+			expect(client.acceptsTemperature("flag-false")).toBe(false);
+			expect(client.acceptsTemperature("flag-true")).toBe(true);
+			expect(client.acceptsTemperature("params-without")).toBe(false);
+			expect(client.acceptsTemperature("params-with")).toBe(true);
+			expect(client.acceptsTemperature("no-metadata")).toBe(true);
+			expect(client.acceptsTemperature("not-listed")).toBe(true);
+		});
+
 		it("keeps using tags for web search, which has no structured field", async () => {
 			const capabilities = await capabilitiesOf({
 				...baseModel,
