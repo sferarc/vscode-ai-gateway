@@ -494,11 +494,15 @@ function convertSingleMessage(
 		if (isTextPart(part)) {
 			parts.push({ type: "text", text: part.value });
 		} else if (part instanceof LanguageModelDataPart) {
+			if (part.mimeType === CACHE_CONTROL_MIME_TYPE) continue;
 			if (part.mimeType.startsWith("image/")) {
 				const base64 = Buffer.from(part.data).toString("base64");
 				parts.push({ type: "image", image: `data:${part.mimeType};base64,${base64}` });
-			} else {
+			} else if (isTextualMimeType(part.mimeType)) {
 				parts.push({ type: "text", text: new TextDecoder().decode(part.data) });
+			} else {
+				logger.warn(`Unsupported message data part: ${part.mimeType}`);
+				parts.push({ type: "text", text: `[Unsupported ${part.mimeType} content]` });
 			}
 		} else if (part instanceof LanguageModelToolCallPart) {
 			const call: ToolCallPart = {
