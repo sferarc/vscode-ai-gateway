@@ -367,14 +367,21 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return true;
 
 			case "tool-call": {
-				progress.report(
-					new LanguageModelToolCallPart(chunk.toolCallId, chunk.toolName, chunk.input),
-				);
+				// Unparsable input arrives as the raw string; VS Code needs an object and answers the call itself.
+				const input = isPlainObject(chunk.input) ? chunk.input : {};
+				if (chunk.invalid) {
+					logger.warn(
+						`Invalid tool call ${chunk.toolName} (${chunk.toolCallId}): ${extractErrorMessage(chunk.error)}`,
+					);
+				}
+				progress.report(new LanguageModelToolCallPart(chunk.toolCallId, chunk.toolName, input));
 				logger.debug(`Tool call: ${chunk.toolName} (${chunk.toolCallId})`);
 				return true;
 			}
 
 			case "tool-error": {
+				// Tools here have no execute, so a local tool error only follows an invalid call already handed to VS Code.
+				if (!chunk.providerExecuted) return false;
 				logger.error(`Tool error in ${chunk.toolName}:`, chunk.error);
 				this.reportError(chunk.error, progress, request);
 				return true;
@@ -685,6 +692,10 @@ function tallyPart(part: unknown, tally: { characters: number; images: number })
 			tally.characters += new TextDecoder().decode(part.data).length;
 		}
 	}
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isValidMessage(msg: ModelMessage): boolean {
