@@ -39,6 +39,8 @@ export interface Model {
 	supported_parameters?: string[];
 	/** Present when the model exposes configurable reasoning. */
 	reasoning_options?: { type: string }[];
+	/** False for models that take no temperature, such as OpenAI's reasoning models. */
+	temperature?: boolean;
 	pricing: {
 		input: string;
 		output: string;
@@ -123,6 +125,13 @@ function detectReasoning(model: Model, tags: string[]): boolean {
 	return hasTag(tags, REASONING_TAGS);
 }
 
+function acceptsTemperature(model: Model): boolean {
+	if (typeof model.temperature === "boolean") {
+		return model.temperature;
+	}
+	return model.supported_parameters?.includes("temperature") ?? true;
+}
+
 /**
  * Splits the gateway's `context_window`, which covers input and output together, so that a prompt
  * filled to `maxInputTokens` still leaves room for `maxOutputTokens`. Many models report `max_tokens`
@@ -143,6 +152,12 @@ export class ModelsClient {
 	private modelsCache?: ModelsCache;
 	private inflightFetch?: { apiKey: string; promise: Promise<LanguageModelChatInformation[]> };
 	private generation = 0;
+	private temperatureUnsupported = new Set<string>();
+
+	/** False only for a model the last fetched list marked as taking no temperature. */
+	acceptsTemperature(modelId: string): boolean {
+		return !this.temperatureUnsupported.has(modelId);
+	}
 
 	invalidateCache(): void {
 		this.modelsCache = undefined;
@@ -211,6 +226,9 @@ export class ModelsClient {
 			clearTimeout(timer);
 		}
 		const models = this.transformToVSCodeModels(data);
+		this.temperatureUnsupported = new Set(
+			data.filter((model) => !acceptsTemperature(model)).map((model) => model.id),
+		);
 
 		logger.info(`Models fetched in ${Date.now() - startTime}ms, count: ${models.length}`);
 		return models;

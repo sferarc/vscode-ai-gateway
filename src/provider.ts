@@ -203,7 +203,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				messages,
 				instructions,
 				toolChoice,
-				temperature: options.modelOptions?.temperature,
+				temperature: this.temperatureFor(model.id, options.modelOptions?.temperature),
 				maxOutputTokens: options.modelOptions?.maxOutputTokens ?? defaultMaxOutputTokens(model),
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
 				abortSignal: abortController.signal,
@@ -277,6 +277,15 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			} as ToolSet[string];
 		}
 		return toolSet;
+	}
+
+	// Callers set a temperature without knowing the model, and the gateway lists models that take none.
+	private temperatureFor(modelId: string, temperature: number | undefined): number | undefined {
+		if (temperature === undefined || this.modelsClient.acceptsTemperature(modelId)) {
+			return temperature;
+		}
+		logger.debug(`Dropping temperature ${temperature} for ${modelId}, which takes none`);
+		return undefined;
 	}
 
 	private getToolChoice(
