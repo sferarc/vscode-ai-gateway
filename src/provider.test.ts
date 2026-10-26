@@ -693,6 +693,32 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(report).not.toHaveBeenCalled();
 	});
 
+	it("explains a filtered answer instead of reporting no response", async () => {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+		const { streamText } = await import("ai");
+		vi.mocked(streamText).mockReturnValue({
+			fullStream: [{ type: "finish", finishReason: "content-filter" }],
+		} as never);
+
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "google/gemini-2.5-pro" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+
+		expect(report).toHaveBeenCalledTimes(1);
+		expect(report.mock.calls[0]?.[0].value).toContain("content filter stopped this answer");
+		expect(report.mock.calls[0]?.[0].value).not.toContain("No response received");
+	});
+
 	it("logs the status of a rejected request without its body and points to sign-in", async () => {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,
@@ -800,6 +826,19 @@ describe("handleStreamChunk", () => {
 		progress.report.mockClear();
 		provider.handleStreamChunk({ type: "finish", finishReason: "stop" } as any, progress);
 		expect(progress.report).not.toHaveBeenCalled();
+	});
+
+	it("notes when the provider's content filter stopped the answer", () => {
+		const provider = createProvider();
+		const progress = { report: vi.fn() };
+		expect(
+			provider.handleStreamChunk(
+				{ type: "finish", finishReason: "content-filter" } as any,
+				progress,
+			),
+		).toBe(true);
+		expect(progress.report).toHaveBeenCalledTimes(1);
+		expect(progress.report.mock.calls[0]?.[0].value).toContain("content filter");
 	});
 
 	it("reports text-delta chunks using chunk.text", () => {
