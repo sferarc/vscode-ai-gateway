@@ -1,4 +1,4 @@
-import { GatewayError, GatewayModelNotFoundError } from "@ai-sdk/gateway";
+import { GatewayError, GatewayForbiddenError, GatewayModelNotFoundError } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
 import { extractErrorMessage } from "./logger";
 
@@ -30,8 +30,22 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 		modelNotFound,
 		userMessage: modelNotFound
 			? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
-			: userMessageFor(statusCode, detail),
+			: GatewayForbiddenError.isInstance(failure)
+				? policyMessage(statusCode, failure.ruleId, detail)
+				: userMessageFor(statusCode, detail),
 	};
+}
+
+// A forbidden error is a gateway rule refusing the request, so signing in again would not help.
+function policyMessage(
+	statusCode: number | undefined,
+	ruleId: string | undefined,
+	detail: string,
+): string {
+	const status = [`HTTP ${statusCode ?? "unknown"}`, ruleId ? `rule ${ruleId}` : undefined]
+		.filter(Boolean)
+		.join(", ");
+	return `A gateway rule refused this request (${status}); the credentials are fine. Check the team's AI Gateway rules or pick another model. Details: ${detail}`;
 }
 
 // The gateway provider wraps the APICallError from the HTTP layer in a GatewayError's cause.
