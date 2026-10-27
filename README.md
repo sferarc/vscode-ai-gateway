@@ -4,7 +4,7 @@ A VS Code extension that makes [Vercel AI Gateway](https://vercel.com/docs/ai-ga
 
 ## Features
 
-- **Models listed live from the gateway.** The model list comes from `GET {endpoint}/v1/models` on the configured gateway and is cached for five minutes. Every chat or language model the gateway returns is offered; nothing is hard-coded in the extension.
+- **Models listed live from the gateway.** The model list comes from `GET {endpoint}/v1/models` on the configured gateway and is cached for five minutes. Every chat or language model the gateway returns is offered; nothing is hard-coded in the extension. A model the gateway marks as deprecated shows its deprecation date in the picker.
 - **Capabilities from gateway metadata.** Image input, tool calling and reasoning are read from each model's metadata (input modalities, supported parameters, reasoning options), with the model's tags as a fallback when a field is missing.
 - **Streaming responses**, including reasoning output where the model provides it.
 - **Tool calling** with VS Code's tools.

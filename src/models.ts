@@ -41,6 +41,8 @@ export interface Model {
 	reasoning_options?: { type: string }[];
 	/** False for models that take no temperature, such as OpenAI's reasoning models. */
 	temperature?: boolean;
+	/** When the gateway deprecates the model, in milliseconds since the epoch, unlike `created`. */
+	deprecated_at?: number;
 	pricing: {
 		input: string;
 		output: string;
@@ -130,6 +132,14 @@ function acceptsTemperature(model: Model): boolean {
 		return model.temperature;
 	}
 	return model.supported_parameters?.includes("temperature") ?? true;
+}
+
+// Observed in milliseconds while every other gateway timestamp is in seconds, so accept either.
+function deprecationDate(model: Model): string | undefined {
+	const value = model.deprecated_at;
+	if (typeof value !== "number" || !(value > 0)) return undefined;
+	const date = new Date(value < 1e12 ? value * 1000 : value);
+	return Number.isNaN(date.getTime()) ? undefined : date.toISOString().slice(0, 10);
 }
 
 /**
@@ -277,15 +287,19 @@ export class ModelsClient {
 			.map((model) => {
 				const identity = parseModelIdentity(model.id);
 				const tags = (model.tags ?? []).map((tag) => tag.toLowerCase());
+				const description = model.description || "No description available.";
+				const deprecated = deprecationDate(model);
 
 				return {
 					id: model.id,
 					name: model.name,
-					detail: "Vercel AI Gateway",
+					detail: deprecated ? `Vercel AI Gateway, deprecated ${deprecated}` : "Vercel AI Gateway",
 					family: identity.family,
 					version: identity.version,
 					...splitContextWindow(model.context_window, model.max_tokens),
-					tooltip: model.description || "No description available.",
+					tooltip: deprecated
+						? `${description}\n\nThe gateway marks this model as deprecated from ${deprecated}.`
+						: description,
 					capabilities: {
 						imageInput: detectImageInput(model, tags),
 						toolCalling: detectToolCalling(model, tags),
