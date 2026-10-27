@@ -1,13 +1,13 @@
 catalog:
-  '@ai-sdk/gateway': 4.0.116
-  '@biomejs/biome': 2.5.15
+  '@ai-sdk/gateway': 4.0.126
+  '@biomejs/biome': 2.6.3
   '@changesets/cli': 3.0.3
   '@types/json-schema': 7.0.15
   '@types/node': 26.6.5
   '@vscode/vsce': 4.0.0
-  ai: 7.0.143
+  ai: 7.0.153
   bunchee: 7.0.2
-  knip: 6.42.0
+  knip: 6.43.0
   lefthook: 2.2.2
   # bunchee refuses to build on TypeScript 7 without the TypeScript 6 JavaScript API, which it
   # looks for by name. Remove the shim once bunchee runs on TS 7 alone.
