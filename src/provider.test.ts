@@ -709,6 +709,66 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(report).not.toHaveBeenCalled();
 	});
 
+	async function respondWithStream(fullStream: unknown[]) {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+		const { streamText } = await import("ai");
+		vi.mocked(streamText).mockReturnValue({ fullStream } as never);
+
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "perplexity/sonar" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+		return report.mock.calls.map(([part]) => part.value as string);
+	}
+
+	it("lists cited sources under the answer, numbered in arrival order", async () => {
+		const source = (url: string, title?: string) => ({
+			type: "source",
+			sourceType: "url",
+			id: url,
+			url,
+			title,
+		});
+		const parts = await respondWithStream([
+			source("https://example.com/a", "First [page]"),
+			{ type: "text-delta", text: "Answer [1][2]" },
+			source("https://example.com/b?q=a b"),
+			source("https://example.com/a", "Repeated"),
+			source("javascript:alert(1)", "Script"),
+			{
+				type: "source",
+				sourceType: "document",
+				id: "d",
+				mediaType: "application/pdf",
+				title: "Doc",
+			},
+			{ type: "finish", finishReason: "length" },
+		]);
+
+		expect(parts).toEqual([
+			"Answer [1][2]",
+			"\n\n**Sources**\n\n1. [First \\[page\\]](<https://example.com/a>)\n2. <https://example.com/b?q=a%20b>\n",
+			expect.stringContaining("output token limit"),
+		]);
+	});
+
+	it("adds no source list when the model cites nothing", async () => {
+		const parts = await respondWithStream([
+			{ type: "text-delta", text: "Answer" },
+			{ type: "finish", finishReason: "stop" },
+		]);
+		expect(parts).toEqual(["Answer"]);
+	});
+
 	it("explains a filtered answer instead of reporting no response", async () => {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,
