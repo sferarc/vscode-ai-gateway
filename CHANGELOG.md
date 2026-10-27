@@ -1,5 +1,19 @@
 # vscode-extension-vercel-ai
 
+## 0.5.4
+
+### Patch Changes
+
+- f5693b8: Say when the model provider's content filter stopped an answer. A filtered request used to show "No response received from model.", and a filtered partial answer ended with no explanation; both now end with a note that the content filter stopped it.
+- fc0fee0: Leave room for the answer in each model's context window. The input limit VS Code sees is now the context window minus the output limit, and the output limit is at most half the window, so a long conversation no longer asks the model for more tokens than it has.
+- 3d976e2: Stop sending a reasoning model's earlier thinking back to it as part of its answer. In agent mode, the Copilot Chat extension returns the thinking from earlier steps of the same request, and it reached the model as ordinary assistant text, so the model saw its own reasoning as something it had said and every step paid for those tokens again. Thinking parts are now left out of the request and out of the token estimate.
+- 33299e3: Stop sending a temperature to models that take none. Chat features and other extensions can ask for a temperature without knowing the model, and the gateway marks some models, such as OpenAI's reasoning models, as not accepting one. The temperature is now left out of requests to those models.
+- 3c5c068: Refresh the model list as soon as the `vercelAiGateway.endpoint` setting changes, instead of showing the previous endpoint's models for up to five minutes.
+- 827dcba: Hand a malformed tool call back to VS Code instead of ending the answer with an error. When a model called a tool that does not exist or sent tool input that is not valid JSON, the chat showed an error next to a tool call carrying the raw text as its input; the call now reaches VS Code with an object input so the agent can answer it and the model can retry.
+- 5c2fd21: List the web pages a search model cites under its answer. Models such as Perplexity's Sonar number their citations in the text but send the pages separately, and those pages used to be dropped, leaving `[1]` and `[2]` with nothing to point to.
+- 5c3e048: Refresh the model list when the gateway says it no longer serves the chosen model. The model stayed in the picker for up to five minutes and the chat showed only the gateway's "Model not found"; the chat now says to pick another model and the list reloads.
+- 2d301ee: Stop sending VS Code's prompt cache markers to the model as text. A cache breakpoint on a chat message used to reach the model as the word "ephemeral" appended to that message; it is now dropped, and a binary attachment the extension cannot convert is sent as a short placeholder instead of undecodable bytes.
+
 ## 0.5.3
 
 ### Patch Changes
