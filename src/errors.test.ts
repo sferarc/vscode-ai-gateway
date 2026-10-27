@@ -1,6 +1,7 @@
 import {
 	GatewayAuthenticationError,
 	GatewayInternalServerError,
+	GatewayModelNotFoundError,
 	GatewayRateLimitError,
 } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
@@ -66,6 +67,22 @@ describe("describeGatewayError", () => {
 		expect(userMessage).toContain("try again");
 	});
 
+	it("flags a model the gateway does not serve", () => {
+		const error = new GatewayModelNotFoundError({
+			message: "Model 'openai/gone' not found",
+			modelId: "openai/gone",
+			cause: apiCallError(404),
+		});
+		const description = describeGatewayError(error);
+		expect(description).toMatchObject({ statusCode: 404, modelNotFound: true });
+		expect(description.userMessage).toContain("does not offer this model (HTTP 404)");
+		expect(description.userMessage).toContain("Details: Model 'openai/gone' not found");
+	});
+
+	it("does not flag other 404s as a missing model", () => {
+		expect(describeGatewayError(apiCallError(404)).modelNotFound).toBe(false);
+	});
+
 	it("drops credentials and the query string from the url", () => {
 		const error = apiCallError(500, "https://user:pass@example.com/v1/ai/language-model?key=abc");
 		expect(describeGatewayError(error).url).toBe("https://example.com/v1/ai/language-model");
@@ -76,6 +93,7 @@ describe("describeGatewayError", () => {
 			statusCode: undefined,
 			url: undefined,
 			isRetryable: undefined,
+			modelNotFound: false,
 			userMessage: "boom",
 		});
 	});
