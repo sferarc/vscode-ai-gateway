@@ -21,7 +21,7 @@ function settings(
 	return {
 		get: vi.fn((key: string, d: unknown) => {
 			if (key === "endpoint") return effective ?? d;
-			if (key === "timeout") return timeout ?? d;
+			if (key === "timeout") return timeout === undefined ? d : timeout;
 			return d;
 		}),
 		inspect: vi.fn((key: string) =>
