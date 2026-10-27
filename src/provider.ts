@@ -210,7 +210,14 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
 			});
 
+			const sources = new Map<string, string | undefined>();
 			for await (const chunk of response.fullStream) {
+				if (chunk.type === "source" && chunk.sourceType === "url") {
+					if (!sources.has(chunk.url)) sources.set(chunk.url, chunk.title);
+				}
+				if (chunk.type === "finish" && this.reportSources(sources, progress)) {
+					responseSent = true;
+				}
 				// streamText ends the stream with an abort part instead of throwing when a chunk timeout fires.
 				if (chunk.type === "abort") {
 					if (!token.isCancellationRequested && !abortController.signal.aborted) {
@@ -414,6 +421,23 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			default:
 				return false;
 		}
+	}
+
+	// Search models cite pages as [1], [2] in the text and send the pages only as source parts.
+	private reportSources(
+		sources: ReadonlyMap<string, string | undefined>,
+		progress: Progress<LanguageModelResponsePart>,
+	): boolean {
+		const items: string[] = [];
+		for (const [url, title] of sources) {
+			const href = webUrl(url);
+			if (!href) continue;
+			const label = title?.trim() ? escapeMarkdown(title.trim()) : undefined;
+			items.push(`${items.length + 1}. ${label ? `[${label}](<${href}>)` : `<${href}>`}`);
+		}
+		if (items.length === 0) return false;
+		progress.report(new LanguageModelTextPart(`\n\n**Sources**\n\n${items.join("\n")}\n`));
+		return true;
 	}
 
 	private handleReasoningChunk(
@@ -695,6 +719,20 @@ function tallyPart(part: unknown, tally: { characters: number; images: number })
 			tally.characters += new TextDecoder().decode(part.data).length;
 		}
 	}
+}
+
+/** The URL normalised for a Markdown link, or undefined when it is not an http or https address. */
+function webUrl(url: string): string | undefined {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function escapeMarkdown(text: string): string {
+	return text.replace(/\s+/g, " ").replace(/[\\`*_[\]<>]/g, "\\$&");
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
