@@ -1,5 +1,6 @@
 import {
 	GatewayAuthenticationError,
+	GatewayForbiddenError,
 	GatewayInternalServerError,
 	GatewayModelNotFoundError,
 	GatewayRateLimitError,
@@ -59,6 +60,24 @@ describe("describeGatewayError", () => {
 		const { userMessage } = describeGatewayError(error);
 		expect(userMessage).toContain(`rejected the credentials (HTTP ${statusCode})`);
 		expect(userMessage).toContain('"Vercel AI Gateway: Manage Authentication"');
+	});
+
+	it("blames a gateway rule, not the credentials, for a forbidden error", () => {
+		const error = new GatewayForbiddenError({
+			message: "Blocked by routing rule",
+			ruleId: "rule_123",
+			cause: apiCallError(403),
+		});
+		const { statusCode, userMessage } = describeGatewayError(error);
+		expect(statusCode).toBe(403);
+		expect(userMessage).toContain("A gateway rule refused this request (HTTP 403, rule rule_123)");
+		expect(userMessage).toContain("Details: Blocked by routing rule");
+		expect(userMessage).not.toContain("Manage Authentication");
+	});
+
+	it("leaves the rule out of a forbidden error that names none", () => {
+		const { userMessage } = describeGatewayError(new GatewayForbiddenError({ message: "Blocked" }));
+		expect(userMessage).toContain("refused this request (HTTP 403);");
 	});
 
 	it("calls a 5xx retryable", () => {
