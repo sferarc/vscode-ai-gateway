@@ -301,6 +301,28 @@ describe("ModelsClient", () => {
 			expect(client.acceptsTemperature("not-listed")).toBe(true);
 		});
 
+		it("names the deprecation date of a model the gateway marks as deprecated", async () => {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{ ...baseModel, id: "ms", description: "Fast", deprecated_at: 1794960000000 },
+						{ ...baseModel, id: "seconds", deprecated_at: 1793404800 },
+						{ ...baseModel, id: "current", description: "Fast" },
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const [ms, seconds, current] = await new ModelsClient().getModels("test-key");
+
+			expect(ms).toMatchObject({
+				detail: "Vercel AI Gateway, deprecated 2026-11-18",
+				tooltip: "Fast\n\nThe gateway marks this model as deprecated from 2026-11-18.",
+			});
+			expect(seconds?.detail).toBe("Vercel AI Gateway, deprecated 2026-10-31");
+			expect(current).toMatchObject({ detail: "Vercel AI Gateway", tooltip: "Fast" });
+		});
+
 		it("keeps using tags for web search, which has no structured field", async () => {
 			const capabilities = await capabilitiesOf({
 				...baseModel,
