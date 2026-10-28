@@ -327,7 +327,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			// (inputSchema from jsonSchema() satisfies Tool's FlexibleSchema requirement)
 			toolSet[name] = {
 				description,
-				inputSchema: jsonSchema(inputSchema ?? { type: "object", properties: {} }),
+				inputSchema: jsonSchema(objectSchema(name, inputSchema)),
 			} as ToolSet[string];
 		}
 		return toolSet;
@@ -797,6 +797,19 @@ function webUrl(url: string): string | undefined {
 
 function escapeMarkdown(text: string): string {
 	return text.replace(/\s+/g, " ").replace(/[\\`*_[\]<>]/g, "\\$&");
+}
+
+type ToolInputSchema = Parameters<typeof jsonSchema>[0];
+
+// Anthropic and OpenAI reject tool parameters that are not an object schema, which fails the whole request.
+function objectSchema(toolName: string, schema: unknown): ToolInputSchema {
+	if (!isPlainObject(schema)) return { type: "object", properties: {} };
+	if (schema.type !== undefined && schema.type !== "object") return schema as ToolInputSchema;
+	if (schema.type === "object" && isPlainObject(schema.properties))
+		return schema as ToolInputSchema;
+	logger.debug(`Declaring the input schema of tool ${toolName} an object with properties`);
+	const properties = isPlainObject(schema.properties) ? schema.properties : {};
+	return { ...schema, type: "object", properties } as ToolInputSchema;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
