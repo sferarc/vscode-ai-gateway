@@ -992,6 +992,53 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(invalidate).not.toHaveBeenCalled();
 		expect(fire).not.toHaveBeenCalled();
 	});
+
+	async function sentToolSchemas(tools: { name: string; inputSchema?: unknown }[]) {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: () => undefined,
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+		const { streamText } = await import("ai");
+		const streamTextMock = vi.mocked(streamText);
+		streamTextMock.mockClear();
+		streamTextMock.mockReturnValue({ fullStream: [{ type: "text-delta", text: "hi" }] } as never);
+
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "anthropic/claude-sonnet-4.5" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{ tools } as never,
+			{ report: vi.fn() },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+		const sent = streamTextMock.mock.calls[0]?.[0].tools ?? {};
+		return Object.fromEntries(Object.entries(sent).map(([name, tool]) => [name, tool.inputSchema]));
+	}
+
+	it("sends every tool's input as an object schema with properties", async () => {
+		const properties = { path: { type: "string" } };
+		const schemas = await sentToolSchemas([
+			{ name: "none" },
+			{ name: "empty", inputSchema: {} },
+			{ name: "untyped", inputSchema: { properties, required: ["path"] } },
+			{ name: "bare", inputSchema: { type: "object" } },
+			{ name: "notObject", inputSchema: "path" },
+		]);
+
+		expect(schemas).toEqual({
+			none: { type: "object", properties: {} },
+			empty: { type: "object", properties: {} },
+			untyped: { type: "object", properties, required: ["path"] },
+			bare: { type: "object", properties: {} },
+			notObject: { type: "object", properties: {} },
+		});
+	});
+
+	it("passes a complete object schema through unchanged", async () => {
+		const inputSchema = { type: "object", properties: { path: { type: "string" } } };
+		expect((await sentToolSchemas([{ name: "read", inputSchema }])).read).toBe(inputSchema);
+	});
 });
 
 describe("file chunk MIME validation", () => {
