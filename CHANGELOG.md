@@ -1,5 +1,13 @@
 # vscode-extension-vercel-ai
 
+## 0.5.6
+
+### Patch Changes
+
+- eff797f: Keep a requested output limit within the model's own. An extension that asks for more output tokens than the model allows now gets the model's limit, and one that sends a limit that is not a whole positive number gets the model's limit instead of an error.
+- 93aafcc: Stop showing setup steps that do not apply when the gateway rejects the credentials. The chat error used to repeat the AI SDK's advice to pass an `apiKey` option or set `AI_GATEWAY_API_KEY`, neither of which the extension reads; it now keeps the gateway's reason and points to Manage Authentication.
+- eceffde: Say how long to wait when the gateway rate limits a chat request. When the gateway's reply carries a `Retry-After` header, the error in the chat now names the wait instead of only saying to wait a moment.
+
 ## 0.5.5
 
 ### Patch Changes
