@@ -595,7 +595,11 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(options.messages).toEqual([{ role: "user", content: "Hello" }]);
 	});
 
-	async function requestOptions(model: object, modelOptions?: Record<string, unknown>) {
+	async function requestOptions(
+		model: object,
+		modelOptions?: Record<string, unknown>,
+		content: unknown[] = [new hoisted.MockLanguageModelTextPart("Hello")],
+	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,
 			inspect: () => undefined,
@@ -611,7 +615,7 @@ describe("provideLanguageModelChatResponse", () => {
 
 		await createProvider().provideLanguageModelChatResponse(
 			{ id: "openai/gpt-4o", ...model } as never,
-			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			[{ role: 1, content }] as never,
 			{ modelOptions } as never,
 			{ report: vi.fn() },
 			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
@@ -673,6 +677,23 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(hoisted.mockAcceptsTemperature).toHaveBeenLastCalledWith("openai/gpt-4o");
 		expect(options.temperature).toBeUndefined();
 		expect(options.maxOutputTokens).toBe(1000);
+	});
+
+	it("asks the gateway for automatic caching when VS Code marks a cache breakpoint", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const inToolResult = new hoisted.MockLanguageModelToolResultPart("call-1", [text, breakpoint]);
+
+		expect((await requestOptions({}, {}, [text, breakpoint])).providerOptions).toEqual({
+			gateway: { caching: "auto" },
+		});
+		expect((await requestOptions({}, {}, [inToolResult])).providerOptions).toEqual({
+			gateway: { caching: "auto" },
+		});
+	});
+
+	it("sends no provider options when the request has no cache breakpoint", async () => {
+		expect((await requestOptions({})).providerOptions).toBeUndefined();
 	});
 
 	async function respondWithTimeout(isCancellationRequested: boolean, textBeforeStall?: string) {
