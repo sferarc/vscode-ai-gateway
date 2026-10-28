@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.8
+
+### Patch Changes
+
+- bff037e: Ask the gateway to cache the prompt when VS Code marks cache breakpoints in a chat request. The breakpoints used to be dropped with nothing in their place, so models that cache only where told, such as Anthropic's, reprocessed the whole conversation at full input price on every turn of an agent session.
+
 ## 0.5.7
 
 ### Patch Changes
