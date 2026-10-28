@@ -1,5 +1,13 @@
 # vscode-extension-vercel-ai
 
+## 0.5.7
+
+### Patch Changes
+
+- 3c24b84: Use the default gateway when the `vercelAiGateway.endpoint` setting is empty. Clearing the field in the Settings editor saves an empty value, which made every model list and chat request fail with an invalid URL; a value that is not text in `settings.json` made them fail outright. Both now fall back to `https://ai-gateway.vercel.sh`.
+- 25dd560: Say how to sign in when a chat request has no session. The chat used to answer "Vercel AI Gateway API key not found", which named no next step and mentioned only API keys; it now points to Manage Authentication and both sign-in methods.
+- 7af4e58: Say when the gateway could not be reached. A chat request that got no response, because the endpoint did not resolve, refused the connection or timed out connecting, used to be reported as "HTTP 500" with "Invalid error response format", or with advice to raise a Node.js timeout; it now says no response came back and points to the network connection and the `vercelAiGateway.endpoint` setting.
+
 ## 0.5.6
 
 ### Patch Changes
