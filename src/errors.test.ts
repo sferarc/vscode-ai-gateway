@@ -55,6 +55,28 @@ async function unreachableGatewayError(code: string, message: string): Promise<u
 	throw new Error("The stream ended without an error part");
 }
 
+// Runs a real gateway request that the gateway answers with the given status and JSON body.
+async function gatewayResponseError(status: number, body: unknown) {
+	let requests = 0;
+	const fetch = async () => {
+		requests++;
+		return new Response(JSON.stringify(body), {
+			status,
+			headers: { "content-type": "application/json" },
+		});
+	};
+	const gateway = createGatewayProvider({
+		apiKey: "vck_test",
+		baseURL: "https://gateway.example/v1/ai",
+		fetch,
+	});
+	const result = streamText({ model: gateway("openai/gpt-5"), prompt: "hi" });
+	for await (const chunk of result.fullStream) {
+		if (chunk.type === "error") return { error: chunk.error, requests };
+	}
+	throw new Error("The stream ended without an error part");
+}
+
 describe("describeGatewayError", () => {
 	it("reads status, url and retryability from an APICallError", () => {
 		const description = describeGatewayError(apiCallError(400));
@@ -177,6 +199,23 @@ describe("describeGatewayError", () => {
 	it("leaves the rule out of a forbidden error that names none", () => {
 		const { userMessage } = describeGatewayError(new GatewayForbiddenError({ message: "Blocked" }));
 		expect(userMessage).toContain("refused this request (HTTP 403);");
+	});
+
+	it("names a used up spend budget instead of passing the bare message through", async () => {
+		// Budget rejection body from the "When a budget is exceeded" section of Vercel's AI Gateway budgets docs.
+		const message =
+			"Project budget exceeded. Current spend: $200.00, limit: $200.00. Please contact your administrator to increase the budget.";
+		const { error, requests } = await gatewayResponseError(402, {
+			error: { message, type: "quota_for_entity_exceeded" },
+		});
+		expect(GatewayInternalServerError.isInstance(error)).toBe(true);
+		expect(requests).toBe(1);
+		const description = describeGatewayError(error);
+		expect(description).toMatchObject({ statusCode: 402, isRetryable: false });
+		expect(description.userMessage).toBe(
+			`A gateway spend budget is used up (HTTP 402), so the gateway refuses requests until the budget resets or is raised. Ask whoever manages the team's AI Gateway budgets, or wait for the reset. Details: ${message}`,
+		);
+		expect(description.userMessage).not.toContain("Manage Authentication");
 	});
 
 	it("calls a 5xx retryable", () => {
