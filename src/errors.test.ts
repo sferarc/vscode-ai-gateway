@@ -112,6 +112,30 @@ describe("describeGatewayError", () => {
 		expect(userMessage).toContain('"Vercel AI Gateway: Manage Authentication"');
 	});
 
+	it("leaves out the SDK's setup steps for its own API key option", () => {
+		const cause = new APICallError({
+			message: "Invalid API key",
+			url: "https://ai-gateway.vercel.sh/v1/ai/language-model",
+			requestBodyValues: {},
+			statusCode: 401,
+		});
+		const error = GatewayAuthenticationError.createContextualError({
+			apiKeyProvided: true,
+			oidcTokenProvided: false,
+			cause,
+		});
+		const { userMessage } = describeGatewayError(error);
+		expect(userMessage).toBe(
+			'The gateway rejected the credentials (HTTP 401). Run "Vercel AI Gateway: Manage Authentication" to sign in again or replace the API key. Details: AI Gateway authentication failed: Invalid API key or token. (Invalid API key)',
+		);
+		expect(userMessage).not.toContain("AI_GATEWAY_API_KEY");
+	});
+
+	it("keeps a credential error's own message when the gateway gave the same one", () => {
+		const error = new GatewayAuthenticationError({ message: "HTTP 401", cause: apiCallError(401) });
+		expect(describeGatewayError(error).userMessage).toMatch(/Details: HTTP 401$/);
+	});
+
 	it("blames a gateway rule, not the credentials, for a forbidden error", () => {
 		const error = new GatewayForbiddenError({
 			message: "Blocked by routing rule",
