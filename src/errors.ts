@@ -2,6 +2,7 @@ import {
 	GatewayAuthenticationError,
 	GatewayError,
 	GatewayForbiddenError,
+	GatewayInvalidRequestError,
 	GatewayModelNotFoundError,
 } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
@@ -32,10 +33,11 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 	const unreachable = apiCall !== undefined && apiCall.statusCode === undefined;
 	const statusCode = unreachable ? undefined : (gateway?.statusCode ?? apiCall?.statusCode);
 	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
-	// A budget message already names the scope, spend and limit; the cause chain only repeats it as raw JSON.
+	// A budget or invalid request message is the gateway's own text; the cause chain only repeats it as raw JSON.
+	const ownMessage = statusCode === 402 || GatewayInvalidRequestError.isInstance(failure);
 	const detail = GatewayAuthenticationError.isInstance(failure)
 		? authenticationDetail(failure, apiCall)
-		: statusCode === 402 && gateway
+		: ownMessage && gateway
 			? gateway.message
 			: extractErrorMessage(error);
 	return {
@@ -121,6 +123,9 @@ function userMessageFor(
 	detail: string,
 	retryAfter: number | undefined,
 ): string {
+	if (statusCode === 400) {
+		return `The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less. Details: ${detail}`;
+	}
 	if (statusCode === 401 || statusCode === 403) {
 		return `The gateway rejected the credentials (HTTP ${statusCode}). Run "${MANAGE_AUTH_COMMAND}" to sign in again or replace the API key. Details: ${detail}`;
 	}
