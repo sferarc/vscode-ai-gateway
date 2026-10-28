@@ -20,10 +20,12 @@ interface ConnectionCheckResult {
 	latencyMs?: number;
 	modelCount?: number;
 	chatModelCount?: number;
+	credits?: { balance: string; totalUsed: string };
 	error?: string;
 }
 
 const SHOW_LOGS = "Show Logs";
+const CREDITS_ENDPOINT = "/v1/credits";
 
 /**
  * Sends its own request so the result never comes from the models cache.
@@ -80,8 +82,44 @@ export async function checkConnection(
 	} catch (error) {
 		result.latencyMs ??= Date.now() - startTime;
 		result.error = extractErrorMessage(error);
+		return result;
 	}
+	result.credits = await fetchCredits(session.accessToken, endpoint, timeoutMs);
 	return result;
+}
+
+// The balance is extra detail, so a failure here never fails the check.
+async function fetchCredits(
+	accessToken: string,
+	endpoint: string,
+	timeoutMs: number,
+): Promise<ConnectionCheckResult["credits"]> {
+	try {
+		const response = await fetch(`${endpoint}${CREDITS_ENDPOINT}`, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+			signal: AbortSignal.timeout(timeoutMs),
+		});
+		if (!response.ok) {
+			logger.info(`Credit balance not available: HTTP ${response.status}`);
+			return undefined;
+		}
+		const body = (await response.json()) as { balance?: unknown; total_used?: unknown } | null;
+		const balance = creditAmount(body?.balance);
+		const totalUsed = creditAmount(body?.total_used);
+		if (balance === undefined || totalUsed === undefined) {
+			logger.info("Credit balance not available: the response has no balance and total_used");
+			return undefined;
+		}
+		return { balance, totalUsed };
+	} catch (error) {
+		logger.info(`Credit balance not available: ${extractErrorMessage(error)}`);
+		return undefined;
+	}
+}
+
+function creditAmount(value: unknown): string | undefined {
+	if (typeof value === "number" && Number.isFinite(value)) return String(value);
+	return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function formatConnectionCheck(result: ConnectionCheckResult): string[] {
@@ -101,6 +139,9 @@ function formatConnectionCheck(result: ConnectionCheckResult): string[] {
 	if (result.modelCount !== undefined) {
 		// The picker shows chat models only, so the total alone overstates what the user can pick.
 		lines.push(`Chat models: ${result.chatModelCount ?? 0} of ${result.modelCount} listed`);
+	}
+	if (result.credits) {
+		lines.push(`Credits: ${result.credits.balance} left, ${result.credits.totalUsed} used`);
 	}
 	if (result.error) {
 		lines.push(`Error: ${result.error}`);
