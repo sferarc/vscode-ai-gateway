@@ -53,6 +53,21 @@ describe("getConfig endpoint", () => {
 		expect(getConfig().endpoint).toBe("https://gateway.example.com");
 	});
 
+	it("trims spaces and trailing slashes from the user's endpoint", () => {
+		getConfiguration.mockReturnValue(settings({ globalValue: "  https://gateway.example.com// " }));
+
+		expect(getConfig().endpoint).toBe("https://gateway.example.com");
+	});
+
+	it.each([[""], ["   "], ["/"], [42], [null], [{}]])(
+		"falls back to the default endpoint for %j",
+		(value) => {
+			getConfiguration.mockReturnValue(settings({ globalValue: value as string }));
+
+			expect(getConfig().endpoint).toBe(DEFAULT_BASE_URL);
+		},
+	);
+
 	it("declares the endpoint setting machine scoped so VS Code never reads it from a workspace", () => {
 		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
