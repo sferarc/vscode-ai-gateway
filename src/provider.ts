@@ -222,6 +222,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				temperature: this.temperatureFor(model.id, options.modelOptions?.temperature),
 				maxOutputTokens: outputTokenLimit(model, options.modelOptions?.maxOutputTokens),
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
+				providerOptions: hasCacheBreakpoint(chatMessages) ? AUTO_CACHING : undefined,
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
 			});
@@ -699,6 +700,22 @@ function convertToolResultOutput(content: readonly unknown[]): ToolResultOutput 
 const UNSUPPORTED_TOOL_RESULT = "[Unsupported tool result content]";
 /** VS Code marks prompt cache breakpoints with a data part of this type; it carries no content. */
 const CACHE_CONTROL_MIME_TYPE = "cache_control";
+// The breakpoints themselves are dropped, so the gateway is asked to cache wherever the provider supports it.
+const AUTO_CACHING = { gateway: { caching: "auto" } };
+
+function isCacheBreakpoint(part: unknown): boolean {
+	return part instanceof LanguageModelDataPart && part.mimeType === CACHE_CONTROL_MIME_TYPE;
+}
+
+function hasCacheBreakpoint(messages: readonly LanguageModelChatMessage[]): boolean {
+	return messages.some((msg) =>
+		msg.content.some(
+			(part) =>
+				isCacheBreakpoint(part) ||
+				(part instanceof LanguageModelToolResultPart && part.content.some(isCacheBreakpoint)),
+		),
+	);
+}
 
 function isTextualMimeType(mimeType: string): boolean {
 	return (

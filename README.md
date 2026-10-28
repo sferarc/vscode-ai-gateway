@@ -9,6 +9,7 @@ A VS Code extension that makes [Vercel AI Gateway](https://vercel.com/docs/ai-ga
 - **Streaming responses**, including reasoning output where the model provides it.
 - **Cited sources.** When a search model cites web pages, they are listed as numbered links under the answer.
 - **Tool calling** with VS Code's tools.
+- **Prompt caching.** When VS Code marks cache breakpoints in a request, the gateway is asked to cache the prompt for models that support it.
 
 ## Install
 
