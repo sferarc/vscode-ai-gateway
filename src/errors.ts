@@ -1,4 +1,9 @@
-import { GatewayError, GatewayForbiddenError, GatewayModelNotFoundError } from "@ai-sdk/gateway";
+import {
+	GatewayAuthenticationError,
+	GatewayError,
+	GatewayForbiddenError,
+	GatewayModelNotFoundError,
+} from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
 import { extractErrorMessage } from "./logger";
 
@@ -22,7 +27,9 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 	const gateway = GatewayError.isInstance(failure) ? failure : undefined;
 	const statusCode = gateway?.statusCode ?? apiCall?.statusCode;
 	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
-	const detail = extractErrorMessage(error);
+	const detail = GatewayAuthenticationError.isInstance(failure)
+		? authenticationDetail(failure, apiCall)
+		: extractErrorMessage(error);
 	return {
 		statusCode,
 		url: apiCall ? redactUrl(apiCall.url) : undefined,
@@ -46,6 +53,14 @@ function policyMessage(
 		.filter(Boolean)
 		.join(", ");
 	return `A gateway rule refused this request (${status}); the credentials are fine. Check the team's AI Gateway rules or pick another model. Details: ${detail}`;
+}
+
+// The SDK replaces the gateway's message with setup steps for its apiKey option and AI_GATEWAY_API_KEY, which this extension does not read.
+function authenticationDetail(error: GatewayAuthenticationError, apiCall?: APICallError): string {
+	const summary = error.message.split("\n", 1)[0]?.trim() ?? "";
+	const gatewayMessage = apiCall?.message.trim();
+	if (!gatewayMessage || gatewayMessage === summary) return summary;
+	return summary ? `${summary} (${gatewayMessage})` : gatewayMessage;
 }
 
 // The gateway provider wraps the APICallError from the HTTP layer in a GatewayError's cause.
