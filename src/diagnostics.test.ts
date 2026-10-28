@@ -28,10 +28,18 @@ const apiKeySession: DiagnosticsSession = {
 	method: "api-key",
 };
 
-function mockFetch(impl: () => Promise<unknown>) {
+function mockFetch(impl: (url?: unknown) => Promise<unknown>) {
 	const fetchMock = vi.fn(impl);
 	vi.stubGlobal("fetch", fetchMock);
 	return fetchMock;
+}
+
+function routeFetch(credits: () => Promise<unknown>) {
+	return mockFetch(async (url?: unknown) =>
+		String(url).endsWith("/v1/credits")
+			? credits()
+			: { ok: true, status: 200, json: async () => ({ data: [{ id: "a" }] }) },
+	);
 }
 
 function everythingShown(): string {
@@ -134,6 +142,58 @@ describe("checkConnection", () => {
 		expect(result.error).toBe("fetch failed");
 	});
 
+	it("reports the credit balance after the model list", async () => {
+		const fetchMock = routeFetch(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({ balance: "12.34", total_used: "5.66" }),
+		}));
+
+		const result = await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			`${DEFAULT_BASE_URL}/v1/credits`,
+			expect.objectContaining({ headers: { Authorization: `Bearer ${TOKEN}` } }),
+		);
+		expect(result).toMatchObject({
+			ok: true,
+			modelCount: 1,
+			credits: { balance: "12.34", totalUsed: "5.66" },
+		});
+	});
+
+	it.each([
+		["a refused request", async () => ({ ok: false, status: 403, statusText: "Forbidden" })],
+		["a body without amounts", async () => ({ ok: true, status: 200, json: async () => ({}) })],
+		["a null body", async () => ({ ok: true, status: 200, json: async () => null })],
+		[
+			"a network failure",
+			async () => {
+				throw new TypeError("fetch failed");
+			},
+		],
+	])("still passes without a balance after %s", async (_, credits) => {
+		routeFetch(credits);
+
+		const result = await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
+
+		expect(result).toMatchObject({ ok: true, modelCount: 1 });
+		expect(result.credits).toBeUndefined();
+		expect(result.error).toBeUndefined();
+	});
+
+	it("does not ask for the balance when the model list fails", async () => {
+		const fetchMock = mockFetch(async () => ({
+			ok: false,
+			status: 401,
+			statusText: "Unauthorized",
+		}));
+
+		await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("does not send a request without a session", async () => {
 		const fetchMock = mockFetch(async () => ({ ok: true }));
 
@@ -167,6 +227,22 @@ describe("runConnectionCheck", () => {
 		);
 		expect(logInfo).toHaveBeenCalledWith(expect.stringContaining(`Endpoint: ${DEFAULT_BASE_URL}`));
 		expect(logShow).toHaveBeenCalled();
+		expect(everythingShown()).not.toContain(TOKEN);
+	});
+
+	it("shows the credit balance", async () => {
+		routeFetch(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({ balance: "12.34", total_used: "5.66" }),
+		}));
+
+		await runConnectionCheck(async () => apiKeySession);
+
+		expect(showInformationMessage).toHaveBeenCalledWith(
+			expect.stringContaining("Credits: 12.34 left, 5.66 used"),
+			"Show Logs",
+		);
 		expect(everythingShown()).not.toContain(TOKEN);
 	});
 
