@@ -648,6 +648,11 @@ describe("provideLanguageModelChatResponse", () => {
 		expect((await requestOptions({}, { maxOutputTokens: 64000 })).maxOutputTokens).toBe(64000);
 	});
 
+	it("leaves the output limit unset for an infinite caller limit and no model limit", async () => {
+		const options = await requestOptions({}, { maxOutputTokens: Number.POSITIVE_INFINITY });
+		expect(options.maxOutputTokens).toBeUndefined();
+	});
+
 	it("uses the model's output limit when the caller's is not a positive number", async () => {
 		for (const maxOutputTokens of [0, -1, 0.5, Number.NaN, "1000", null]) {
 			const options = await requestOptions({ maxOutputTokens: 8192 }, { maxOutputTokens });

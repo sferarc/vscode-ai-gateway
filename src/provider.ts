@@ -74,7 +74,10 @@ function outputTokenLimit(
 	requested: unknown,
 ): number | undefined {
 	const own = defaultMaxOutputTokens(model);
-	const limit = typeof requested === "number" ? Math.floor(requested) : Number.NaN;
+	const limit =
+		typeof requested === "number" && Number.isFinite(requested)
+			? Math.floor(requested)
+			: Number.NaN;
 	if (!(limit >= 1)) return own;
 	if (own === undefined || limit <= own) return limit;
 	logger.debug(`Lowering the requested output limit ${limit} to ${own} for ${model.id}`);
