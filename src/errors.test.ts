@@ -1,13 +1,15 @@
 import {
+	createGatewayProvider,
 	GatewayAuthenticationError,
 	GatewayForbiddenError,
 	GatewayInternalServerError,
 	GatewayModelNotFoundError,
 	GatewayRateLimitError,
 } from "@ai-sdk/gateway";
-import { APICallError, RetryError } from "ai";
+import { APICallError, RetryError, streamText } from "ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { describeGatewayError } from "./errors";
+import { extractErrorMessage } from "./logger";
 
 vi.mock("vscode", () => ({}));
 
@@ -34,6 +36,23 @@ function rateLimited(responseHeaders: Record<string, string>) {
 		reason: "maxRetriesExceeded",
 		errors: [last, last, last],
 	});
+}
+
+// Runs a real gateway request whose fetch fails the way Node's does when no response arrives.
+async function unreachableGatewayError(code: string, message: string): Promise<unknown> {
+	const fetch = async () => {
+		throw new TypeError("fetch failed", { cause: Object.assign(new Error(message), { code }) });
+	};
+	const gateway = createGatewayProvider({
+		apiKey: "vck_test",
+		baseURL: "https://gateway.example/v1/ai",
+		fetch,
+	});
+	const result = streamText({ model: gateway("openai/gpt-5"), prompt: "hi", maxRetries: 0 });
+	for await (const chunk of result.fullStream) {
+		if (chunk.type === "error") return chunk.error;
+	}
+	throw new Error("The stream ended without an error part");
 }
 
 describe("describeGatewayError", () => {
@@ -179,6 +198,33 @@ describe("describeGatewayError", () => {
 	it("drops credentials and the query string from the url", () => {
 		const error = apiCallError(500, "https://user:pass@example.com/v1/ai/language-model?key=abc");
 		expect(describeGatewayError(error).url).toBe("https://example.com/v1/ai/language-model");
+	});
+
+	describe("unreachable gateway", () => {
+		it.each([
+			["ENOTFOUND", "getaddrinfo ENOTFOUND gateway.example"],
+			["ECONNREFUSED", "connect ECONNREFUSED 127.0.0.1:443"],
+			["UND_ERR_CONNECT_TIMEOUT", "Connect Timeout Error (timeout: 10000ms)"],
+		])("reports %s as a network failure, not an HTTP status", async (code, message) => {
+			const description = describeGatewayError(await unreachableGatewayError(code, message));
+			expect(description).toMatchObject({
+				statusCode: undefined,
+				url: "https://gateway.example/v1/ai/language-model",
+				isRetryable: true,
+			});
+			expect(description.userMessage).toBe(
+				`Could not reach the gateway; no HTTP response came back. Check the network connection and the "vercelAiGateway.endpoint" setting, then try again. Details: Cannot connect to API: ${message}`,
+			);
+		});
+
+		it("drops the SDK's advice to raise a Node.js timeout", async () => {
+			const error = await unreachableGatewayError(
+				"UND_ERR_CONNECT_TIMEOUT",
+				"Connect Timeout Error",
+			);
+			expect(extractErrorMessage(error)).toContain("video-generation");
+			expect(describeGatewayError(error).userMessage).not.toContain("video-generation");
+		});
 	});
 
 	it("keeps the plain message for errors without a status", () => {
