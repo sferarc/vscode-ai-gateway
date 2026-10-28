@@ -639,6 +639,32 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(options.maxOutputTokens).toBe(1000);
 	});
 
+	it("lowers a caller's output limit above the model's own to the model's", async () => {
+		const options = await requestOptions({ maxOutputTokens: 8192 }, { maxOutputTokens: 64000 });
+		expect(options.maxOutputTokens).toBe(8192);
+	});
+
+	it("keeps a caller's output limit when the model reports none", async () => {
+		expect((await requestOptions({}, { maxOutputTokens: 64000 })).maxOutputTokens).toBe(64000);
+	});
+
+	it("leaves the output limit unset for an infinite caller limit and no model limit", async () => {
+		const options = await requestOptions({}, { maxOutputTokens: Number.POSITIVE_INFINITY });
+		expect(options.maxOutputTokens).toBeUndefined();
+	});
+
+	it("uses the model's output limit when the caller's is not a positive number", async () => {
+		for (const maxOutputTokens of [0, -1, 0.5, Number.NaN, "1000", null]) {
+			const options = await requestOptions({ maxOutputTokens: 8192 }, { maxOutputTokens });
+			expect(options.maxOutputTokens).toBe(8192);
+		}
+	});
+
+	it("rounds a fractional output limit down, since the AI SDK takes integers only", async () => {
+		const options = await requestOptions({ maxOutputTokens: 8192 }, { maxOutputTokens: 1000.7 });
+		expect(options.maxOutputTokens).toBe(1000);
+	});
+
 	it("drops the caller's temperature for a model the gateway lists as taking none", async () => {
 		hoisted.mockAcceptsTemperature.mockReturnValueOnce(false);
 		const options = await requestOptions({}, { temperature: 0, maxOutputTokens: 1000 });
