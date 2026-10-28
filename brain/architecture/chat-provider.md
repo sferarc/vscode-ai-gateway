@@ -17,7 +17,7 @@ A failed fetch throws `ModelsFetchError` with the status when there was one. Its
 
 ## Getting a key
 
-`getApiKey` is the only place a model-list or chat request gets credentials. It reads the active session from this extension's own provider ([[decisions/2026-08-09-active-session-from-own-provider]]) and falls back to `authentication.getSession` with `createIfNone` only when there is no session and the request may prompt. Without a key the model list is `[]` with no fetch, and a chat request reports `**Error:** Vercel AI Gateway API key not found` in the chat without building a gateway provider.
+`getApiKey` is the only place a model-list or chat request gets credentials. It reads the active session from this extension's own provider ([[decisions/2026-08-09-active-session-from-own-provider]]) and falls back to `authentication.getSession` with `createIfNone` only when there is no session and the request may prompt. Without a key the model list is `[]` with no fetch, and a chat request reports `**Error:** Not signed in to Vercel AI Gateway.` in the chat, naming the "Vercel AI Gateway: Manage Authentication" command and both sign-in methods, without building a gateway provider (`ERROR_MESSAGES.NOT_SIGNED_IN` in `src/constants.ts`). It used to say "Vercel AI Gateway API key not found", which named no next step and read as wrong to an OIDC user. Test: "tells a signed-out chat to run Manage Authentication and makes no gateway request" in `src/provider.test.ts`.
 
 | Situation | Silent | Prompting |
 | --- | --- | --- |

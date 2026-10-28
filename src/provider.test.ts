@@ -421,13 +421,15 @@ describe("active session", () => {
 			expect(t.getSession).not.toHaveBeenCalled();
 		});
 
-		it("reports a missing key in the chat and makes no gateway request", async () => {
+		it("tells a signed-out chat to run Manage Authentication and makes no gateway request", async () => {
 			const t = await setup(async () => null);
 			t.getSession.mockResolvedValue(undefined as never);
 
 			const output = await chat(t.provider);
 
-			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.API_KEY_NOT_FOUND}`);
+			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.NOT_SIGNED_IN}`);
+			expect(output).toContain('Run "Vercel AI Gateway: Manage Authentication"');
+			expect(output).not.toContain("API key not found");
 			expect(t.gateway).not.toHaveBeenCalled();
 			expect(t.stream).not.toHaveBeenCalled();
 			expect(t.showErrorMessage).not.toHaveBeenCalled();
@@ -439,7 +441,7 @@ describe("active session", () => {
 
 			const output = await chat(t.provider);
 
-			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.API_KEY_NOT_FOUND}`);
+			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.NOT_SIGNED_IN}`);
 			expect(t.gateway).not.toHaveBeenCalled();
 			expect(t.stream).not.toHaveBeenCalled();
 			expect(t.showErrorMessage).not.toHaveBeenCalled();
