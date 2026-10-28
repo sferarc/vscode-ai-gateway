@@ -3,6 +3,7 @@ import {
 	type FinishReason,
 	type ImagePart,
 	jsonSchema,
+	type LanguageModelUsage,
 	type ModelMessage,
 	streamText,
 	type TextPart,
@@ -62,6 +63,26 @@ interface ActiveSession {
 export interface ChatRequestContext {
 	modelId: string;
 	startedAt: number;
+	/** The gateway's id for the request, which its generation lookup takes. */
+	generationId?: string;
+}
+
+// The gateway's docs say it tags the first content chunk, so the id is known before a mid-stream failure.
+function gatewayGenerationId(chunk: StreamChunk): string | undefined {
+	const metadata = "providerMetadata" in chunk ? chunk.providerMetadata : undefined;
+	const id = metadata?.gateway?.generationId;
+	return typeof id === "string" && id.length > 0 ? id : undefined;
+}
+
+function usageFields(usage: LanguageModelUsage | undefined): string[] {
+	const count = (value: number | undefined) => value ?? "unknown";
+	return [
+		`inputTokens=${count(usage?.inputTokens)}`,
+		`cacheReadTokens=${count(usage?.inputTokenDetails.cacheReadTokens)}`,
+		`cacheWriteTokens=${count(usage?.inputTokenDetails.cacheWriteTokens)}`,
+		`outputTokens=${count(usage?.outputTokens)}`,
+		`reasoningTokens=${count(usage?.outputTokenDetails.reasoningTokens)}`,
+	];
 }
 
 function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | undefined {
@@ -228,7 +249,10 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			});
 
 			const sources = new Map<string, string | undefined>();
+			let usage: LanguageModelUsage | undefined;
 			for await (const chunk of response.fullStream) {
+				request.generationId ??= gatewayGenerationId(chunk);
+				if (chunk.type === "finish") usage = chunk.totalUsage;
 				if (chunk.type === "source" && chunk.sourceType === "url") {
 					if (!sources.has(chunk.url)) sources.set(chunk.url, chunk.title);
 				}
@@ -254,7 +278,13 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				);
 			}
 
-			logger.info(`Chat request completed for ${model.id}`);
+			const fields = [
+				`model=${model.id}`,
+				`generation=${request.generationId ?? "none"}`,
+				...usageFields(usage),
+				`elapsedMs=${Date.now() - request.startedAt}`,
+			];
+			logger.info(`Chat request completed: ${fields.join(" ")}`);
 		} catch (error) {
 			if (token.isCancellationRequested || abortController.signal.aborted) {
 				logger.debug("Request was cancelled");
@@ -502,13 +532,14 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		progress: Progress<LanguageModelResponsePart>,
 		request?: ChatRequestContext,
 	): void {
-		const { statusCode, url, isRetryable, modelNotFound, userMessage } =
+		const { statusCode, url, isRetryable, modelNotFound, generationId, userMessage } =
 			describeGatewayError(error);
 		// A model the gateway dropped stays in the picker until the cached list expires.
 		if (modelNotFound) this.refreshModels();
 		// The error object is not logged: an APICallError carries the request body and headers.
 		const fields = [
 			`model=${request?.modelId ?? "unknown"}`,
+			`generation=${request?.generationId ?? generationId ?? "none"}`,
 			`status=${statusCode ?? "none"}`,
 			`url=${url ?? "none"}`,
 			`retryable=${isRetryable ?? "unknown"}`,

@@ -810,6 +810,68 @@ describe("provideLanguageModelChatResponse", () => {
 		]);
 	});
 
+	it("logs the gateway's generation id and the token usage when a request completes", async () => {
+		const { logger } = await import("./logger");
+		const logInfo = vi.spyOn(logger, "info").mockImplementation(() => {});
+		await respondWithStream([
+			{
+				type: "text-delta",
+				text: "Answer",
+				providerMetadata: { gateway: { generationId: "gen_01abc" } },
+			},
+			{
+				type: "finish",
+				finishReason: "stop",
+				totalUsage: {
+					inputTokens: 1200,
+					inputTokenDetails: { cacheReadTokens: 1000, cacheWriteTokens: 0 },
+					outputTokens: 80,
+					outputTokenDetails: { reasoningTokens: 30 },
+				},
+			},
+		]);
+
+		const line = logInfo.mock.calls.find(([message]) =>
+			message.startsWith("Chat request completed"),
+		);
+		expect(line?.[0]).toMatch(
+			/^Chat request completed: model=perplexity\/sonar generation=gen_01abc inputTokens=1200 cacheReadTokens=1000 cacheWriteTokens=0 outputTokens=80 reasoningTokens=30 elapsedMs=\d+$/,
+		);
+		logInfo.mockRestore();
+	});
+
+	it("logs unknown usage and no generation id when the stream reports neither", async () => {
+		const { logger } = await import("./logger");
+		const logInfo = vi.spyOn(logger, "info").mockImplementation(() => {});
+		await respondWithStream([{ type: "text-delta", text: "Answer" }]);
+
+		const line = logInfo.mock.calls.find(([message]) =>
+			message.startsWith("Chat request completed"),
+		);
+		expect(line?.[0]).toContain(
+			"generation=none inputTokens=unknown cacheReadTokens=unknown cacheWriteTokens=unknown outputTokens=unknown reasoningTokens=unknown",
+		);
+		logInfo.mockRestore();
+	});
+
+	it("logs the generation id a stream carried before it failed", async () => {
+		const { GatewayInternalServerError } = await import("@ai-sdk/gateway");
+		const { logger } = await import("./logger");
+		const logError = vi.spyOn(logger, "error").mockImplementation(() => {});
+		await respondWithStream([
+			{
+				type: "text-delta",
+				text: "Partial",
+				providerMetadata: { gateway: { generationId: "gen_02def" } },
+			},
+			{ type: "error", error: new GatewayInternalServerError() },
+		]);
+
+		const line = logError.mock.calls.find(([message]) => message.startsWith("Chat request failed"));
+		expect(line?.[0]).toContain("model=perplexity/sonar generation=gen_02def status=500");
+		logError.mockRestore();
+	});
+
 	it("adds no source list when the model cites nothing", async () => {
 		const parts = await respondWithStream([
 			{ type: "text-delta", text: "Answer" },
@@ -877,7 +939,7 @@ describe("provideLanguageModelChatResponse", () => {
 
 		const line = logError.mock.calls.find(([message]) => message.startsWith("Chat request failed"));
 		expect(line?.[0]).toMatch(
-			/model=openai\/gpt-4o status=401 url=https:\/\/ai-gateway\.vercel\.sh\/v1\/ai\/language-model retryable=false elapsedMs=\d+/,
+			/model=openai\/gpt-4o generation=none status=401 url=https:\/\/ai-gateway\.vercel\.sh\/v1\/ai\/language-model retryable=false elapsedMs=\d+/,
 		);
 		expect(JSON.stringify(logError.mock.calls)).not.toContain("private prompt");
 		expect(report.mock.calls[0]?.[0].value).toContain("Vercel AI Gateway: Manage Authentication");

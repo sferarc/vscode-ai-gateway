@@ -75,6 +75,12 @@ describe("describeGatewayError", () => {
 		});
 	});
 
+	it("reads the generation id a gateway error carries", () => {
+		const error = new GatewayInternalServerError({ generationId: "gen_03ghi" });
+		expect(describeGatewayError(error).generationId).toBe("gen_03ghi");
+		expect(describeGatewayError(apiCallError(500)).generationId).toBeUndefined();
+	});
+
 	it("unwraps the last error after streamText gives up retrying", () => {
 		const last = new GatewayRateLimitError({ cause: apiCallError(429) });
 		const error = new RetryError({
