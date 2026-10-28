@@ -1,5 +1,15 @@
 # vscode-extension-vercel-ai
 
+## 0.5.9
+
+### Patch Changes
+
+- abf4839: A chat request the gateway refuses because a spend budget is used up (HTTP 402) now says so, and that requests stay refused until the budget resets or is raised, instead of showing only the gateway's message.
+- ef69224: The log now records each chat request's token usage, cached prompt tokens included, and the gateway's generation id, the id the gateway looks a request up by.
+- caa0e77: Check Connection now reports how many of the listed models are chat models the model picker offers, instead of a total that also counted embedding, image and video models.
+- 4d675c6: Check Connection now shows the team's AI Gateway credit balance and total used when the gateway returns them, so a run of failing requests can be checked against an empty balance.
+- 54daf32: The model picker tooltip now shows the gateway's input and output prices per million tokens, marked "from" for models priced by prompt size.
+
 ## 0.5.8
 
 ### Patch Changes
