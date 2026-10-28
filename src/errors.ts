@@ -32,9 +32,12 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 	const unreachable = apiCall !== undefined && apiCall.statusCode === undefined;
 	const statusCode = unreachable ? undefined : (gateway?.statusCode ?? apiCall?.statusCode);
 	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
+	// A budget message already names the scope, spend and limit; the cause chain only repeats it as raw JSON.
 	const detail = GatewayAuthenticationError.isInstance(failure)
 		? authenticationDetail(failure, apiCall)
-		: extractErrorMessage(error);
+		: statusCode === 402 && gateway
+			? gateway.message
+			: extractErrorMessage(error);
 	return {
 		statusCode,
 		url: apiCall ? redactUrl(apiCall.url) : undefined,
@@ -120,6 +123,9 @@ function userMessageFor(
 ): string {
 	if (statusCode === 401 || statusCode === 403) {
 		return `The gateway rejected the credentials (HTTP ${statusCode}). Run "${MANAGE_AUTH_COMMAND}" to sign in again or replace the API key. Details: ${detail}`;
+	}
+	if (statusCode === 402) {
+		return `A gateway spend budget is used up (HTTP 402), so the gateway refuses requests until the budget resets or is raised. Ask whoever manages the team's AI Gateway budgets, or wait for the reset. Details: ${detail}`;
 	}
 	if (statusCode === 429) {
 		const wait = retryAfter
