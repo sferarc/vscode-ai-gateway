@@ -5,9 +5,11 @@ import {
 	GatewayModelNotFoundError,
 } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
+import { EXTENSION_ID } from "./constants";
 import { extractErrorMessage } from "./logger";
 
 const MANAGE_AUTH_COMMAND = "Vercel AI Gateway: Manage Authentication";
+const ENDPOINT_SETTING = `${EXTENSION_ID}.endpoint`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -25,7 +27,9 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 	const failure = RetryError.isInstance(error) ? error.lastError : error;
 	const apiCall = findApiCallError(failure);
 	const gateway = GatewayError.isInstance(failure) ? failure : undefined;
-	const statusCode = gateway?.statusCode ?? apiCall?.statusCode;
+	// A fetch that got no response still becomes a gateway error with a made up 500, or 408 on a connect timeout.
+	const unreachable = apiCall !== undefined && apiCall.statusCode === undefined;
+	const statusCode = unreachable ? undefined : (gateway?.statusCode ?? apiCall?.statusCode);
 	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
 	const detail = GatewayAuthenticationError.isInstance(failure)
 		? authenticationDetail(failure, apiCall)
@@ -35,11 +39,13 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 		url: apiCall ? redactUrl(apiCall.url) : undefined,
 		isRetryable: gateway?.isRetryable ?? apiCall?.isRetryable,
 		modelNotFound,
-		userMessage: modelNotFound
-			? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
-			: GatewayForbiddenError.isInstance(failure)
-				? policyMessage(statusCode, failure.ruleId, detail)
-				: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
+		userMessage: unreachable
+			? `Could not reach the gateway; no HTTP response came back. Check the network connection and the "${ENDPOINT_SETTING}" setting, then try again. Details: ${apiCall.message}`
+			: modelNotFound
+				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
+				: GatewayForbiddenError.isInstance(failure)
+					? policyMessage(statusCode, failure.ruleId, detail)
+					: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
 	};
 }
 
