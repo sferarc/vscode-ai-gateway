@@ -19,6 +19,7 @@ export interface GatewayErrorDescription {
 	isRetryable?: boolean;
 	/** The gateway does not serve the requested model, so the cached model list is out of date. */
 	modelNotFound: boolean;
+	generationId?: string;
 	userMessage: string;
 }
 
@@ -39,6 +40,7 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 		url: apiCall ? redactUrl(apiCall.url) : undefined,
 		isRetryable: gateway?.isRetryable ?? apiCall?.isRetryable,
 		modelNotFound,
+		generationId: gateway?.generationId,
 		userMessage: unreachable
 			? `Could not reach the gateway; no HTTP response came back. Check the network connection and the "${ENDPOINT_SETTING}" setting, then try again. Details: ${apiCall.message}`
 			: modelNotFound
