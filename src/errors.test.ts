@@ -3,6 +3,7 @@ import {
 	GatewayAuthenticationError,
 	GatewayForbiddenError,
 	GatewayInternalServerError,
+	GatewayInvalidRequestError,
 	GatewayModelNotFoundError,
 	GatewayRateLimitError,
 } from "@ai-sdk/gateway";
@@ -85,7 +86,8 @@ describe("describeGatewayError", () => {
 			url: "https://ai-gateway.vercel.sh/v1/ai/language-model",
 			isRetryable: false,
 		});
-		expect(description.userMessage).toBe("HTTP 400");
+		expect(description.userMessage).toContain("(HTTP 400)");
+		expect(description.userMessage).toMatch(/Details: HTTP 400$/);
 	});
 
 	it("finds the APICallError inside a gateway error", () => {
@@ -216,6 +218,21 @@ describe("describeGatewayError", () => {
 			`A gateway spend budget is used up (HTTP 402), so the gateway refuses requests until the budget resets or is raised. Ask whoever manages the team's AI Gateway budgets, or wait for the reset. Details: ${message}`,
 		);
 		expect(description.userMessage).not.toContain("Manage Authentication");
+	});
+
+	it("names an invalid request without repeating the gateway's raw JSON body", async () => {
+		const message = "prompt is too long: 215000 tokens > 200000 maximum";
+		const { error, requests } = await gatewayResponseError(400, {
+			error: { message, type: "invalid_request_error" },
+		});
+		expect(GatewayInvalidRequestError.isInstance(error)).toBe(true);
+		expect(requests).toBe(1);
+		expect(extractErrorMessage(error)).toContain('"type":"invalid_request_error"');
+		const description = describeGatewayError(error);
+		expect(description).toMatchObject({ statusCode: 400, isRetryable: false });
+		expect(description.userMessage).toBe(
+			`The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less. Details: ${message}`,
+		);
 	});
 
 	it("calls a 5xx retryable", () => {
