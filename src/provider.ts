@@ -68,6 +68,19 @@ function defaultMaxOutputTokens(model: LanguageModelChatInformation): number | u
 	return model.maxOutputTokens > 0 ? model.maxOutputTokens : undefined;
 }
 
+// Callers set a limit without knowing the model, and one above its own limit can overflow the context window.
+function outputTokenLimit(
+	model: LanguageModelChatInformation,
+	requested: unknown,
+): number | undefined {
+	const own = defaultMaxOutputTokens(model);
+	const limit = typeof requested === "number" ? Math.floor(requested) : Number.NaN;
+	if (!(limit >= 1)) return own;
+	if (own === undefined || limit <= own) return limit;
+	logger.debug(`Lowering the requested output limit ${limit} to ${own} for ${model.id}`);
+	return own;
+}
+
 // What VS Code's mainThreadAuthentication.ts rejects getSession with when sign-in is dismissed; AuthCancelledError uses the same name.
 function isSignInCancellation(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
@@ -204,7 +217,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				instructions,
 				toolChoice,
 				temperature: this.temperatureFor(model.id, options.modelOptions?.temperature),
-				maxOutputTokens: options.modelOptions?.maxOutputTokens ?? defaultMaxOutputTokens(model),
+				maxOutputTokens: outputTokenLimit(model, options.modelOptions?.maxOutputTokens),
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
