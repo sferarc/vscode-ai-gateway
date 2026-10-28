@@ -4,7 +4,7 @@
 
 ## Model list
 
-`provideLanguageModelChatInformation` gets a key from the active session ([[authentication]]) and returns `[]` without one, or when the fetch fails and there is no earlier list for that key to fall back on. `ModelsClient` (`src/models.ts`) calls `GET {endpoint}/v1/models` with a bearer token, keeps only models whose `type` is `chat`, `language` or absent, and maps them to `LanguageModelChatInformation`:
+`provideLanguageModelChatInformation` gets a key from the active session ([[authentication]]) and returns `[]` without one, or when the fetch fails and there is no earlier list for that key to fall back on. `ModelsClient` (`src/models.ts`) calls `GET {endpoint}/v1/models` with a bearer token, keeps only models whose `type` is `chat`, `language` or absent (`isChatModel`, which Check Connection also counts with), and maps them to `LanguageModelChatInformation`:
 
 - `family` and `version` come from `parseModelIdentity` (`src/models/identity.ts`).
 - `maxOutputTokens` is `max_tokens` capped at half of `context_window`, and `maxInputTokens` is the rest of the window, so a prompt VS Code fills to `maxInputTokens` still fits the default output limit. The gateway's `context_window` covers input and output together, and many models report `max_tokens` equal to it ([[decisions/2026-10-26-context-window-split]]). A missing or zero value passes through unchanged.

@@ -3,6 +3,7 @@ import type { AuthenticationMethod } from "./auth";
 import { getConfig } from "./config";
 import { MODELS_ENDPOINT } from "./constants";
 import { extractErrorMessage, logger } from "./logger";
+import { isChatModel } from "./models";
 
 export interface DiagnosticsSession {
 	accessToken: string;
@@ -18,6 +19,7 @@ interface ConnectionCheckResult {
 	status?: number;
 	latencyMs?: number;
 	modelCount?: number;
+	chatModelCount?: number;
 	error?: string;
 }
 
@@ -71,6 +73,9 @@ export async function checkConnection(
 			return result;
 		}
 		result.modelCount = body.data.length;
+		result.chatModelCount = body.data.filter(
+			(model: unknown) => typeof model === "object" && model !== null && isChatModel(model),
+		).length;
 		result.ok = true;
 	} catch (error) {
 		result.latencyMs ??= Date.now() - startTime;
@@ -94,7 +99,8 @@ function formatConnectionCheck(result: ConnectionCheckResult): string[] {
 		lines.push(`Latency: ${result.latencyMs}ms`);
 	}
 	if (result.modelCount !== undefined) {
-		lines.push(`Models: ${result.modelCount}`);
+		// The picker shows chat models only, so the total alone overstates what the user can pick.
+		lines.push(`Chat models: ${result.chatModelCount ?? 0} of ${result.modelCount} listed`);
 	}
 	if (result.error) {
 		lines.push(`Error: ${result.error}`);

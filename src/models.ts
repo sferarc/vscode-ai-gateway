@@ -83,6 +83,11 @@ function describeErrorBody(body: string): string {
 	return detail.length > ERROR_BODY_LIMIT ? `${detail.slice(0, ERROR_BODY_LIMIT)}...` : detail;
 }
 
+/** Whether the model picker offers this entry; the gateway also lists embedding, image, video and other models. */
+export function isChatModel(model: { type?: unknown }): boolean {
+	return model.type === "chat" || model.type === "language" || model.type === undefined;
+}
+
 interface ModelsCache {
 	apiKey: string;
 	fetchedAt: number;
@@ -280,34 +285,30 @@ export class ModelsClient {
 	}
 
 	private transformToVSCodeModels(data: Model[]): LanguageModelChatInformation[] {
-		return data
-			.filter(
-				(model) => model.type === "chat" || model.type === "language" || model.type === undefined,
-			)
-			.map((model) => {
-				const identity = parseModelIdentity(model.id);
-				const tags = (model.tags ?? []).map((tag) => tag.toLowerCase());
-				const description = model.description || "No description available.";
-				const deprecated = deprecationDate(model);
+		return data.filter(isChatModel).map((model) => {
+			const identity = parseModelIdentity(model.id);
+			const tags = (model.tags ?? []).map((tag) => tag.toLowerCase());
+			const description = model.description || "No description available.";
+			const deprecated = deprecationDate(model);
 
-				return {
-					id: model.id,
-					name: model.name,
-					detail: deprecated ? `Vercel AI Gateway, deprecated ${deprecated}` : "Vercel AI Gateway",
-					family: identity.family,
-					version: identity.version,
-					...splitContextWindow(model.context_window, model.max_tokens),
-					tooltip: deprecated
-						? `${description}\n\nThe gateway marks this model as deprecated from ${deprecated}.`
-						: description,
-					capabilities: {
-						imageInput: detectImageInput(model, tags),
-						toolCalling: detectToolCalling(model, tags),
-						reasoning: detectReasoning(model, tags),
-						// No dedicated metadata field exists yet, so tags remain the only signal.
-						webSearch: hasTag(tags, WEB_SEARCH_TAGS),
-					},
-				};
-			});
+			return {
+				id: model.id,
+				name: model.name,
+				detail: deprecated ? `Vercel AI Gateway, deprecated ${deprecated}` : "Vercel AI Gateway",
+				family: identity.family,
+				version: identity.version,
+				...splitContextWindow(model.context_window, model.max_tokens),
+				tooltip: deprecated
+					? `${description}\n\nThe gateway marks this model as deprecated from ${deprecated}.`
+					: description,
+				capabilities: {
+					imageInput: detectImageInput(model, tags),
+					toolCalling: detectToolCalling(model, tags),
+					reasoning: detectReasoning(model, tags),
+					// No dedicated metadata field exists yet, so tags remain the only signal.
+					webSearch: hasTag(tags, WEB_SEARCH_TAGS),
+				},
+			};
+		});
 	}
 }
