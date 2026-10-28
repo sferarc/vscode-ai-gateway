@@ -32,7 +32,7 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 			? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
 			: GatewayForbiddenError.isInstance(failure)
 				? policyMessage(statusCode, failure.ruleId, detail)
-				: userMessageFor(statusCode, detail),
+				: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
 	};
 }
 
@@ -71,12 +71,38 @@ function redactUrl(url: string): string {
 	}
 }
 
-function userMessageFor(statusCode: number | undefined, detail: string): string {
+// Same headers, in the same order, that the AI SDK reads when it waits between retries.
+function retryAfterMs(apiCall: APICallError | undefined): number | undefined {
+	const headers = apiCall?.responseHeaders;
+	if (!headers) return undefined;
+	const ms = Number.parseFloat(headers["retry-after-ms"] ?? "");
+	if (Number.isFinite(ms)) return ms > 0 ? ms : undefined;
+	const retryAfter = headers["retry-after"]?.trim();
+	if (!retryAfter) return undefined;
+	const seconds = Number(retryAfter);
+	const wait = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
+	return Number.isFinite(wait) && wait > 0 ? wait : undefined;
+}
+
+function formatWait(ms: number): string {
+	const seconds = Math.ceil(ms / 1000);
+	if (seconds < 120) return seconds === 1 ? "1 second" : `${seconds} seconds`;
+	return `${Math.ceil(seconds / 60)} minutes`;
+}
+
+function userMessageFor(
+	statusCode: number | undefined,
+	detail: string,
+	retryAfter: number | undefined,
+): string {
 	if (statusCode === 401 || statusCode === 403) {
 		return `The gateway rejected the credentials (HTTP ${statusCode}). Run "${MANAGE_AUTH_COMMAND}" to sign in again or replace the API key. Details: ${detail}`;
 	}
 	if (statusCode === 429) {
-		return `The gateway rate limited this request (HTTP 429). Wait a moment and try again. Details: ${detail}`;
+		const wait = retryAfter
+			? `It asks to wait ${formatWait(retryAfter)} before trying again.`
+			: "Wait a moment and try again.";
+		return `The gateway rate limited this request (HTTP 429). ${wait} Details: ${detail}`;
 	}
 	if (statusCode !== undefined && statusCode >= 500) {
 		return `The gateway or the model provider failed (HTTP ${statusCode}). This is usually temporary, so try again. Details: ${detail}`;

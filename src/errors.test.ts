@@ -6,7 +6,7 @@ import {
 	GatewayRateLimitError,
 } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { describeGatewayError } from "./errors";
 
 vi.mock("vscode", () => ({}));
@@ -14,12 +14,25 @@ vi.mock("vscode", () => ({}));
 function apiCallError(
 	statusCode: number,
 	url = "https://ai-gateway.vercel.sh/v1/ai/language-model",
+	responseHeaders?: Record<string, string>,
 ) {
 	return new APICallError({
 		message: `HTTP ${statusCode}`,
 		url,
 		requestBodyValues: { prompt: "secret prompt" },
 		statusCode,
+		responseHeaders,
+	});
+}
+
+function rateLimited(responseHeaders: Record<string, string>) {
+	const last = new GatewayRateLimitError({
+		cause: apiCallError(429, undefined, responseHeaders),
+	});
+	return new RetryError({
+		message: "Failed after 3 attempts",
+		reason: "maxRetriesExceeded",
+		errors: [last, last, last],
 	});
 }
 
@@ -53,6 +66,43 @@ describe("describeGatewayError", () => {
 		const description = describeGatewayError(error);
 		expect(description.statusCode).toBe(429);
 		expect(description.userMessage).toContain("rate limited");
+		expect(description.userMessage).toContain("Wait a moment and try again.");
+	});
+
+	describe("rate limit wait", () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it.each<[Record<string, string>, string]>([
+			[{ "retry-after": "30" }, "30 seconds"],
+			[{ "retry-after": "1" }, "1 second"],
+			[{ "retry-after": "0.2" }, "1 second"],
+			[{ "retry-after-ms": "4500" }, "5 seconds"],
+			[{ "retry-after-ms": "2000", "retry-after": "90" }, "2 seconds"],
+			[{ "retry-after": "600" }, "10 minutes"],
+		])("names the wait from %o", (headers, wait) => {
+			const { userMessage } = describeGatewayError(rateLimited(headers));
+			expect(userMessage).toContain(`(HTTP 429). It asks to wait ${wait} before trying again.`);
+		});
+
+		it("reads a Retry-After date", () => {
+			vi.useFakeTimers({ toFake: ["Date"] });
+			vi.setSystemTime(new Date("2026-10-27T12:00:00Z"));
+			const headers = { "retry-after": "Tue, 27 Oct 2026 12:00:45 GMT" };
+			const { userMessage } = describeGatewayError(rateLimited(headers));
+			expect(userMessage).toContain("It asks to wait 45 seconds");
+		});
+
+		it.each<Record<string, string>>([
+			{ "retry-after": "0" },
+			{ "retry-after": "soon" },
+			{ "retry-after": "Tue, 27 Oct 2020 12:00:45 GMT" },
+			{ "retry-after-ms": "0" },
+		])("falls back to a moment for %o", (headers) => {
+			const { userMessage } = describeGatewayError(rateLimited(headers));
+			expect(userMessage).toContain("(HTTP 429). Wait a moment and try again.");
+		});
 	});
 
 	it.each([401, 403])("points to Manage Authentication on %i", (statusCode) => {
