@@ -71,9 +71,31 @@ describe("checkConnection", () => {
 			session: { label: "Work", method: "api-key" },
 			status: 200,
 			modelCount: 3,
+			chatModelCount: 3,
 		});
 		expect(result.latencyMs).toBeGreaterThanOrEqual(0);
 		expect(result.error).toBeUndefined();
+	});
+
+	it("counts only the chat models the picker offers apart from the total", async () => {
+		mockFetch(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({
+				data: [
+					{ id: "openai/gpt-5", type: "language" },
+					{ id: "legacy/chat", type: "chat" },
+					{ id: "untyped/model" },
+					{ id: "openai/text-embedding-3-small", type: "embedding" },
+					{ id: "google/imagen-4.0-generate-001", type: "image" },
+					null,
+				],
+			}),
+		}));
+
+		const result = await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
+
+		expect(result).toMatchObject({ ok: true, modelCount: 6, chatModelCount: 3 });
 	});
 
 	it("reports the OIDC token expiry", async () => {
@@ -140,7 +162,7 @@ describe("runConnectionCheck", () => {
 		await runConnectionCheck(async () => apiKeySession);
 
 		expect(showInformationMessage).toHaveBeenCalledWith(
-			expect.stringContaining("Models: 1"),
+			expect.stringContaining("Chat models: 1 of 1 listed"),
 			"Show Logs",
 		);
 		expect(logInfo).toHaveBeenCalledWith(expect.stringContaining(`Endpoint: ${DEFAULT_BASE_URL}`));

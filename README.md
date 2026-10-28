@@ -51,7 +51,7 @@ Chat requests and the model list always use the active session.
 Run these from the Command Palette:
 
 - **Vercel AI Gateway: Manage Authentication**: add, switch or remove sessions.
-- **Vercel AI Gateway: Check Connection**: checks the active session against the gateway. It shows the endpoint, the active session and its method, when an OIDC token expires, and the result of a fresh request for the model list: HTTP status, latency and model count. The same details are written to the log; the key or token never is.
+- **Vercel AI Gateway: Check Connection**: checks the active session against the gateway. It shows the endpoint, the active session and its method, when an OIDC token expires, and the result of a fresh request for the model list: HTTP status, latency, and how many of the listed models are chat models the model picker offers. The same details are written to the log; the key or token never is.
 - **Vercel AI Gateway: Show Logs**: opens the extension's log.
 
 ## Settings
