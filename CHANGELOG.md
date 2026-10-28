@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.5.10
+
+### Patch Changes
+
+- d49e914: A chat request the gateway or the model provider rejects as invalid (HTTP 400) now names the status and shows the gateway's message once, instead of following it with the raw JSON error body. When the prompt is too long for the model, the error suggests starting a new chat or attaching less.
+- 64a6c81: A tool whose input schema is empty or leaves out `"type": "object"` or `properties` is now sent to the gateway as an object schema, so one such tool no longer fails every chat request that offers it.
+
 ## 0.5.9
 
 ### Patch Changes
