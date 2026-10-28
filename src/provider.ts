@@ -200,7 +200,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		try {
 			const apiKey = await this.getApiKey(false);
 			if (!apiKey) {
-				throw new Error(ERROR_MESSAGES.API_KEY_NOT_FOUND);
+				throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN);
 			}
 
 			const config = getConfig();
