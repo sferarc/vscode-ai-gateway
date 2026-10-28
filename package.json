@@ -3,7 +3,7 @@
 	"private": true,
 	"displayName": "Vercel AI Gateway",
 	"description": "VS Code extension that provides Vercel AI models via the Language Model API",
-	"version": "0.5.9",
+	"version": "0.5.10",
 	"publisher": "SferaDev",
 	"license": "MIT",
 	"icon": "images/icon.png",
