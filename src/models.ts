@@ -43,9 +43,13 @@ export interface Model {
 	temperature?: boolean;
 	/** When the gateway deprecates the model, in milliseconds since the epoch, unlike `created`. */
 	deprecated_at?: number;
-	pricing: {
-		input: string;
-		output: string;
+	/** US dollars per token, as decimal strings. */
+	pricing?: {
+		input?: string;
+		output?: string;
+		/** Prompt size bands, cheapest first; the plain `input` is the first band's cost. */
+		input_tiers?: unknown[];
+		output_tiers?: unknown[];
 	};
 }
 
@@ -145,6 +149,32 @@ function deprecationDate(model: Model): string | undefined {
 	if (typeof value !== "number" || !(value > 0)) return undefined;
 	const date = new Date(value < 1e12 ? value * 1000 : value);
 	return Number.isNaN(date.getTime()) ? undefined : date.toISOString().slice(0, 10);
+}
+
+const PRICE_FORMAT = new Intl.NumberFormat("en-US", {
+	style: "currency",
+	currency: "USD",
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 4,
+});
+
+// Zero or missing reads as an unlisted price rather than a free model.
+function perMillionTokens(perToken: unknown, tiers: unknown): string | undefined {
+	const value = typeof perToken === "string" ? Number(perToken) : Number.NaN;
+	if (!(value > 0) || !Number.isFinite(value)) return undefined;
+	const price = PRICE_FORMAT.format(value * 1_000_000);
+	return Array.isArray(tiers) && tiers.length > 1 ? `from ${price}` : price;
+}
+
+function describePricing(model: Model): string | undefined {
+	const pricing = model.pricing;
+	const input = perMillionTokens(pricing?.input, pricing?.input_tiers);
+	const output = perMillionTokens(pricing?.output, pricing?.output_tiers);
+	const parts = [
+		input && `${input} per million input tokens`,
+		output && `${output} per million output tokens`,
+	].filter(Boolean);
+	return parts.length > 0 ? `Price: ${parts.join(", ")}.` : undefined;
 }
 
 /**
@@ -290,6 +320,11 @@ export class ModelsClient {
 			const tags = (model.tags ?? []).map((tag) => tag.toLowerCase());
 			const description = model.description || "No description available.";
 			const deprecated = deprecationDate(model);
+			const tooltip = [
+				description,
+				describePricing(model),
+				deprecated && `The gateway marks this model as deprecated from ${deprecated}.`,
+			].filter(Boolean);
 
 			return {
 				id: model.id,
@@ -298,9 +333,7 @@ export class ModelsClient {
 				family: identity.family,
 				version: identity.version,
 				...splitContextWindow(model.context_window, model.max_tokens),
-				tooltip: deprecated
-					? `${description}\n\nThe gateway marks this model as deprecated from ${deprecated}.`
-					: description,
+				tooltip: tooltip.join("\n\n"),
 				capabilities: {
 					imageInput: detectImageInput(model, tags),
 					toolCalling: detectToolCalling(model, tags),

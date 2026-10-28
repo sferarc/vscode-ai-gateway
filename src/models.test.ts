@@ -323,6 +323,48 @@ describe("ModelsClient", () => {
 			expect(current).toMatchObject({ detail: "Vercel AI Gateway", tooltip: "Fast" });
 		});
 
+		it("lists the gateway's prices per million tokens in the tooltip", async () => {
+			const tier = (cost: string, min: number) => ({ cost, min });
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{
+							...baseModel,
+							id: "priced",
+							description: "Fast",
+							pricing: { input: "0.000002", output: "0.00001", input_cache_read: "0.0000001" },
+							deprecated_at: 1794960000000,
+						},
+						{
+							...baseModel,
+							id: "tiered",
+							description: "Long",
+							pricing: {
+								input: "0.0000012",
+								input_tiers: [tier("0.0000012", 0), tier("0.0000024", 32001)],
+								output: "0.00000004",
+								output_tiers: [tier("0.00000004", 0)],
+							},
+						},
+						{ ...baseModel, id: "output-only", description: "Out", pricing: { output: "x" } },
+						{ ...baseModel, id: "unpriced", description: "None", pricing: undefined },
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const [priced, tiered, invalid, unpriced] = await new ModelsClient().getModels("test-key");
+
+			expect(priced?.tooltip).toBe(
+				"Fast\n\nPrice: $2.00 per million input tokens, $10.00 per million output tokens.\n\nThe gateway marks this model as deprecated from 2026-11-18.",
+			);
+			expect(tiered?.tooltip).toBe(
+				"Long\n\nPrice: from $1.20 per million input tokens, $0.04 per million output tokens.",
+			);
+			expect(invalid?.tooltip).toBe("Out");
+			expect(unpriced?.tooltip).toBe("None");
+		});
+
 		it("keeps using tags for web search, which has no structured field", async () => {
 			const capabilities = await capabilitiesOf({
 				...baseModel,
