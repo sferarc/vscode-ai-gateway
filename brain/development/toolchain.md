@@ -2,7 +2,7 @@
 
 ## Node and pnpm
 
-`mise.toml` pins Node `26.12.0` and pnpm `12.14.0` (since #45), with `lockfile = true`; `mise.lock` records their checksums. A fresh clone needs `mise trust` before `mise install`, or mise refuses to read the config. `package.json` `packageManager` names the same pnpm. After changing a version in `mise.toml`, run `mise lock` and commit both files.
+`mise.toml` pins Node `26.12.1` (since #73) and pnpm `12.14.0` (since #45), with `lockfile = true`; `mise.lock` records their checksums. A fresh clone needs `mise trust` before `mise install`, or mise refuses to read the config. `package.json` `packageManager` names the same pnpm. After changing a version in `mise.toml`, run `mise lock` and commit both files.
 
 ## Commands
 
