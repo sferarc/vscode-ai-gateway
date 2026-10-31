@@ -1349,6 +1349,33 @@ describe("convertMessages", () => {
 			{ role: "user", content: '{"a":1}[Unsupported application/pdf content]' },
 		]);
 	});
+
+	it("sends only image types providers accept as images", () => {
+		const bytes = new Uint8Array([1, 2, 3]);
+		const { messages } = convertMessages([
+			{
+				role: 1,
+				content: [
+					new hoisted.MockLanguageModelTextPart("Compare these"),
+					hoisted.MockLanguageModelDataPart.image(bytes, "image/JPG"),
+					hoisted.MockLanguageModelDataPart.image(bytes, "image/bmp"),
+					hoisted.MockLanguageModelDataPart.text("<svg/>", "image/svg+xml"),
+				],
+			},
+		] as unknown as LanguageModelChatMessage[]);
+
+		expect(messages).toEqual([
+			{
+				role: "user",
+				content: [
+					{ type: "text", text: "Compare these" },
+					{ type: "image", image: "data:image/jpeg;base64,AQID" },
+					{ type: "text", text: "[Unsupported image/bmp content]" },
+					{ type: "text", text: "<svg/>" },
+				],
+			},
+		]);
+	});
 });
 
 describe("tool message conversion", () => {
@@ -1394,6 +1421,15 @@ describe("tool message conversion", () => {
 				{ type: "file", mediaType: "image/png", data: { type: "data", data: bytes } },
 			],
 		});
+	});
+
+	it("sends an SVG tool result as text and other unsendable images as a placeholder", () => {
+		const output = toolResultOutput([
+			MockLanguageModelDataPart.text("<svg/>", "image/svg+xml"),
+			MockLanguageModelDataPart.image(new Uint8Array([1]), "image/tiff"),
+		]);
+
+		expect(output).toEqual({ type: "text", value: "<svg/>[Unsupported tool result content]" });
 	});
 
 	it("emits a placeholder result for content it cannot convert", () => {
@@ -1586,6 +1622,16 @@ describe("provideTokenCount", () => {
 
 		expect(await count([textOnly, image])).toBe(textOnlyCount + imageTokens);
 		expect(await count([textOnly, image, result])).toBe(textOnlyCount + 2 * imageTokens);
+	});
+
+	it("counts an SVG by its text and an image type that is not sent as nothing", async () => {
+		expect(
+			await count([
+				textOnly,
+				hoisted.MockLanguageModelDataPart.text("s".repeat(40), "image/svg+xml"),
+				hoisted.MockLanguageModelDataPart.image(new Uint8Array(400), "image/bmp"),
+			]),
+		).toBe(textOnlyCount + 10);
 	});
 
 	it("ignores thinking parts, which are not sent", async () => {
