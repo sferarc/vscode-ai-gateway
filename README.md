@@ -69,7 +69,7 @@ Run these from the Command Palette:
 - **Vercel OIDC is not offered.** The Vercel CLI is not logged in. Run `vercel login` and try again.
 - **Spend budget used up (HTTP 402).** A budget on the team, project, API key or team member has reached its limit, and the gateway refuses requests until it resets or is raised. The error names which budget, its spend and its limit.
 - **Request rejected as invalid (HTTP 400).** The gateway or the model provider refused the request; the error shows its reason. When the reason is a prompt too long for the model, start a new chat or attach fewer files.
-- **Request timed out.** The model sent nothing for longer than `vercelAiGateway.timeout`. Raise the setting for slow models.
+- **Request timed out.** The model sent nothing for longer than `vercelAiGateway.timeout`, either before its first output or in a pause partway through, in which case the answer above the error is incomplete. Raise the setting for slow models.
 
 ## Development
 

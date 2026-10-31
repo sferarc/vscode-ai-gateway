@@ -696,7 +696,11 @@ describe("provideLanguageModelChatResponse", () => {
 		expect((await requestOptions({})).providerOptions).toBeUndefined();
 	});
 
-	async function respondWithTimeout(isCancellationRequested: boolean, textBeforeStall?: string) {
+	async function respondWithTimeout(
+		isCancellationRequested: boolean,
+		textBeforeStall?: string,
+		thrown?: Error,
+	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,
 			inspect: () => undefined,
@@ -711,6 +715,7 @@ describe("provideLanguageModelChatResponse", () => {
 		streamTextMock.mockReturnValue({
 			fullStream: (async function* () {
 				if (textBeforeStall) yield { type: "text-delta", text: textBeforeStall };
+				if (thrown) throw thrown;
 				yield { type: "abort", reason: "Chunk timeout of 30000ms exceeded" };
 			})(),
 		} as never);
@@ -748,9 +753,17 @@ describe("provideLanguageModelChatResponse", () => {
 		const { report } = await respondWithTimeout(false, "Half an answer");
 		expect(report).toHaveBeenCalledTimes(2);
 		expect(report.mock.calls[0]?.[0].value).toBe("Half an answer");
-		expect(report.mock.calls[1]?.[0].value).toContain(
-			"**Error:** Request timed out after 30000 ms",
+		expect(report.mock.calls[1]?.[0].value).toBe(
+			"\n\n**Error:** Request timed out: the model sent nothing for 30000 ms, so the answer above is incomplete.\n\n",
 		);
+	});
+
+	it("says a thrown timeout after a partial answer cut the answer off", async () => {
+		const timeout = Object.assign(new Error("The operation timed out"), { name: "TimeoutError" });
+		const { report } = await respondWithTimeout(false, "Half an answer", timeout);
+		expect(report).toHaveBeenCalledTimes(2);
+		expect(report.mock.calls[1]?.[0].value).toContain("so the answer above is incomplete.");
+		expect(report.mock.calls[1]?.[0].value).not.toContain("no output from the model");
 	});
 
 	it("stays silent when the user cancelled", async () => {
