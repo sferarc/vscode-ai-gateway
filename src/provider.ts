@@ -605,9 +605,10 @@ function convertSingleMessage(
 			parts.push({ type: "text", text: part.value });
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType === CACHE_CONTROL_MIME_TYPE) continue;
-			if (part.mimeType.startsWith("image/")) {
+			const imageType = sendableImageType(part.mimeType);
+			if (imageType) {
 				const base64 = Buffer.from(part.data).toString("base64");
-				parts.push({ type: "image", image: `data:${part.mimeType};base64,${base64}` });
+				parts.push({ type: "image", image: `data:${imageType};base64,${base64}` });
 			} else if (isTextualMimeType(part.mimeType)) {
 				parts.push({ type: "text", text: new TextDecoder().decode(part.data) });
 			} else {
@@ -706,10 +707,11 @@ function convertToolResultOutput(content: readonly unknown[]): ToolResultOutput 
 			appendText(part.value);
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType === CACHE_CONTROL_MIME_TYPE) continue;
-			if (part.mimeType.startsWith("image/")) {
+			const imageType = sendableImageType(part.mimeType);
+			if (imageType) {
 				items.push({
 					type: "file",
-					mediaType: part.mimeType,
+					mediaType: imageType,
 					data: { type: "data", data: part.data },
 				});
 			} else if (isTextualMimeType(part.mimeType)) {
@@ -753,8 +755,23 @@ function isTextualMimeType(mimeType: string): boolean {
 		mimeType.startsWith("text/") ||
 		mimeType === "application/json" ||
 		mimeType.endsWith("+json") ||
-		mimeType === "application/xml"
+		mimeType === "application/xml" ||
+		mimeType.endsWith("+xml")
 	);
+}
+
+// The image formats OpenAI and Anthropic both accept; any other image type fails the whole request.
+const SENDABLE_IMAGE_TYPES: ReadonlyMap<string, string> = new Map([
+	["image/png", "image/png"],
+	["image/jpeg", "image/jpeg"],
+	["image/jpg", "image/jpeg"],
+	["image/gif", "image/gif"],
+	["image/webp", "image/webp"],
+]);
+
+/** The media type to send an image data part as, or undefined when providers would reject it. */
+function sendableImageType(mimeType: string): string | undefined {
+	return SENDABLE_IMAGE_TYPES.get(mimeType.toLowerCase());
 }
 
 // Role and message framing tokens that providers add around every message.
@@ -777,7 +794,7 @@ function tallyPart(part: unknown, tally: { characters: number; images: number })
 	} else if (part instanceof LanguageModelToolResultPart) {
 		for (const item of part.content) tallyPart(item, tally);
 	} else if (part instanceof LanguageModelDataPart) {
-		if (part.mimeType.startsWith("image/")) {
+		if (sendableImageType(part.mimeType)) {
 			tally.images += 1;
 		} else if (isTextualMimeType(part.mimeType)) {
 			tally.characters += new TextDecoder().decode(part.data).length;
