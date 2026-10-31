@@ -23,27 +23,31 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # Not github.token: its pushes and pull requests trigger no workflows, so the version PR would never get its Check.
+      - name: Mint the sferarc-hq App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.HQ_APP_ID }}
+          private-key: ${{ secrets.HQ_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Warn when GIT_TOKEN is missing
-        env:
-          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
-        run: |
-          [ -n "$GIT_TOKEN" ] || echo "::warning::GIT_TOKEN is not set; the version PR and its branch push trigger no pull_request workflows, so the required Check never runs on it until CI is triggered by hand."
-
-      # Prefer GIT_TOKEN: pushes and pull requests made by the Actions token
-      # trigger no workflows, so the version PR would never get its Check.
       # The extension goes to the VS Code Marketplace only; nothing is published to npm.
       - name: Create version PR or publish
         id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           publish-script: pnpm release
-          github-token: ${{ secrets.GIT_TOKEN || github.token }}
+          github-token: ${{ steps.app.outputs.token }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
@@ -52,7 +56,7 @@ jobs:
       - name: Tag and create GitHub release
         if: github.ref == 'refs/heads/main' && steps.changesets.outputs.has-changesets == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           version="$(node -p "require('./package.json').version")"
           if gh release view "v${version}" >/dev/null 2>&1; then
