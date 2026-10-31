@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.11
+
+### Patch Changes
+
+- ab5972b: Send an SVG attachment or tool result as its text and replace other image types the model providers reject, such as BMP or TIFF, with a placeholder, so one such image no longer fails the whole request.
+
 ## 0.5.10
 
 ### Patch Changes
