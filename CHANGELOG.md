@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.12
+
+### Patch Changes
+
+- 15f8803: A timeout that fires in a pause after part of the answer has streamed now says the answer above is incomplete, instead of claiming the model sent no output.
+
 ## 0.5.11
 
 ### Patch Changes
