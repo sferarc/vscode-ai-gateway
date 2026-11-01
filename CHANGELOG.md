@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.15
+
+### Patch Changes
+
+- 5ecc9c1: The model picker tooltip now shows the model's knowledge cutoff when the gateway lists one.
+
 ## 0.5.14
 
 ### Patch Changes
