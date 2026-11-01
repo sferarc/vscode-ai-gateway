@@ -365,6 +365,36 @@ describe("ModelsClient", () => {
 			expect(unpriced?.tooltip).toBe("None");
 		});
 
+		it("shows the knowledge cutoff the gateway lists in the tooltip", async () => {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{
+							...baseModel,
+							id: "month",
+							description: "Fast",
+							pricing: { input: "0.000002", output: "0.00001" },
+							knowledge: "2025-04",
+							deprecated_at: 1794960000000,
+						},
+						{ ...baseModel, id: "day", description: "Day", knowledge: "2025-02-28" },
+						{ ...baseModel, id: "null", description: "Null", knowledge: null },
+						{ ...baseModel, id: "free-form", description: "Text", knowledge: "early 2025" },
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const [month, day, missing, freeForm] = await new ModelsClient().getModels("test-key");
+
+			expect(month?.tooltip).toBe(
+				"Fast\n\nPrice: $2.00 per million input tokens, $10.00 per million output tokens.\n\nKnowledge cutoff: 2025-04.\n\nThe gateway marks this model as deprecated from 2026-11-18.",
+			);
+			expect(day?.tooltip).toBe("Day\n\nKnowledge cutoff: 2025-02-28.");
+			expect(missing?.tooltip).toBe("Null");
+			expect(freeForm?.tooltip).toBe("Text");
+		});
+
 		it("keeps using tags for web search, which has no structured field", async () => {
 			const capabilities = await capabilitiesOf({
 				...baseModel,
