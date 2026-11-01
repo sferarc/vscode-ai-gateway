@@ -59,6 +59,26 @@ describe("getConfig endpoint", () => {
 		expect(getConfig().endpoint).toBe("https://gateway.example.com");
 	});
 
+	it.each([
+		["https://ai-gateway.vercel.sh/v1"],
+		["https://ai-gateway.vercel.sh/v1/"],
+		["https://ai-gateway.vercel.sh/v4/ai"],
+		["https://ai-gateway.vercel.sh/V1/AI/"],
+	])("drops the API version a base URL copied from Vercel's docs ends in: %s", (value) => {
+		getConfiguration.mockReturnValue(settings({ globalValue: value }));
+
+		expect(getConfig().endpoint).toBe("https://ai-gateway.vercel.sh");
+	});
+
+	it.each([["https://gateway.example.com/v1beta"], ["https://gateway.example.com/v1/proxy"]])(
+		"keeps a path that is not a bare API version: %s",
+		(value) => {
+			getConfiguration.mockReturnValue(settings({ globalValue: value }));
+
+			expect(getConfig().endpoint).toBe(value);
+		},
+	);
+
 	it.each([[""], ["   "], ["/"], [42], [null], [{}]])(
 		"falls back to the default endpoint for %j",
 		(value) => {
