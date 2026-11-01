@@ -1,9 +1,11 @@
 # Plans
 
-The repository has no roadmap file and no open plan. The first release shipped as `0.5.0`; the untagged `0.5.1` and `0.5.2` were backfilled with tags and releases on 2026-10-22 ([[development/release]]).
+GitHub issues in sferarc/vscode-ai-gateway are the source of truth for pending work, progress and the roadmap. This note keeps the phases and links to their tracking issues; it holds no todo list.
 
-Add a note here, one per plan, when work is planned that is too large for a single pull request, or when a multi-step process waits on the owner.
+The first release shipped as `0.5.0`; the untagged `0.5.1` and `0.5.2` were backfilled with tags and releases on 2026-10-22 ([[development/release]]).
 
-Gaps left open after the first release:
+Add a phase here, with a tracking issue labelled `roadmap`, when work is planned that is too large for a single pull request, or when a multi-step process waits on the owner.
 
-- It is still unknown whether the `Canceled` and `AuthCancelledError` names survive `authentication.getSession`. The extension host test cannot reach the picker: `getSession` with `createIfNone` first asks consent through a modal dialog, which the test build refuses ([[architecture/chat-provider]]). A manual check in a normal VS Code window remains.
+## Phases
+
+- Gaps left open after the first release: [#123](https://github.com/sferarc/vscode-ai-gateway/issues/123), with [#122](https://github.com/sferarc/vscode-ai-gateway/issues/122) (whether a dismissed sign-in picker is logged as a cancel, [[architecture/chat-provider]]) and [#124](https://github.com/sferarc/vscode-ai-gateway/issues/124) (a Release run on a superseded commit).
