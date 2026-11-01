@@ -13,6 +13,7 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("vscode", () => ({
 	EventEmitter: hoisted.MockEventEmitter,
+	ProgressLocation: { Notification: 15 },
 	authentication: { registerAuthenticationProvider: vi.fn(() => ({ dispose: vi.fn() })) },
 	window: {
 		showInputBox: hoisted.mockShowInputBox,
@@ -20,11 +21,17 @@ vi.mock("vscode", () => ({
 		showInformationMessage: vi.fn(),
 		showErrorMessage: vi.fn(),
 		showWarningMessage: vi.fn(),
+		withProgress: vi.fn((_options: unknown, task: () => unknown) => task()),
 	},
+}));
+
+vi.mock("./config", () => ({
+	getConfig: () => ({ endpoint: "https://gateway.test", timeout: 30000 }),
 }));
 
 vi.mock("./logger", () => ({
 	logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+	extractErrorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
 vi.mock("./vercel-auth", () => ({
@@ -102,16 +109,21 @@ describe("VercelAIAuthenticationProvider", () => {
 	let ctx: ExtensionContext;
 	let provider: VercelAIAuthenticationProvider;
 
+	let fetchMock: ReturnType<typeof vi.fn>;
+
 	beforeEach(() => {
 		vi.useFakeTimers({ toFake: ["Date"] });
 		vi.setSystemTime(NOW);
 		vi.clearAllMocks();
+		fetchMock = vi.fn(async () => new Response('{"data":[]}', { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
 		ctx = createMockContext();
 		provider = new VercelAIAuthenticationProvider(ctx);
 	});
 
 	afterEach(() => {
 		vi.useRealTimers();
+		vi.unstubAllGlobals();
 	});
 
 	it("returns empty sessions when none exist", async () => {
@@ -616,6 +628,84 @@ describe("VercelAIAuthenticationProvider", () => {
 			};
 			expect(apiKeyPrompt.validateInput("wrong")).toMatch(/vck_/);
 			expect(apiKeyPrompt.validateInput("vck_good")).toBeNull();
+		});
+	});
+
+	describe("API key check", () => {
+		async function addApiKey(key: string) {
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "API Key",
+				value: "api-key",
+			} as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("Work").mockResolvedValueOnce(key);
+			return provider.createSession([]);
+		}
+
+		it("checks the trimmed key against the gateway and stores it trimmed", async () => {
+			const session = await addApiKey("  vck_pasted \n");
+
+			expect(session.accessToken).toBe("vck_pasted");
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+			expect(url).toBe("https://gateway.test/v1/models");
+			expect(init.headers).toEqual({ Authorization: "Bearer vck_pasted" });
+			expect((await provider.getSessions())[0]?.accessToken).toBe("vck_pasted");
+		});
+
+		it("accepts a key pasted with surrounding whitespace in the input box", async () => {
+			await addApiKey("vck_ok");
+
+			const apiKeyPrompt = hoisted.mockShowInputBox.mock.calls[1]?.[0] as {
+				validateInput: (value: string) => string | null;
+			};
+			expect(apiKeyPrompt.validateInput(" vck_good ")).toBeNull();
+			expect(apiKeyPrompt.validateInput("   ")).toBe("API key required");
+		});
+
+		it("does not store a key the gateway rejects with 401", async () => {
+			fetchMock.mockResolvedValueOnce(new Response('{"error":{}}', { status: 401 }));
+
+			await expect(addApiKey("vck_wrong")).rejects.toThrow(/rejected this API key \(HTTP 401\)/);
+
+			expect(await provider.getSessions()).toEqual([]);
+			expect(ctx.globalState.get(ACTIVE_KEY)).toBeUndefined();
+		});
+
+		it("names the rejected key in the manage command's error", async () => {
+			fetchMock.mockResolvedValueOnce(new Response("", { status: 401 }));
+			hoisted.mockShowQuickPick.mockResolvedValueOnce({
+				label: "API Key",
+				value: "api-key",
+			} as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("Work").mockResolvedValueOnce("vck_wrong");
+
+			await provider.manageAuthentication();
+
+			expect(window.showErrorMessage).toHaveBeenCalledWith(
+				expect.stringContaining("The gateway rejected this API key"),
+			);
+		});
+
+		it.each([
+			["the gateway cannot be reached", () => Promise.reject(new TypeError("fetch failed"))],
+			["the gateway fails", () => Promise.resolve(new Response("", { status: 503 }))],
+			[
+				"a gateway rule refuses the request",
+				() => Promise.resolve(new Response("", { status: 403 })),
+			],
+		])("stores the key unchecked when %s", async (_case, reply) => {
+			fetchMock.mockImplementationOnce(reply);
+
+			const session = await addApiKey("vck_offline");
+
+			expect(session.accessToken).toBe("vck_offline");
+			expect(await provider.getSessions()).toHaveLength(1);
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining("Saving the API key unchecked"),
+			);
+			for (const call of vi.mocked(logger.warn).mock.calls) {
+				expect(JSON.stringify(call)).not.toContain("vck_offline");
+			}
 		});
 	});
 

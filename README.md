@@ -27,6 +27,8 @@ Open the Command Palette (`Cmd/Ctrl + Shift + P`) and run **Vercel AI Gateway: M
 1. Enter a name for the session, for example Personal or Work.
 2. Enter your AI Gateway API key. It must start with `vck_`.
 
+The key is checked with the gateway before it is saved. If the gateway rejects it, the session is not added and the error says so; copy the key again or create a new one. If the gateway cannot be reached, the key is saved unchecked.
+
 ### Vercel OIDC
 
 1. Pick a team or your personal account.
