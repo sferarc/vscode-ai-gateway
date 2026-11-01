@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.17
+
+### Patch Changes
+
+- fac7a6d: Keep a chat working when a tool call in its history has no result: the call now gets a placeholder result instead of failing every later request with "Tool result is missing for tool call".
+
 ## 0.5.16
 
 ### Patch Changes
