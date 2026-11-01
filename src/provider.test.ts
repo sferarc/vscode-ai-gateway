@@ -1362,6 +1362,14 @@ describe("convertMessages", () => {
 					new hoisted.MockLanguageModelToolCallPart("c1", "read", { path: "a.ts" }),
 				],
 			},
+			{
+				role: 1,
+				content: [
+					new hoisted.MockLanguageModelToolResultPart("c1", [
+						new hoisted.MockLanguageModelTextPart("const a = 1;"),
+					]),
+				],
+			},
 			{ role: 2, content: [new hoisted.MockLanguageModelThinkingPart("Only thinking.")] },
 		] as unknown as LanguageModelChatMessage[]);
 
@@ -1372,6 +1380,17 @@ describe("convertMessages", () => {
 				content: [
 					{ type: "text", text: "Reading it." },
 					{ type: "tool-call", toolCallId: "c1", toolName: "read", input: { path: "a.ts" } },
+				],
+			},
+			{
+				role: "tool",
+				content: [
+					{
+						type: "tool-result",
+						toolCallId: "c1",
+						toolName: "read",
+						output: { type: "text", value: "const a = 1;" },
+					},
 				],
 			},
 		]);
@@ -1546,6 +1565,112 @@ describe("tool message conversion", () => {
 
 		expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "tool", "user"]);
 		expect(messages[3]).toEqual({ role: "user", content: "Now summarise" });
+	});
+});
+
+describe("unanswered tool calls", () => {
+	const {
+		MockLanguageModelTextPart,
+		MockLanguageModelToolCallPart,
+		MockLanguageModelToolResultPart,
+	} = hoisted;
+
+	function message(role: 1 | 2, content: unknown[]) {
+		return { role, content } as unknown as LanguageModelChatMessage;
+	}
+
+	function placeholder(toolCallId: string, toolName: string) {
+		return {
+			type: "tool-result",
+			toolCallId,
+			toolName,
+			output: { type: "text", value: "[No result was returned for this tool call]" },
+		};
+	}
+
+	it("answers a call left without a result before the next user message", () => {
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Fix the bug")]),
+			message(2, [
+				new MockLanguageModelTextPart("Reading it."),
+				new MockLanguageModelToolCallPart("c1", "read", { path: "a.ts" }),
+			]),
+			message(1, [new MockLanguageModelTextPart("Never mind")]),
+		]);
+
+		expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "tool", "user"]);
+		expect(messages[2]).toEqual({ role: "tool", content: [placeholder("c1", "read")] });
+	});
+
+	it("adds the missing result to the results VS Code did send", () => {
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Go")]),
+			message(2, [
+				new MockLanguageModelToolCallPart("c1", "read", {}),
+				new MockLanguageModelToolCallPart("c2", "list", {}),
+			]),
+			message(1, [
+				new MockLanguageModelToolResultPart("c1", [new MockLanguageModelTextPart("ok")]),
+			]),
+		]);
+
+		expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
+		expect(messages[2]?.content).toEqual([
+			{
+				type: "tool-result",
+				toolCallId: "c1",
+				toolName: "read",
+				output: { type: "text", value: "ok" },
+			},
+			placeholder("c2", "list"),
+		]);
+	});
+
+	it("leaves answered calls as they are", () => {
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Go")]),
+			message(2, [new MockLanguageModelToolCallPart("c1", "read", {})]),
+			message(1, [
+				new MockLanguageModelToolResultPart("c1", [new MockLanguageModelTextPart("ok")]),
+			]),
+			message(1, [new MockLanguageModelTextPart("Thanks")]),
+		]);
+
+		expect(JSON.stringify(messages)).not.toContain("No result was returned");
+	});
+
+	it("gives the AI SDK a prompt it accepts for a call the chat ends on", async () => {
+		const { streamText } = await vi.importActual<typeof import("ai")>("ai");
+		const { MockLanguageModelV4, convertArrayToReadableStream } = await import("ai/test");
+		const model = new MockLanguageModelV4({
+			doStream: async () => ({
+				stream: convertArrayToReadableStream([
+					{
+						type: "finish",
+						finishReason: { unified: "stop", raw: "stop" },
+						usage: {
+							inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+							outputTokens: { total: 0, text: 0, reasoning: 0 },
+						},
+					},
+				]),
+			}),
+		});
+		const { messages } = convertMessages([
+			message(1, [new MockLanguageModelTextPart("Go")]),
+			message(2, [new MockLanguageModelToolCallPart("c1", "read", {})]),
+		]);
+
+		const errors: unknown[] = [];
+		for await (const part of streamText({ model, messages }).fullStream) {
+			if (part.type === "error") errors.push(part.error);
+		}
+
+		expect(errors).toEqual([]);
+		expect(model.doStreamCalls[0]?.prompt.at(-1)).toMatchObject({
+			role: "tool",
+			content: [{ type: "tool-result", toolCallId: "c1" }],
+		});
 	});
 });
 
