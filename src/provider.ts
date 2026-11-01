@@ -65,6 +65,8 @@ export interface ChatRequestContext {
 	startedAt: number;
 	/** The gateway's id for the request, which its generation lookup takes. */
 	generationId?: string;
+	/** An error is already in the chat, so a finish reason of `error` adds nothing. */
+	errorReported?: boolean;
 }
 
 // The gateway's docs say it tags the first content chunk, so the id is known before a mid-stream failure.
@@ -446,6 +448,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			}
 
 			case "finish": {
+				if (chunk.finishReason === "error") {
+					return this.reportFinishError(chunk.rawFinishReason, progress, request);
+				}
 				const note = FINISH_NOTES[chunk.finishReason];
 				if (!note) return false;
 				progress.report(new LanguageModelTextPart(note));
@@ -488,6 +493,26 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		}
 		if (items.length === 0) return false;
 		progress.report(new LanguageModelTextPart(`\n\n**Sources**\n\n${items.join("\n")}\n`));
+		return true;
+	}
+
+	// Gemini ends with MALFORMED_FUNCTION_CALL as finish reason error, with no error part and often no text.
+	private reportFinishError(
+		rawReason: string | undefined,
+		progress: Progress<LanguageModelResponsePart>,
+		request?: ChatRequestContext,
+	): boolean {
+		if (request?.errorReported) return false;
+		const reason = rawReason?.trim();
+		logger.error(
+			`Chat request ended with finish reason error: model=${request?.modelId ?? "unknown"} generation=${request?.generationId ?? "none"} reason=${reason || "none"}`,
+		);
+		const named = reason ? ` (${escapeMarkdown(reason)})` : "";
+		progress.report(
+			new LanguageModelTextPart(
+				`\n\n**Error:** The model provider ended the answer with an error${named}, so it is missing or incomplete. Try again or pick another model.\n\n`,
+			),
+		);
 		return true;
 	}
 
@@ -550,6 +575,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			`elapsedMs=${request ? Date.now() - request.startedAt : "unknown"}`,
 		];
 		logger.error(`Chat request failed: ${fields.join(" ")}: ${userMessage}`);
+		if (request) request.errorReported = true;
 		if (error instanceof Error && error.stack) logger.debug(error.stack);
 		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${userMessage}\n\n`));
 	}
