@@ -601,11 +601,60 @@ export function convertMessages(messages: readonly LanguageModelChatMessage[]): 
 		}
 	}
 
-	const result = messages
-		.flatMap((msg) => convertSingleMessage(msg, toolNameMap))
-		.filter(isValidMessage);
+	const result = answerUnansweredToolCalls(
+		messages.flatMap((msg) => convertSingleMessage(msg, toolNameMap)).filter(isValidMessage),
+	);
 
 	return extractInstructions(result);
+}
+
+const NO_TOOL_RESULT = "[No result was returned for this tool call]";
+
+/**
+ * Gives every tool call that has no result a placeholder result directly after it. The AI SDK
+ * throws `MissingToolResultsError` for a call still unanswered at the next user message or at the
+ * end of the prompt, which would fail this request and every later one in the same chat.
+ */
+function answerUnansweredToolCalls(messages: ModelMessage[]): ModelMessage[] {
+	const result: ModelMessage[] = [];
+	let pending = new Map<string, string>();
+
+	const answerPending = () => {
+		if (pending.size === 0) return;
+		logger.warn(`No result for tool call ${[...pending.keys()].join(", ")}, sending a placeholder`);
+		const placeholders: ToolResultPart[] = [...pending].map(([toolCallId, toolName]) => ({
+			type: "tool-result",
+			toolCallId,
+			toolName,
+			output: { type: "text", value: NO_TOOL_RESULT },
+		}));
+		const last = result.at(-1);
+		if (last?.role === "tool") {
+			result[result.length - 1] = { role: "tool", content: [...last.content, ...placeholders] };
+		} else {
+			result.push({ role: "tool", content: placeholders });
+		}
+		pending = new Map();
+	};
+
+	for (const msg of messages) {
+		if (msg.role === "tool") {
+			for (const part of msg.content) {
+				if (part.type === "tool-result") pending.delete(part.toolCallId);
+			}
+			result.push(msg);
+			continue;
+		}
+		answerPending();
+		result.push(msg);
+		if (msg.role === "assistant" && Array.isArray(msg.content)) {
+			for (const part of msg.content) {
+				if (part.type === "tool-call") pending.set(part.toolCallId, part.toolName);
+			}
+		}
+	}
+	answerPending();
+	return result;
 }
 
 type ContentPart = TextPart | ImagePart | ToolCallPart;
