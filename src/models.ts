@@ -41,6 +41,8 @@ export interface Model {
 	reasoning_options?: { type: string }[];
 	/** False for models that take no temperature, such as OpenAI's reasoning models. */
 	temperature?: boolean;
+	/** Training data cutoff, as `YYYY-MM` or `YYYY-MM-DD`; absent for many models. */
+	knowledge?: string | null;
 	/** When the gateway deprecates the model, in milliseconds since the epoch, unlike `created`. */
 	deprecated_at?: number;
 	/** US dollars per token, as decimal strings. */
@@ -149,6 +151,12 @@ function deprecationDate(model: Model): string | undefined {
 	if (typeof value !== "number" || !(value > 0)) return undefined;
 	const date = new Date(value < 1e12 ? value * 1000 : value);
 	return Number.isNaN(date.getTime()) ? undefined : date.toISOString().slice(0, 10);
+}
+
+// Only the date forms the gateway sends are shown, so a free-form value cannot reach the tooltip.
+function knowledgeCutoff(model: Model): string | undefined {
+	const value = model.knowledge;
+	return typeof value === "string" && /^\d{4}-\d{2}(-\d{2})?$/.test(value) ? value : undefined;
 }
 
 const PRICE_FORMAT = new Intl.NumberFormat("en-US", {
@@ -320,9 +328,11 @@ export class ModelsClient {
 			const tags = (model.tags ?? []).map((tag) => tag.toLowerCase());
 			const description = model.description || "No description available.";
 			const deprecated = deprecationDate(model);
+			const cutoff = knowledgeCutoff(model);
 			const tooltip = [
 				description,
 				describePricing(model),
+				cutoff && `Knowledge cutoff: ${cutoff}.`,
 				deprecated && `The gateway marks this model as deprecated from ${deprecated}.`,
 			].filter(Boolean);
 
