@@ -16,9 +16,13 @@ export function getConfig() {
 	};
 }
 
+// Vercel's docs give base URLs ending in /v1 (OpenAI SDKs) and /v4/ai (AI SDK); the paths here add their own.
+const API_VERSION_SUFFIX = /\/v\d+(?:\/ai)?$/i;
+
 // The Settings editor saves a cleared field as "", and settings.json can hold a value of any type.
 function normalisedEndpoint(value: unknown): string {
-	const endpoint = typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+	const trimmed = typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+	const endpoint = trimmed.replace(API_VERSION_SUFFIX, "").replace(/\/+$/, "");
 	return endpoint || DEFAULT_BASE_URL;
 }
 
