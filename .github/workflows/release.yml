@@ -41,9 +41,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # A run on a superseded commit would reopen the version PR for a release that already shipped.
+      - name: Skip when the branch has moved on
+        id: head
+        run: |
+          head="$(git ls-remote --exit-code origin "${GITHUB_REF}" | cut -f1)"
+          if [ -z "${head}" ]; then
+            echo "::error::Could not read the head of ${GITHUB_REF}"
+            exit 1
+          fi
+          if [ "${head}" = "${GITHUB_SHA}" ]; then
+            echo "current=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::notice::${GITHUB_SHA} is no longer the head of ${GITHUB_REF} (now ${head}), so this run skips; the run on the newer commit versions and releases"
+            echo "current=false" >> "${GITHUB_OUTPUT}"
+          fi
+
       # The extension goes to the VS Code Marketplace only; nothing is published to npm.
       - name: Create version PR or publish
         id: changesets
+        if: steps.head.outputs.current == 'true'
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           publish-script: pnpm release
@@ -54,7 +71,7 @@ jobs:
       # privatePackages.tag is false, so changesets/action creates no tag or release.
       # Only without pending changesets: otherwise this push published nothing.
       - name: Tag and create GitHub release
-        if: github.ref == 'refs/heads/main' && steps.changesets.outputs.has-changesets == 'false'
+        if: github.ref == 'refs/heads/main' && steps.head.outputs.current == 'true' && steps.changesets.outputs.has-changesets == 'false'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
