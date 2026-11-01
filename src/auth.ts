@@ -8,11 +8,13 @@ import {
 	type Event,
 	EventEmitter,
 	type ExtensionContext,
+	ProgressLocation,
 	window,
 } from "vscode";
-import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
+import { getConfig } from "./config";
+import { ERROR_MESSAGES, EXTENSION_ID, MODELS_ENDPOINT } from "./constants";
 import { AuthCancelledError } from "./errors";
-import { logger } from "./logger";
+import { extractErrorMessage, logger } from "./logger";
 import {
 	checkVercelCliAvailable,
 	createInteractiveOidcSession,
@@ -326,10 +328,11 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			throw new AuthCancelledError("Session name required");
 		}
 
-		const apiKey = await this.promptForApiKey();
+		const apiKey = (await this.promptForApiKey())?.trim();
 		if (!apiKey) {
 			throw new AuthCancelledError("API key required");
 		}
+		await verifyApiKey(apiKey);
 
 		// The account id must be unique per session, otherwise VS Code treats every session as
 		// the same account and cannot switch between them.
@@ -464,10 +467,11 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	private validateApiKey(value: string): string | null {
-		if (!value?.trim()) {
+		const key = value?.trim();
+		if (!key) {
 			return "API key required";
 		}
-		if (!value.startsWith("vck_")) {
+		if (!key.startsWith("vck_")) {
 			return 'API key must start with "vck_"';
 		}
 		return null;
@@ -710,5 +714,37 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			});
 		}
 		window.showInformationMessage(`Switched to: ${selectedSession?.account.label} ${methodLabel}`);
+	}
+}
+
+// Only a 401 refuses the key, so an unreachable or failing gateway never blocks sign-in.
+async function verifyApiKey(apiKey: string): Promise<void> {
+	const { endpoint, timeout } = getConfig();
+	let status: number;
+	try {
+		const response = await window.withProgress(
+			{
+				location: ProgressLocation.Notification,
+				title: "Checking the API key with Vercel AI Gateway",
+			},
+			() =>
+				fetch(`${endpoint}${MODELS_ENDPOINT}`, {
+					headers: { Authorization: `Bearer ${apiKey}` },
+					signal: AbortSignal.timeout(timeout),
+				}),
+		);
+		status = response.status;
+		response.body?.cancel().catch(() => undefined);
+	} catch (error) {
+		logger.warn(`Saving the API key unchecked: ${extractErrorMessage(error)}`);
+		return;
+	}
+	if (status === 401) {
+		throw new Error(
+			"The gateway rejected this API key (HTTP 401). Copy the key again from the AI Gateway dashboard, or create a new one, and add it again.",
+		);
+	}
+	if (status < 200 || status >= 300) {
+		logger.warn(`Saving the API key unchecked: the gateway answered HTTP ${status}`);
 	}
 }
