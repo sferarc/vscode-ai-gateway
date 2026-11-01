@@ -893,6 +893,36 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(parts).toEqual(["Answer"]);
 	});
 
+	it("names the provider's reason when a stream ends with finish reason error and no error part", async () => {
+		const parts = await respondWithStream([
+			{ type: "finish", finishReason: "error", rawFinishReason: "MALFORMED_FUNCTION_CALL" },
+		]);
+		expect(parts).toEqual([
+			"\n\n**Error:** The model provider ended the answer with an error (MALFORMED\\_FUNCTION\\_CALL), so it is missing or incomplete. Try again or pick another model.\n\n",
+		]);
+	});
+
+	it("flags a partial answer that ends with finish reason error", async () => {
+		const parts = await respondWithStream([
+			{ type: "text-delta", text: "Partial" },
+			{ type: "finish", finishReason: "error", rawFinishReason: undefined },
+		]);
+		expect(parts).toEqual([
+			"Partial",
+			expect.stringContaining("ended the answer with an error, so it is missing or incomplete"),
+		]);
+	});
+
+	it("adds nothing for finish reason error after an error part was reported", async () => {
+		const { GatewayInternalServerError } = await import("@ai-sdk/gateway");
+		const parts = await respondWithStream([
+			{ type: "error", error: new GatewayInternalServerError() },
+			{ type: "finish", finishReason: "error", rawFinishReason: undefined },
+		]);
+		expect(parts).toHaveLength(1);
+		expect(parts[0]).toContain("HTTP 500");
+	});
+
 	it("explains a filtered answer instead of reporting no response", async () => {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,
