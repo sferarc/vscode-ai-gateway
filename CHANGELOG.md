@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.18
+
+### Patch Changes
+
+- d9d9956: Show an icon for Vercel AI Gateway in the chat model picker (VS Code 1.143 and later).
+
 ## 0.5.17
 
 ### Patch Changes
