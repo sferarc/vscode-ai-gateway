@@ -110,6 +110,14 @@
 					],
 					"default": "default",
 					"description": "Order in which the gateway tries the providers that serve a chat model. The gateway falls back through the rest in that order and tries unhealthy providers last; no provider is excluded."
+				},
+				"vercelAiGateway.providerOrder": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "Provider slugs the gateway tries first for a chat model, in this order, such as bedrock or anthropic. The gateway falls back to the other providers afterwards, in its own ranking or the providerSort order; no provider is excluded."
 				}
 			}
 		}
