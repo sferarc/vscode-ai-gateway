@@ -607,7 +607,7 @@ describe("provideLanguageModelChatResponse", () => {
 		userSettings: Record<string, unknown> = {},
 	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
-			get: (_: string, d?: unknown) => d,
+			get: (key: string, d?: unknown) => (key in userSettings ? userSettings[key] : d),
 			inspect: (key: string) =>
 				key in userSettings ? { globalValue: userSettings[key] } : undefined,
 		});
@@ -758,6 +758,34 @@ describe("provideLanguageModelChatResponse", () => {
 		const off = { zeroDataRetention: false };
 
 		expect((await requestOptions({}, {}, [text], off)).providerOptions).toBeUndefined();
+	});
+
+	it("asks the gateway to sort providers by the chosen metric", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { providerSort: "ttft" })).providerOptions,
+		).toEqual({ gateway: { sort: "ttft" } });
+	});
+
+	it("sends the provider sort together with the other gateway options", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text, breakpoint], {
+			zeroDataRetention: true,
+			providerSort: "cost",
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { caching: "auto", zeroDataRetention: true, sort: "cost" },
+		});
+	});
+
+	it("leaves the provider sort out for the default ranking", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const byDefault = { providerSort: "default" };
+
+		expect((await requestOptions({}, {}, [text], byDefault)).providerOptions).toBeUndefined();
 	});
 
 	async function respondWithTimeout(

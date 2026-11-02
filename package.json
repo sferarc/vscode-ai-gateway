@@ -93,6 +93,23 @@
 					"type": "boolean",
 					"default": false,
 					"description": "Route chat requests only to providers with zero data retention agreements with Vercel. Needs a Vercel Pro or Enterprise team. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Your own provider keys (BYOK) are skipped unless marked as ZDR in the AI Gateway dashboard."
+				},
+				"vercelAiGateway.providerSort": {
+					"type": "string",
+					"enum": [
+						"default",
+						"cost",
+						"ttft",
+						"tps"
+					],
+					"enumDescriptions": [
+						"Use the gateway's own provider ranking, based on recent uptime and latency.",
+						"Try the provider with the lowest estimated cost first.",
+						"Try the provider with the lowest median time to first token first.",
+						"Try the provider with the highest median tokens per second first."
+					],
+					"default": "default",
+					"description": "Order in which the gateway tries the providers that serve a chat model. The gateway falls back through the rest in that order and tries unhealthy providers last; no provider is excluded."
 				}
 			}
 		}
