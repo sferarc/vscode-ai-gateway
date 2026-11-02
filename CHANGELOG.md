@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.5.19
+
+### Patch Changes
+
+- e012292: Add the `vercelAiGateway.disallowPromptTraining` setting, which routes chat requests only to providers that do not train on prompts, and explain the error when a model has no such provider.
+- 6748292: Show in the model tooltip whether the providers serving a model may train on prompts or offer zero data retention.
+
 ## 0.5.18
 
 ### Patch Changes
