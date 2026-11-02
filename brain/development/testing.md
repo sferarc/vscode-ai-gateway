@@ -16,7 +16,8 @@ Tests that depend on token expiry pin the clock: `src/auth.test.ts` and `src/ver
 | `src/logger.test.ts` | `Logger` and `extractErrorMessage` |
 | `src/package.test.ts` | `VSIX contents`: vsce's `listFiles` keeps `package.json` and `README.md` and leaves out `CLAUDE.md` and `brain/`. `manifest`: `@types/vscode` equals the `engines.vscode` floor, `contributes.commands` equals the `registerCommand` ids in `src/extension.ts`, and the chat provider vendor, authentication id and `activationEvents` agree with `EXTENSION_ID` and the register calls |
 | `src/diagnostics.test.ts` | Check Connection: success, the chat model count apart from the total, the credit balance and a check that still passes when the balance request fails, rejected credentials, network failure, no session, and that the token never reaches the message or the log |
-| `src/release-workflow.test.ts` | `release workflow`: the Tag step reads changesets/action's kebab-case `has-changesets` output |
+| `src/release-workflow.test.ts` | `release workflow`: the Tag step reads changesets/action's kebab-case `has-changesets` output and runs `scripts/github-release.sh` |
+| `src/github-release.test.ts` | `GitHub release step`: `scripts/github-release.sh` against a fake `gh`: skips an existing release, releases an existing tag, creates both at `GITHUB_SHA`, and fails without creating when the lookup errors with anything but 404 |
 
 ## Extension host smoke test
 

@@ -57,10 +57,4 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.changesets.outputs.has-changesets == 'false'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if gh release view "v${version}" >/dev/null 2>&1; then
-            echo "Release v${version} exists"
-          else
-            gh release create "v${version}" --target "${GITHUB_SHA}" --title "v${version}" --generate-notes
-          fi
+        run: ./scripts/github-release.sh
