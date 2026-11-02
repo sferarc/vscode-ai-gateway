@@ -12,6 +12,7 @@ import { extractErrorMessage } from "./logger";
 const MANAGE_AUTH_COMMAND = "Vercel AI Gateway: Manage Authentication";
 const ENDPOINT_SETTING = `${EXTENSION_ID}.endpoint`;
 const PROMPT_TRAINING_SETTING = `${EXTENSION_ID}.disallowPromptTraining`;
+const ZERO_DATA_RETENTION_SETTING = `${EXTENSION_ID}.zeroDataRetention`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -53,7 +54,7 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 			: modelNotFound
 				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
 				: noProviders !== undefined
-					? `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "${PROMPT_TRAINING_SETTING}" setting if it is on. Details: ${noProviders || detail}`
+					? `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "${PROMPT_TRAINING_SETTING}" or "${ZERO_DATA_RETENTION_SETTING}" setting if it is on. Details: ${noProviders || detail}`
 					: GatewayForbiddenError.isInstance(failure)
 						? policyMessage(statusCode, failure.ruleId, detail)
 						: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),

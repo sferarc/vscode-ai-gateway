@@ -249,7 +249,7 @@ describe("describeGatewayError", () => {
 		const description = describeGatewayError(error);
 		expect(description).toMatchObject({ statusCode: 400, isRetryable: false });
 		expect(description.userMessage).toBe(
-			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" setting if it is on. Details: ${message}`,
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
 		);
 	});
 
@@ -259,7 +259,21 @@ describe("describeGatewayError", () => {
 			error: { message, type: "no_providers_available" },
 		});
 		expect(describeGatewayError(error).userMessage).toBe(
-			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" setting if it is on. Details: ${message}`,
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
+		);
+	});
+
+	it("names a model with no provider that offers zero data retention", async () => {
+		// Error body from the "Per-request zero data retention" section of Vercel's AI Gateway docs.
+		const message =
+			"No ZDR (Zero Data Retention) providers available for model: example/model-name. Providers considered: provider-a, provider-b";
+		const { error } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+			statusCode: 400,
+		});
+		expect(describeGatewayError(error).userMessage).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
 		);
 	});
 

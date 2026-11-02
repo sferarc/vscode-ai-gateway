@@ -14,10 +14,11 @@ export function getConfig() {
 		endpoint: normalisedEndpoint(config.inspect<unknown>("endpoint")?.globalValue),
 		timeout: boundedTimeout(config.get<unknown>("timeout", DEFAULT_TIMEOUT_MS)),
 		disallowPromptTraining: anyScopeEnabled(config.inspect<unknown>("disallowPromptTraining")),
+		zeroDataRetention: anyScopeEnabled(config.inspect<unknown>("zeroDataRetention")),
 	};
 }
 
-// A workspace may turn the filter on but not off, so a cloned repo cannot route the user's prompts to training providers.
+// A workspace may turn a filter on but not off, so a cloned repo cannot route the user's prompts past the user's data policy.
 function anyScopeEnabled(
 	inspected:
 		| { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown }

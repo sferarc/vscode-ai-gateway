@@ -63,6 +63,7 @@ Run these from the Command Palette:
 | `vercelAiGateway.endpoint` | `https://ai-gateway.vercel.sh` | AI Gateway endpoint URL. Change it for self-hosted or regional deployments. Read from user settings only: a workspace `.vscode/settings.json` cannot change it, because requests to it carry your key or token. An empty value uses the default. |
 | `vercelAiGateway.timeout` | `30000` | Longest time, in milliseconds, the model may stay silent before its first chunk or between any two chunks. Allowed range is 5000 to 300000. When it runs out, the request stops and the chat shows an error saying it timed out. It does not limit the total length of an answer. Loading the model list also gives up after this long. |
 | `vercelAiGateway.disallowPromptTraining` | `false` | Sends chat requests only to providers that do not train on prompts, using the gateway's free Disallow Prompt Training option. A model with no such provider fails with an error instead of falling back to one that trains. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. The gateway does not apply it to requests that use your own provider keys (BYOK). |
+| `vercelAiGateway.zeroDataRetention` | `false` | Sends chat requests only to providers with zero data retention agreements with Vercel, using the gateway's per-request ZDR option, which needs a Vercel Pro or Enterprise team and costs nothing extra. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Your own provider keys (BYOK) are skipped unless you mark them as ZDR in the AI Gateway dashboard. |
 
 ## Troubleshooting
 
@@ -72,7 +73,7 @@ Run these from the Command Palette:
 - **Vercel OIDC is not offered.** The Vercel CLI is not logged in. Run `vercel login` and try again.
 - **Spend budget used up (HTTP 402).** A budget on the team, project, API key or team member has reached its limit, and the gateway refuses requests until it resets or is raised. The error names which budget, its spend and its limit.
 - **Request rejected as invalid (HTTP 400).** The gateway or the model provider refused the request; the error shows its reason. When the reason is a prompt too long for the model, start a new chat or attach fewer files.
-- **No provider meets the data policy (HTTP 400).** With `vercelAiGateway.disallowPromptTraining` on, the gateway found no provider of the chosen model that does not train on prompts. Pick another model, or turn the setting off.
+- **No provider meets the data policy (HTTP 400).** With `vercelAiGateway.disallowPromptTraining` or `vercelAiGateway.zeroDataRetention` on, the gateway found no provider of the chosen model that meets it. Pick another model, or turn the setting off.
 - **Request timed out.** The model sent nothing for longer than `vercelAiGateway.timeout`, either before its first output or in a pause partway through, in which case the answer above the error is incomplete. Raise the setting for slow models.
 
 ## Development
