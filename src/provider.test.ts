@@ -283,6 +283,7 @@ describe("active session", () => {
 				getModels,
 				logged: () => logs.flatMap((spy) => spy.mock.calls),
 				errorLog: logs[0],
+				infoLog: logs[2],
 			};
 		}
 
@@ -371,12 +372,16 @@ describe("active session", () => {
 			expect(t.errorLog).not.toHaveBeenCalled();
 		});
 
-		it("shows no error toast when the extension's own sign-in picker is dismissed", async () => {
+		it("logs a dismissed sign-in picker at info after VS Code relays it to getSession", async () => {
 			const t = await setup(async () => null);
-			t.getSession.mockRejectedValue(new AuthCancelledError("API key required"));
+			// VS Code 1.137.0 rpcProtocol.ts _receiveReplyErr rebuilds a relayed error from name, message and stack only.
+			const thrown = new AuthCancelledError("API key required");
+			const relayed = Object.assign(new Error(), { name: thrown.name, message: thrown.message });
+			t.getSession.mockRejectedValue(relayed);
 
 			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
 
+			expect(t.infoLog).toHaveBeenCalledWith("Sign-in was cancelled");
 			expect(t.showErrorMessage).not.toHaveBeenCalled();
 			expect(t.errorLog).not.toHaveBeenCalled();
 		});
