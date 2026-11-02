@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.20
+
+### Patch Changes
+
+- c583813: Add the `vercelAiGateway.zeroDataRetention` setting, which routes chat requests only to providers with zero data retention agreements with Vercel.
+
 ## 0.5.19
 
 ### Patch Changes
