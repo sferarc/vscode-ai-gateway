@@ -197,3 +197,38 @@ describe.each([["disallowPromptTraining"], ["zeroDataRetention"]] as const)(
 		});
 	},
 );
+
+describe("getConfig providerSort", () => {
+	function sorted(value: unknown) {
+		return {
+			get: vi.fn((key: string, d: unknown) => (key === "providerSort" ? value : d)),
+			inspect: vi.fn(() => undefined),
+		};
+	}
+
+	it.each([["cost"], ["ttft"], ["tps"]])("passes the %s sort through", (value) => {
+		getConfiguration.mockReturnValue(sorted(value));
+
+		expect(getConfig().providerSort).toBe(value);
+	});
+
+	it.each([["default"], [undefined], ["COST"], ["latency"], [1], [null]])(
+		"leaves the gateway's ranking for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(sorted(value));
+
+			expect(getConfig().providerSort).toBeUndefined();
+		},
+	);
+
+	it("declares default and the gateway's three sorts in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.providerSort"],
+		).toMatchObject({
+			type: "string",
+			default: "default",
+			enum: ["default", "cost", "ttft", "tps"],
+		});
+	});
+});

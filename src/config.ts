@@ -15,7 +15,17 @@ export function getConfig() {
 		timeout: boundedTimeout(config.get<unknown>("timeout", DEFAULT_TIMEOUT_MS)),
 		disallowPromptTraining: anyScopeEnabled(config.inspect<unknown>("disallowPromptTraining")),
 		zeroDataRetention: anyScopeEnabled(config.inspect<unknown>("zeroDataRetention")),
+		providerSort: providerSort(config.get<unknown>("providerSort")),
 	};
+}
+
+const PROVIDER_SORTS = ["cost", "ttft", "tps"] as const;
+
+export type ProviderSort = (typeof PROVIDER_SORTS)[number];
+
+// "default", like any value outside the manifest's enum, leaves the gateway's own ranking.
+function providerSort(value: unknown): ProviderSort | undefined {
+	return PROVIDER_SORTS.find((sort) => sort === value);
 }
 
 // A workspace may turn a filter on but not off, so a cloned repo cannot route the user's prompts past the user's data policy.

@@ -32,7 +32,7 @@ import {
 } from "vscode";
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
-import { getConfig } from "./config";
+import { getConfig, type ProviderSort } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
@@ -249,6 +249,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					autoCaching: hasCacheBreakpoint(chatMessages),
 					disallowPromptTraining: config.disallowPromptTraining,
 					zeroDataRetention: config.zeroDataRetention,
+					sort: config.providerSort,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -822,16 +823,25 @@ function gatewayOptions(options: {
 	autoCaching: boolean;
 	disallowPromptTraining: boolean;
 	zeroDataRetention: boolean;
+	sort: ProviderSort | undefined;
 }):
-	| { gateway: { caching?: "auto"; disallowPromptTraining?: true; zeroDataRetention?: true } }
+	| {
+			gateway: {
+				caching?: "auto";
+				disallowPromptTraining?: true;
+				zeroDataRetention?: true;
+				sort?: ProviderSort;
+			};
+	  }
 	| undefined {
-	const { autoCaching, disallowPromptTraining, zeroDataRetention } = options;
-	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention) return undefined;
+	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort } = options;
+	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention && !sort) return undefined;
 	return {
 		gateway: {
 			...(autoCaching && { caching: "auto" }),
 			...(disallowPromptTraining && { disallowPromptTraining: true }),
 			...(zeroDataRetention && { zeroDataRetention: true }),
+			...(sort && { sort }),
 		},
 	};
 }
