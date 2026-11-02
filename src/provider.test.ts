@@ -604,10 +604,12 @@ describe("provideLanguageModelChatResponse", () => {
 		model: object,
 		modelOptions?: Record<string, unknown>,
 		content: unknown[] = [new hoisted.MockLanguageModelTextPart("Hello")],
+		userSettings: Record<string, unknown> = {},
 	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,
-			inspect: () => undefined,
+			inspect: (key: string) =>
+				key in userSettings ? { globalValue: userSettings[key] } : undefined,
 		});
 
 		const vscode = await import("vscode");
@@ -699,6 +701,34 @@ describe("provideLanguageModelChatResponse", () => {
 
 	it("sends no provider options when the request has no cache breakpoint", async () => {
 		expect((await requestOptions({})).providerOptions).toBeUndefined();
+	});
+
+	it("asks the gateway to skip providers that train on prompts when the setting is on", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const on = { disallowPromptTraining: true };
+
+		expect((await requestOptions({}, {}, [text], on)).providerOptions).toEqual({
+			gateway: { disallowPromptTraining: true },
+		});
+	});
+
+	it("sends the prompt training filter together with automatic caching", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text, breakpoint], {
+			disallowPromptTraining: true,
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { caching: "auto", disallowPromptTraining: true },
+		});
+	});
+
+	it("leaves the prompt training filter out when the setting is off", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const off = { disallowPromptTraining: false };
+
+		expect((await requestOptions({}, {}, [text], off)).providerOptions).toBeUndefined();
 	});
 
 	async function respondWithTimeout(

@@ -11,6 +11,7 @@ import { extractErrorMessage } from "./logger";
 
 const MANAGE_AUTH_COMMAND = "Vercel AI Gateway: Manage Authentication";
 const ENDPOINT_SETTING = `${EXTENSION_ID}.endpoint`;
+const PROMPT_TRAINING_SETTING = `${EXTENSION_ID}.disallowPromptTraining`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -33,6 +34,7 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 	const unreachable = apiCall !== undefined && apiCall.statusCode === undefined;
 	const statusCode = unreachable ? undefined : (gateway?.statusCode ?? apiCall?.statusCode);
 	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
+	const noProviders = statusCode === 400 ? noProvidersAvailable(apiCall) : undefined;
 	// A budget or invalid request message is the gateway's own text; the cause chain only repeats it as raw JSON.
 	const ownMessage = statusCode === 402 || GatewayInvalidRequestError.isInstance(failure);
 	const detail = GatewayAuthenticationError.isInstance(failure)
@@ -50,9 +52,11 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 			? `Could not reach the gateway; no HTTP response came back. Check the network connection and the "${ENDPOINT_SETTING}" setting, then try again. Details: ${apiCall.message}`
 			: modelNotFound
 				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
-				: GatewayForbiddenError.isInstance(failure)
-					? policyMessage(statusCode, failure.ruleId, detail)
-					: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
+				: noProviders !== undefined
+					? `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "${PROMPT_TRAINING_SETTING}" setting if it is on. Details: ${noProviders || detail}`
+					: GatewayForbiddenError.isInstance(failure)
+						? policyMessage(statusCode, failure.ruleId, detail)
+						: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
 	};
 }
 
@@ -74,6 +78,30 @@ function authenticationDetail(error: GatewayAuthenticationError, apiCall?: APICa
 	const gatewayMessage = apiCall?.message.trim();
 	if (!gatewayMessage || gatewayMessage === summary) return summary;
 	return summary ? `${summary} (${gatewayMessage})` : gatewayMessage;
+}
+
+// Vercel documents this refusal as a flat { error, type } body, which the SDK cannot parse and replaces with its own text.
+function noProvidersAvailable(apiCall: APICallError | undefined): string | undefined {
+	const body = responseBody(apiCall);
+	if (!isRecord(body)) return undefined;
+	const nested = isRecord(body.error) ? body.error : undefined;
+	if ((nested?.type ?? body.type) !== "no_providers_available") return undefined;
+	const message = nested?.message ?? body.error;
+	return typeof message === "string" ? message.trim() : "";
+}
+
+function responseBody(apiCall: APICallError | undefined): unknown {
+	if (apiCall?.data !== undefined) return apiCall.data;
+	if (!apiCall?.responseBody) return undefined;
+	try {
+		return JSON.parse(apiCall.responseBody);
+	} catch {
+		return undefined;
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
 }
 
 // The gateway provider wraps the APICallError from the HTTP layer in a GatewayError's cause.
