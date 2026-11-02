@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.21
+
+### Patch Changes
+
+- cb71892: Add the `vercelAiGateway.providerSort` setting, which asks the gateway to try a model's providers cheapest first (`cost`), lowest latency first (`ttft`) or highest throughput first (`tps`).
+
 ## 0.5.20
 
 ### Patch Changes
