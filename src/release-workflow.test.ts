@@ -11,4 +11,10 @@ describe("release workflow", () => {
 		expect(source).toContain("steps.changesets.outputs.has-changesets == 'false'");
 		expect(source).not.toContain("outputs.hasChangesets");
 	});
+
+	it("tags and releases through the idempotent script", async () => {
+		const source = await readFile(workflow, "utf8");
+
+		expect(source).toContain("run: ./scripts/github-release.sh");
+	});
 });
