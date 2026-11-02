@@ -47,7 +47,8 @@
 		"languageModelChatProviders": [
 			{
 				"vendor": "vercelAiGateway",
-				"displayName": "Vercel AI Gateway"
+				"displayName": "Vercel AI Gateway",
+				"icon": "$(triangle-up)"
 			}
 		],
 		"commands": [
