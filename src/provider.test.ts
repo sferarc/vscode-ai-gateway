@@ -788,6 +788,33 @@ describe("provideLanguageModelChatResponse", () => {
 		expect((await requestOptions({}, {}, [text], byDefault)).providerOptions).toBeUndefined();
 	});
 
+	it("asks the gateway to try the listed providers first", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const preferred = { providerOrder: ["bedrock", "anthropic"] };
+
+		expect((await requestOptions({}, {}, [text], preferred)).providerOptions).toEqual({
+			gateway: { order: ["bedrock", "anthropic"] },
+		});
+	});
+
+	it("sends the provider order together with the sort", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			providerSort: "tps",
+			providerOrder: ["vertex"],
+		});
+		expect(options.providerOptions).toEqual({ gateway: { sort: "tps", order: ["vertex"] } });
+	});
+
+	it("leaves the provider order out when the list is empty", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { providerOrder: [] })).providerOptions,
+		).toBeUndefined();
+	});
+
 	async function respondWithTimeout(
 		isCancellationRequested: boolean,
 		textBeforeStall?: string,

@@ -250,6 +250,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					disallowPromptTraining: config.disallowPromptTraining,
 					zeroDataRetention: config.zeroDataRetention,
 					sort: config.providerSort,
+					order: config.providerOrder,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -824,6 +825,7 @@ function gatewayOptions(options: {
 	disallowPromptTraining: boolean;
 	zeroDataRetention: boolean;
 	sort: ProviderSort | undefined;
+	order: string[] | undefined;
 }):
 	| {
 			gateway: {
@@ -831,17 +833,21 @@ function gatewayOptions(options: {
 				disallowPromptTraining?: true;
 				zeroDataRetention?: true;
 				sort?: ProviderSort;
+				order?: string[];
 			};
 	  }
 	| undefined {
-	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort } = options;
-	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention && !sort) return undefined;
+	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort, order } = options;
+	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention && !sort && !order) {
+		return undefined;
+	}
 	return {
 		gateway: {
 			...(autoCaching && { caching: "auto" }),
 			...(disallowPromptTraining && { disallowPromptTraining: true }),
 			...(zeroDataRetention && { zeroDataRetention: true }),
 			...(sort && { sort }),
+			...(order && { order }),
 		},
 	};
 }

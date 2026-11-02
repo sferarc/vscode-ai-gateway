@@ -232,3 +232,40 @@ describe("getConfig providerSort", () => {
 		});
 	});
 });
+
+describe("getConfig providerOrder", () => {
+	function ordered(value: unknown) {
+		return {
+			get: vi.fn((key: string, d: unknown) => (key === "providerOrder" ? value : d)),
+			inspect: vi.fn(() => undefined),
+		};
+	}
+
+	it("passes the provider slugs through in order", () => {
+		getConfiguration.mockReturnValue(ordered(["bedrock", "anthropic"]));
+
+		expect(getConfig().providerOrder).toEqual(["bedrock", "anthropic"]);
+	});
+
+	it("trims, lowercases and drops empty, repeated and non-string entries", () => {
+		getConfiguration.mockReturnValue(ordered([" Vertex ", "", 3, null, "vertex", "ANTHROPIC"]));
+
+		expect(getConfig().providerOrder).toEqual(["vertex", "anthropic"]);
+	});
+
+	it.each([[[]], [undefined], ["bedrock"], [[" ", 1]], [{ order: ["bedrock"] }]])(
+		"leaves the gateway's ranking for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(ordered(value));
+
+			expect(getConfig().providerOrder).toBeUndefined();
+		},
+	);
+
+	it("declares an empty list of strings in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.providerOrder"],
+		).toMatchObject({ type: "array", items: { type: "string" }, default: [] });
+	});
+});
