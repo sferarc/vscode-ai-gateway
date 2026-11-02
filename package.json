@@ -83,6 +83,11 @@
 					"description": "Maximum time in milliseconds to wait for the model to start or continue responding, and for the model list to load.",
 					"minimum": 5000,
 					"maximum": 300000
+				},
+				"vercelAiGateway.disallowPromptTraining": {
+					"type": "boolean",
+					"default": false,
+					"description": "Route chat requests only to providers that do not train on prompts. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Not enforced for requests that use your own provider keys (BYOK)."
 				}
 			}
 		}

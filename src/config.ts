@@ -13,7 +13,19 @@ export function getConfig() {
 	return {
 		endpoint: normalisedEndpoint(config.inspect<unknown>("endpoint")?.globalValue),
 		timeout: boundedTimeout(config.get<unknown>("timeout", DEFAULT_TIMEOUT_MS)),
+		disallowPromptTraining: anyScopeEnabled(config.inspect<unknown>("disallowPromptTraining")),
 	};
+}
+
+// A workspace may turn the filter on but not off, so a cloned repo cannot route the user's prompts to training providers.
+function anyScopeEnabled(
+	inspected:
+		| { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown }
+		| undefined,
+): boolean {
+	return [inspected?.globalValue, inspected?.workspaceValue, inspected?.workspaceFolderValue].some(
+		(value) => value === true,
+	);
 }
 
 // Vercel's docs give base URLs ending in /v1 (OpenAI SDKs) and /v4/ai (AI SDK); the paths here add their own.
