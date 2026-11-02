@@ -143,51 +143,57 @@ describe("getConfig timeout", () => {
 	});
 });
 
-describe("getConfig disallowPromptTraining", () => {
-	function promptTraining(values: {
-		globalValue?: unknown;
-		workspaceValue?: unknown;
-		workspaceFolderValue?: unknown;
-	}) {
-		return {
-			get: vi.fn((_: string, d: unknown) => d),
-			inspect: vi.fn((key: string) =>
-				key === "disallowPromptTraining" ? { key, defaultValue: false, ...values } : undefined,
-			),
-		};
-	}
+describe.each([["disallowPromptTraining"], ["zeroDataRetention"]] as const)(
+	"getConfig %s",
+	(setting) => {
+		function filter(values: {
+			globalValue?: unknown;
+			workspaceValue?: unknown;
+			workspaceFolderValue?: unknown;
+		}) {
+			return {
+				get: vi.fn((_: string, d: unknown) => d),
+				inspect: vi.fn((key: string) =>
+					key === setting ? { key, defaultValue: false, ...values } : undefined,
+				),
+			};
+		}
 
-	it("is off by default", () => {
-		getConfiguration.mockReturnValue(promptTraining({}));
+		it("is off by default", () => {
+			getConfiguration.mockReturnValue(filter({}));
 
-		expect(getConfig().disallowPromptTraining).toBe(false);
-	});
+			expect(getConfig()[setting]).toBe(false);
+		});
 
-	it.each([[{ globalValue: true }], [{ workspaceValue: true }], [{ workspaceFolderValue: true }]])(
-		"is on when any scope turns it on: %o",
-		(values) => {
-			getConfiguration.mockReturnValue(promptTraining(values));
+		it.each([
+			[{ globalValue: true }],
+			[{ workspaceValue: true }],
+			[{ workspaceFolderValue: true }],
+		])("is on when any scope turns it on: %o", (values) => {
+			getConfiguration.mockReturnValue(filter(values));
 
-			expect(getConfig().disallowPromptTraining).toBe(true);
-		},
-	);
+			expect(getConfig()[setting]).toBe(true);
+		});
 
-	it("stays on when a workspace sets it to false over the user's true", () => {
-		getConfiguration.mockReturnValue(promptTraining({ globalValue: true, workspaceValue: false }));
+		it("stays on when a workspace sets it to false over the user's true", () => {
+			getConfiguration.mockReturnValue(filter({ globalValue: true, workspaceValue: false }));
 
-		expect(getConfig().disallowPromptTraining).toBe(true);
-	});
+			expect(getConfig()[setting]).toBe(true);
+		});
 
-	it.each([["true"], [1], [null]])("ignores the non boolean value %o", (value) => {
-		getConfiguration.mockReturnValue(promptTraining({ globalValue: value }));
+		it.each([["true"], [1], [null]])("ignores the non boolean value %o", (value) => {
+			getConfiguration.mockReturnValue(filter({ globalValue: value }));
 
-		expect(getConfig().disallowPromptTraining).toBe(false);
-	});
+			expect(getConfig()[setting]).toBe(false);
+		});
 
-	it("is declared off by default in the manifest", () => {
-		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-		expect(
-			manifest.contributes.configuration.properties["vercelAiGateway.disallowPromptTraining"],
-		).toMatchObject({ type: "boolean", default: false });
-	});
-});
+		it("is declared off by default in the manifest", () => {
+			const manifest = JSON.parse(
+				readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+			);
+			expect(
+				manifest.contributes.configuration.properties[`vercelAiGateway.${setting}`],
+			).toMatchObject({ type: "boolean", default: false });
+		});
+	},
+);

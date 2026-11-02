@@ -88,6 +88,11 @@
 					"type": "boolean",
 					"default": false,
 					"description": "Route chat requests only to providers that do not train on prompts. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Not enforced for requests that use your own provider keys (BYOK)."
+				},
+				"vercelAiGateway.zeroDataRetention": {
+					"type": "boolean",
+					"default": false,
+					"description": "Route chat requests only to providers with zero data retention agreements with Vercel. Needs a Vercel Pro or Enterprise team. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Your own provider keys (BYOK) are skipped unless marked as ZDR in the AI Gateway dashboard."
 				}
 			}
 		}

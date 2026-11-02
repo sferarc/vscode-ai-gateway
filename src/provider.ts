@@ -245,10 +245,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				temperature: this.temperatureFor(model.id, options.modelOptions?.temperature),
 				maxOutputTokens: outputTokenLimit(model, options.modelOptions?.maxOutputTokens),
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
-				providerOptions: gatewayOptions(
-					hasCacheBreakpoint(chatMessages),
-					config.disallowPromptTraining,
-				),
+				providerOptions: gatewayOptions({
+					autoCaching: hasCacheBreakpoint(chatMessages),
+					disallowPromptTraining: config.disallowPromptTraining,
+					zeroDataRetention: config.zeroDataRetention,
+				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
 			});
@@ -817,15 +818,20 @@ const UNSUPPORTED_TOOL_RESULT = "[Unsupported tool result content]";
 const CACHE_CONTROL_MIME_TYPE = "cache_control";
 
 // The breakpoints themselves are dropped, so the gateway is asked to cache wherever the provider supports it.
-function gatewayOptions(
-	autoCaching: boolean,
-	disallowPromptTraining: boolean,
-): { gateway: { caching?: "auto"; disallowPromptTraining?: true } } | undefined {
-	if (!autoCaching && !disallowPromptTraining) return undefined;
+function gatewayOptions(options: {
+	autoCaching: boolean;
+	disallowPromptTraining: boolean;
+	zeroDataRetention: boolean;
+}):
+	| { gateway: { caching?: "auto"; disallowPromptTraining?: true; zeroDataRetention?: true } }
+	| undefined {
+	const { autoCaching, disallowPromptTraining, zeroDataRetention } = options;
+	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention) return undefined;
 	return {
 		gateway: {
 			...(autoCaching && { caching: "auto" }),
 			...(disallowPromptTraining && { disallowPromptTraining: true }),
+			...(zeroDataRetention && { zeroDataRetention: true }),
 		},
 	};
 }

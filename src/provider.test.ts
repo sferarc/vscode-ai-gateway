@@ -731,6 +731,35 @@ describe("provideLanguageModelChatResponse", () => {
 		expect((await requestOptions({}, {}, [text], off)).providerOptions).toBeUndefined();
 	});
 
+	it("asks the gateway for zero data retention when the setting is on", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const on = { zeroDataRetention: true };
+
+		expect((await requestOptions({}, {}, [text], on)).providerOptions).toEqual({
+			gateway: { zeroDataRetention: true },
+		});
+	});
+
+	it("sends zero data retention together with the other gateway options", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text, breakpoint], {
+			disallowPromptTraining: true,
+			zeroDataRetention: true,
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { caching: "auto", disallowPromptTraining: true, zeroDataRetention: true },
+		});
+	});
+
+	it("leaves zero data retention out when the setting is off", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const off = { zeroDataRetention: false };
+
+		expect((await requestOptions({}, {}, [text], off)).providerOptions).toBeUndefined();
+	});
+
 	async function respondWithTimeout(
 		isCancellationRequested: boolean,
 		textBeforeStall?: string,
