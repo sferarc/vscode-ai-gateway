@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.22
+
+### Patch Changes
+
+- a4b59b7: Add the `vercelAiGateway.providerOrder` setting, a list of provider slugs the gateway tries first for a chat model before falling back to the others.
+
 ## 0.5.21
 
 ### Patch Changes
