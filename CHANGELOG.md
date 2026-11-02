@@ -1,5 +1,36 @@
 # vscode-extension-vercel-ai
 
+## 0.5.22
+
+### Patch Changes
+
+- a4b59b7: Add the `vercelAiGateway.providerOrder` setting, a list of provider slugs the gateway tries first for a chat model before falling back to the others.
+
+## 0.5.21
+
+### Patch Changes
+
+- cb71892: Add the `vercelAiGateway.providerSort` setting, which asks the gateway to try a model's providers cheapest first (`cost`), lowest latency first (`ttft`) or highest throughput first (`tps`).
+
+## 0.5.20
+
+### Patch Changes
+
+- c583813: Add the `vercelAiGateway.zeroDataRetention` setting, which routes chat requests only to providers with zero data retention agreements with Vercel.
+
+## 0.5.19
+
+### Patch Changes
+
+- e012292: Add the `vercelAiGateway.disallowPromptTraining` setting, which routes chat requests only to providers that do not train on prompts, and explain the error when a model has no such provider.
+- 6748292: Show in the model tooltip whether the providers serving a model may train on prompts or offer zero data retention.
+
+## 0.5.18
+
+### Patch Changes
+
+- d9d9956: Show an icon for Vercel AI Gateway in the chat model picker (VS Code 1.143 and later).
+
 ## 0.5.17
 
 ### Patch Changes

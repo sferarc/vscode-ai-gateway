@@ -235,6 +235,48 @@ describe("describeGatewayError", () => {
 		);
 	});
 
+	it("names a model with no provider that disallows prompt training", async () => {
+		// Error body from the "Disallow prompt training per request" section of Vercel's AI Gateway docs.
+		const message =
+			"No providers available that disallow prompt training for model: example/model-name. Providers considered: provider-a, provider-b";
+		const { error, requests } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+			statusCode: 400,
+		});
+		expect(requests).toBe(1);
+		expect(extractErrorMessage(error)).toContain("Invalid error response format");
+		const description = describeGatewayError(error);
+		expect(description).toMatchObject({ statusCode: 400, isRetryable: false });
+		expect(description.userMessage).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
+		);
+	});
+
+	it("names the same refusal when the gateway nests it in an error object", async () => {
+		const message = "No providers available that disallow prompt training for model: a/b";
+		const { error } = await gatewayResponseError(400, {
+			error: { message, type: "no_providers_available" },
+		});
+		expect(describeGatewayError(error).userMessage).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
+		);
+	});
+
+	it("names a model with no provider that offers zero data retention", async () => {
+		// Error body from the "Per-request zero data retention" section of Vercel's AI Gateway docs.
+		const message =
+			"No ZDR (Zero Data Retention) providers available for model: example/model-name. Providers considered: provider-a, provider-b";
+		const { error } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+			statusCode: 400,
+		});
+		expect(describeGatewayError(error).userMessage).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
+		);
+	});
+
 	it("calls a 5xx retryable", () => {
 		const { userMessage } = describeGatewayError(apiCallError(503));
 		expect(userMessage).toContain("(HTTP 503)");

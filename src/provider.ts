@@ -32,7 +32,7 @@ import {
 } from "vscode";
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
-import { getConfig } from "./config";
+import { getConfig, type ProviderSort } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
@@ -245,7 +245,13 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				temperature: this.temperatureFor(model.id, options.modelOptions?.temperature),
 				maxOutputTokens: outputTokenLimit(model, options.modelOptions?.maxOutputTokens),
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
-				providerOptions: hasCacheBreakpoint(chatMessages) ? AUTO_CACHING : undefined,
+				providerOptions: gatewayOptions({
+					autoCaching: hasCacheBreakpoint(chatMessages),
+					disallowPromptTraining: config.disallowPromptTraining,
+					zeroDataRetention: config.zeroDataRetention,
+					sort: config.providerSort,
+					order: config.providerOrder,
+				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
 			});
@@ -812,8 +818,39 @@ function convertToolResultOutput(content: readonly unknown[]): ToolResultOutput 
 const UNSUPPORTED_TOOL_RESULT = "[Unsupported tool result content]";
 /** VS Code marks prompt cache breakpoints with a data part of this type; it carries no content. */
 const CACHE_CONTROL_MIME_TYPE = "cache_control";
+
 // The breakpoints themselves are dropped, so the gateway is asked to cache wherever the provider supports it.
-const AUTO_CACHING = { gateway: { caching: "auto" } };
+function gatewayOptions(options: {
+	autoCaching: boolean;
+	disallowPromptTraining: boolean;
+	zeroDataRetention: boolean;
+	sort: ProviderSort | undefined;
+	order: string[] | undefined;
+}):
+	| {
+			gateway: {
+				caching?: "auto";
+				disallowPromptTraining?: true;
+				zeroDataRetention?: true;
+				sort?: ProviderSort;
+				order?: string[];
+			};
+	  }
+	| undefined {
+	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort, order } = options;
+	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention && !sort && !order) {
+		return undefined;
+	}
+	return {
+		gateway: {
+			...(autoCaching && { caching: "auto" }),
+			...(disallowPromptTraining && { disallowPromptTraining: true }),
+			...(zeroDataRetention && { zeroDataRetention: true }),
+			...(sort && { sort }),
+			...(order && { order }),
+		},
+	};
+}
 
 function isCacheBreakpoint(part: unknown): boolean {
 	return part instanceof LanguageModelDataPart && part.mimeType === CACHE_CONTROL_MIME_TYPE;

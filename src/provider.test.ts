@@ -283,6 +283,7 @@ describe("active session", () => {
 				getModels,
 				logged: () => logs.flatMap((spy) => spy.mock.calls),
 				errorLog: logs[0],
+				infoLog: logs[2],
 			};
 		}
 
@@ -371,12 +372,16 @@ describe("active session", () => {
 			expect(t.errorLog).not.toHaveBeenCalled();
 		});
 
-		it("shows no error toast when the extension's own sign-in picker is dismissed", async () => {
+		it("logs a dismissed sign-in picker at info after VS Code relays it to getSession", async () => {
 			const t = await setup(async () => null);
-			t.getSession.mockRejectedValue(new AuthCancelledError("API key required"));
+			// VS Code 1.137.0 rpcProtocol.ts _receiveReplyErr rebuilds a relayed error from name, message and stack only.
+			const thrown = new AuthCancelledError("API key required");
+			const relayed = Object.assign(new Error(), { name: thrown.name, message: thrown.message });
+			t.getSession.mockRejectedValue(relayed);
 
 			await t.provider.provideLanguageModelChatInformation({ silent: false }, {} as never);
 
+			expect(t.infoLog).toHaveBeenCalledWith("Sign-in was cancelled");
 			expect(t.showErrorMessage).not.toHaveBeenCalled();
 			expect(t.errorLog).not.toHaveBeenCalled();
 		});
@@ -599,10 +604,12 @@ describe("provideLanguageModelChatResponse", () => {
 		model: object,
 		modelOptions?: Record<string, unknown>,
 		content: unknown[] = [new hoisted.MockLanguageModelTextPart("Hello")],
+		userSettings: Record<string, unknown> = {},
 	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
-			get: (_: string, d?: unknown) => d,
-			inspect: () => undefined,
+			get: (key: string, d?: unknown) => (key in userSettings ? userSettings[key] : d),
+			inspect: (key: string) =>
+				key in userSettings ? { globalValue: userSettings[key] } : undefined,
 		});
 
 		const vscode = await import("vscode");
@@ -694,6 +701,118 @@ describe("provideLanguageModelChatResponse", () => {
 
 	it("sends no provider options when the request has no cache breakpoint", async () => {
 		expect((await requestOptions({})).providerOptions).toBeUndefined();
+	});
+
+	it("asks the gateway to skip providers that train on prompts when the setting is on", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const on = { disallowPromptTraining: true };
+
+		expect((await requestOptions({}, {}, [text], on)).providerOptions).toEqual({
+			gateway: { disallowPromptTraining: true },
+		});
+	});
+
+	it("sends the prompt training filter together with automatic caching", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text, breakpoint], {
+			disallowPromptTraining: true,
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { caching: "auto", disallowPromptTraining: true },
+		});
+	});
+
+	it("leaves the prompt training filter out when the setting is off", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const off = { disallowPromptTraining: false };
+
+		expect((await requestOptions({}, {}, [text], off)).providerOptions).toBeUndefined();
+	});
+
+	it("asks the gateway for zero data retention when the setting is on", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const on = { zeroDataRetention: true };
+
+		expect((await requestOptions({}, {}, [text], on)).providerOptions).toEqual({
+			gateway: { zeroDataRetention: true },
+		});
+	});
+
+	it("sends zero data retention together with the other gateway options", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text, breakpoint], {
+			disallowPromptTraining: true,
+			zeroDataRetention: true,
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { caching: "auto", disallowPromptTraining: true, zeroDataRetention: true },
+		});
+	});
+
+	it("leaves zero data retention out when the setting is off", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const off = { zeroDataRetention: false };
+
+		expect((await requestOptions({}, {}, [text], off)).providerOptions).toBeUndefined();
+	});
+
+	it("asks the gateway to sort providers by the chosen metric", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { providerSort: "ttft" })).providerOptions,
+		).toEqual({ gateway: { sort: "ttft" } });
+	});
+
+	it("sends the provider sort together with the other gateway options", async () => {
+		const breakpoint = hoisted.MockLanguageModelDataPart.text("ephemeral", "cache_control");
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text, breakpoint], {
+			zeroDataRetention: true,
+			providerSort: "cost",
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { caching: "auto", zeroDataRetention: true, sort: "cost" },
+		});
+	});
+
+	it("leaves the provider sort out for the default ranking", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const byDefault = { providerSort: "default" };
+
+		expect((await requestOptions({}, {}, [text], byDefault)).providerOptions).toBeUndefined();
+	});
+
+	it("asks the gateway to try the listed providers first", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+		const preferred = { providerOrder: ["bedrock", "anthropic"] };
+
+		expect((await requestOptions({}, {}, [text], preferred)).providerOptions).toEqual({
+			gateway: { order: ["bedrock", "anthropic"] },
+		});
+	});
+
+	it("sends the provider order together with the sort", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			providerSort: "tps",
+			providerOrder: ["vertex"],
+		});
+		expect(options.providerOptions).toEqual({ gateway: { sort: "tps", order: ["vertex"] } });
+	});
+
+	it("leaves the provider order out when the list is empty", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { providerOrder: [] })).providerOptions,
+		).toBeUndefined();
 	});
 
 	async function respondWithTimeout(

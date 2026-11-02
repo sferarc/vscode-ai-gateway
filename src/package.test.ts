@@ -24,7 +24,7 @@ interface Manifest {
 	activationEvents: string[];
 	contributes: {
 		commands: { command: string }[];
-		languageModelChatProviders: { vendor: string }[];
+		languageModelChatProviders: { vendor: string; icon?: unknown }[];
 		authentication: { id: string }[];
 	};
 }
@@ -61,6 +61,13 @@ describe("manifest", () => {
 		expect(auth).toMatch(/registerAuthenticationProvider\(\s*EXTENSION_ID\b/);
 		expect(pkg.contributes.languageModelChatProviders.map((p) => p.vendor)).toEqual([EXTENSION_ID]);
 		expect(pkg.contributes.authentication.map((a) => a.id)).toEqual([EXTENSION_ID]);
+	});
+
+	it("gives the chat provider a theme icon for the model picker", async () => {
+		const pkg = await readManifest();
+
+		// A $(name) reference needs no asset and follows the theme; VS Code before 1.143 ignores it.
+		expect(pkg.contributes.languageModelChatProviders[0]?.icon).toMatch(/^\$\([a-z0-9-]+\)$/);
 	});
 
 	it("activates only on the contributed chat provider", async () => {

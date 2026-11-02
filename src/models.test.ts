@@ -395,6 +395,53 @@ describe("ModelsClient", () => {
 			expect(freeForm?.tooltip).toBe("Text");
 		});
 
+		it("says whether the providers may train on prompts or retain data", async () => {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{
+							...baseModel,
+							id: "strict",
+							description: "Strict",
+							knowledge: "2025-04",
+							no_training: "all",
+							zdr: "all",
+							deprecated_at: 1794960000000,
+						},
+						{ ...baseModel, id: "mixed", description: "Mixed", no_training: "some", zdr: "some" },
+						{ ...baseModel, id: "open", description: "Open", no_training: "none", zdr: "none" },
+						{ ...baseModel, id: "half", description: "Half", no_training: "all", zdr: "maybe" },
+						{
+							...baseModel,
+							id: "unknown",
+							description: "Unknown",
+							no_training: "toString",
+							zdr: 1,
+						},
+						{ ...baseModel, id: "missing", description: "Missing" },
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const [strict, mixed, open, half, unknown, missing] = await new ModelsClient().getModels(
+				"test-key",
+			);
+
+			expect(strict?.tooltip).toBe(
+				"Strict\n\nKnowledge cutoff: 2025-04.\n\nData: no provider trains on prompts; zero data retention with every provider.\n\nThe gateway marks this model as deprecated from 2026-11-18.",
+			);
+			expect(mixed?.tooltip).toBe(
+				"Mixed\n\nData: some providers may train on prompts; zero data retention with some providers.",
+			);
+			expect(open?.tooltip).toBe(
+				"Open\n\nData: providers may train on prompts; no provider offers zero data retention.",
+			);
+			expect(half?.tooltip).toBe("Half\n\nData: no provider trains on prompts.");
+			expect(unknown?.tooltip).toBe("Unknown");
+			expect(missing?.tooltip).toBe("Missing");
+		});
+
 		it("keeps using tags for web search, which has no structured field", async () => {
 			const capabilities = await capabilitiesOf({
 				...baseModel,

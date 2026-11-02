@@ -45,6 +45,10 @@ export interface Model {
 	knowledge?: string | null;
 	/** When the gateway deprecates the model, in milliseconds since the epoch, unlike `created`. */
 	deprecated_at?: number;
+	/** How many of the providers serving the model do not train on prompts: `all`, `some` or `none`. */
+	no_training?: string;
+	/** How many of the providers serving the model offer zero data retention: `all`, `some` or `none`. */
+	zdr?: string;
 	/** US dollars per token, as decimal strings. */
 	pricing?: {
 		input?: string;
@@ -157,6 +161,26 @@ function deprecationDate(model: Model): string | undefined {
 function knowledgeCutoff(model: Model): string | undefined {
 	const value = model.knowledge;
 	return typeof value === "string" && /^\d{4}-\d{2}(-\d{2})?$/.test(value) ? value : undefined;
+}
+
+const TRAINING_POLICY = new Map<unknown, string>([
+	["all", "no provider trains on prompts"],
+	["some", "some providers may train on prompts"],
+	["none", "providers may train on prompts"],
+]);
+
+const RETENTION_POLICY = new Map<unknown, string>([
+	["all", "zero data retention with every provider"],
+	["some", "zero data retention with some providers"],
+	["none", "no provider offers zero data retention"],
+]);
+
+// The gateway assumes a provider trains on prompts unless it has an agreement saying otherwise.
+function describeDataPolicy(model: Model): string | undefined {
+	const parts = [TRAINING_POLICY.get(model.no_training), RETENTION_POLICY.get(model.zdr)].filter(
+		Boolean,
+	);
+	return parts.length > 0 ? `Data: ${parts.join("; ")}.` : undefined;
 }
 
 const PRICE_FORMAT = new Intl.NumberFormat("en-US", {
@@ -333,6 +357,7 @@ export class ModelsClient {
 				description,
 				describePricing(model),
 				cutoff && `Knowledge cutoff: ${cutoff}.`,
+				describeDataPolicy(model),
 				deprecated && `The gateway marks this model as deprecated from ${deprecated}.`,
 			].filter(Boolean);
 

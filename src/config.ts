@@ -13,7 +13,41 @@ export function getConfig() {
 	return {
 		endpoint: normalisedEndpoint(config.inspect<unknown>("endpoint")?.globalValue),
 		timeout: boundedTimeout(config.get<unknown>("timeout", DEFAULT_TIMEOUT_MS)),
+		disallowPromptTraining: anyScopeEnabled(config.inspect<unknown>("disallowPromptTraining")),
+		zeroDataRetention: anyScopeEnabled(config.inspect<unknown>("zeroDataRetention")),
+		providerSort: providerSort(config.get<unknown>("providerSort")),
+		providerOrder: providerSlugs(config.get<unknown>("providerOrder")),
 	};
+}
+
+const PROVIDER_SORTS = ["cost", "ttft", "tps"] as const;
+
+export type ProviderSort = (typeof PROVIDER_SORTS)[number];
+
+// "default", like any value outside the manifest's enum, leaves the gateway's own ranking.
+function providerSort(value: unknown): ProviderSort | undefined {
+	return PROVIDER_SORTS.find((sort) => sort === value);
+}
+
+// settings.json can hold any value; slugs are lowercase, and an empty list leaves the gateway's ranking.
+function providerSlugs(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const slugs = value
+		.filter((entry): entry is string => typeof entry === "string")
+		.map((entry) => entry.trim().toLowerCase())
+		.filter(Boolean);
+	return slugs.length > 0 ? [...new Set(slugs)] : undefined;
+}
+
+// A workspace may turn a filter on but not off, so a cloned repo cannot route the user's prompts past the user's data policy.
+function anyScopeEnabled(
+	inspected:
+		| { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown }
+		| undefined,
+): boolean {
+	return [inspected?.globalValue, inspected?.workspaceValue, inspected?.workspaceFolderValue].some(
+		(value) => value === true,
+	);
 }
 
 // Vercel's docs give base URLs ending in /v1 (OpenAI SDKs) and /v4/ai (AI SDK); the paths here add their own.

@@ -82,4 +82,10 @@ describe("release workflow", () => {
 		expect(stale).toContain("current=false\n");
 		expect(stale).toContain("::notice::aaa is no longer the head of refs/heads/main (now bbb)");
 	});
+
+	it("tags and releases through the idempotent script", async () => {
+		const source = await readFile(workflow, "utf8");
+
+		expect(source).toContain("run: ./scripts/github-release.sh");
+	});
 });

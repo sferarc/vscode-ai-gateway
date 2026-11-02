@@ -142,3 +142,130 @@ describe("getConfig timeout", () => {
 		});
 	});
 });
+
+describe.each([["disallowPromptTraining"], ["zeroDataRetention"]] as const)(
+	"getConfig %s",
+	(setting) => {
+		function filter(values: {
+			globalValue?: unknown;
+			workspaceValue?: unknown;
+			workspaceFolderValue?: unknown;
+		}) {
+			return {
+				get: vi.fn((_: string, d: unknown) => d),
+				inspect: vi.fn((key: string) =>
+					key === setting ? { key, defaultValue: false, ...values } : undefined,
+				),
+			};
+		}
+
+		it("is off by default", () => {
+			getConfiguration.mockReturnValue(filter({}));
+
+			expect(getConfig()[setting]).toBe(false);
+		});
+
+		it.each([
+			[{ globalValue: true }],
+			[{ workspaceValue: true }],
+			[{ workspaceFolderValue: true }],
+		])("is on when any scope turns it on: %o", (values) => {
+			getConfiguration.mockReturnValue(filter(values));
+
+			expect(getConfig()[setting]).toBe(true);
+		});
+
+		it("stays on when a workspace sets it to false over the user's true", () => {
+			getConfiguration.mockReturnValue(filter({ globalValue: true, workspaceValue: false }));
+
+			expect(getConfig()[setting]).toBe(true);
+		});
+
+		it.each([["true"], [1], [null]])("ignores the non boolean value %o", (value) => {
+			getConfiguration.mockReturnValue(filter({ globalValue: value }));
+
+			expect(getConfig()[setting]).toBe(false);
+		});
+
+		it("is declared off by default in the manifest", () => {
+			const manifest = JSON.parse(
+				readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+			);
+			expect(
+				manifest.contributes.configuration.properties[`vercelAiGateway.${setting}`],
+			).toMatchObject({ type: "boolean", default: false });
+		});
+	},
+);
+
+describe("getConfig providerSort", () => {
+	function sorted(value: unknown) {
+		return {
+			get: vi.fn((key: string, d: unknown) => (key === "providerSort" ? value : d)),
+			inspect: vi.fn(() => undefined),
+		};
+	}
+
+	it.each([["cost"], ["ttft"], ["tps"]])("passes the %s sort through", (value) => {
+		getConfiguration.mockReturnValue(sorted(value));
+
+		expect(getConfig().providerSort).toBe(value);
+	});
+
+	it.each([["default"], [undefined], ["COST"], ["latency"], [1], [null]])(
+		"leaves the gateway's ranking for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(sorted(value));
+
+			expect(getConfig().providerSort).toBeUndefined();
+		},
+	);
+
+	it("declares default and the gateway's three sorts in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.providerSort"],
+		).toMatchObject({
+			type: "string",
+			default: "default",
+			enum: ["default", "cost", "ttft", "tps"],
+		});
+	});
+});
+
+describe("getConfig providerOrder", () => {
+	function ordered(value: unknown) {
+		return {
+			get: vi.fn((key: string, d: unknown) => (key === "providerOrder" ? value : d)),
+			inspect: vi.fn(() => undefined),
+		};
+	}
+
+	it("passes the provider slugs through in order", () => {
+		getConfiguration.mockReturnValue(ordered(["bedrock", "anthropic"]));
+
+		expect(getConfig().providerOrder).toEqual(["bedrock", "anthropic"]);
+	});
+
+	it("trims, lowercases and drops empty, repeated and non-string entries", () => {
+		getConfiguration.mockReturnValue(ordered([" Vertex ", "", 3, null, "vertex", "ANTHROPIC"]));
+
+		expect(getConfig().providerOrder).toEqual(["vertex", "anthropic"]);
+	});
+
+	it.each([[[]], [undefined], ["bedrock"], [[" ", 1]], [{ order: ["bedrock"] }]])(
+		"leaves the gateway's ranking for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(ordered(value));
+
+			expect(getConfig().providerOrder).toBeUndefined();
+		},
+	);
+
+	it("declares an empty list of strings in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.providerOrder"],
+		).toMatchObject({ type: "array", items: { type: "string" }, default: [] });
+	});
+});

@@ -3,7 +3,7 @@
 	"private": true,
 	"displayName": "Vercel AI Gateway",
 	"description": "VS Code extension that provides Vercel AI models via the Language Model API",
-	"version": "0.5.17",
+	"version": "0.5.22",
 	"publisher": "SferaDev",
 	"license": "MIT",
 	"icon": "images/icon.png",
@@ -47,7 +47,8 @@
 		"languageModelChatProviders": [
 			{
 				"vendor": "vercelAiGateway",
-				"displayName": "Vercel AI Gateway"
+				"displayName": "Vercel AI Gateway",
+				"icon": "$(triangle-up)"
 			}
 		],
 		"commands": [
@@ -82,6 +83,41 @@
 					"description": "Maximum time in milliseconds to wait for the model to start or continue responding, and for the model list to load.",
 					"minimum": 5000,
 					"maximum": 300000
+				},
+				"vercelAiGateway.disallowPromptTraining": {
+					"type": "boolean",
+					"default": false,
+					"description": "Route chat requests only to providers that do not train on prompts. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Not enforced for requests that use your own provider keys (BYOK)."
+				},
+				"vercelAiGateway.zeroDataRetention": {
+					"type": "boolean",
+					"default": false,
+					"description": "Route chat requests only to providers with zero data retention agreements with Vercel. Needs a Vercel Pro or Enterprise team. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Your own provider keys (BYOK) are skipped unless marked as ZDR in the AI Gateway dashboard."
+				},
+				"vercelAiGateway.providerSort": {
+					"type": "string",
+					"enum": [
+						"default",
+						"cost",
+						"ttft",
+						"tps"
+					],
+					"enumDescriptions": [
+						"Use the gateway's own provider ranking, based on recent uptime and latency.",
+						"Try the provider with the lowest estimated cost first.",
+						"Try the provider with the lowest median time to first token first.",
+						"Try the provider with the highest median tokens per second first."
+					],
+					"default": "default",
+					"description": "Order in which the gateway tries the providers that serve a chat model. The gateway falls back through the rest in that order and tries unhealthy providers last; no provider is excluded."
+				},
+				"vercelAiGateway.providerOrder": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "Provider slugs the gateway tries first for a chat model, in this order, such as bedrock or anthropic. The gateway falls back to the other providers afterwards, in its own ranking or the providerSort order; no provider is excluded."
 				}
 			}
 		}

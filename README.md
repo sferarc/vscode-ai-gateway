@@ -4,7 +4,7 @@ A VS Code extension that makes [Vercel AI Gateway](https://vercel.com/docs/ai-ga
 
 ## Features
 
-- **Models listed live from the gateway.** The model list comes from `GET {endpoint}/v1/models` on the configured gateway and is cached for five minutes. Every chat or language model the gateway returns is offered; nothing is hard-coded in the extension. A model the gateway marks as deprecated shows its deprecation date in the picker. Hovering a model shows the gateway's input and output prices per million tokens and, when the gateway lists one, the model's knowledge cutoff.
+- **Models listed live from the gateway.** The model list comes from `GET {endpoint}/v1/models` on the configured gateway and is cached for five minutes. Every chat or language model the gateway returns is offered; nothing is hard-coded in the extension. A model the gateway marks as deprecated shows its deprecation date in the picker. Hovering a model shows the gateway's input and output prices per million tokens, the model's knowledge cutoff when the gateway lists one, and whether the providers serving it may train on prompts or offer zero data retention.
 - **Capabilities from gateway metadata.** Image input, tool calling and reasoning are read from each model's metadata (input modalities, supported parameters, reasoning options), with the model's tags as a fallback when a field is missing.
 - **Streaming responses**, including reasoning output where the model provides it.
 - **Cited sources.** When a search model cites web pages, they are listed as numbered links under the answer.
@@ -62,6 +62,10 @@ Run these from the Command Palette:
 | --- | --- | --- |
 | `vercelAiGateway.endpoint` | `https://ai-gateway.vercel.sh` | AI Gateway endpoint URL. Change it for self-hosted or regional deployments. Read from user settings only: a workspace `.vscode/settings.json` cannot change it, because requests to it carry your key or token. An empty value uses the default. |
 | `vercelAiGateway.timeout` | `30000` | Longest time, in milliseconds, the model may stay silent before its first chunk or between any two chunks. Allowed range is 5000 to 300000. When it runs out, the request stops and the chat shows an error saying it timed out. It does not limit the total length of an answer. Loading the model list also gives up after this long. |
+| `vercelAiGateway.disallowPromptTraining` | `false` | Sends chat requests only to providers that do not train on prompts, using the gateway's free Disallow Prompt Training option. A model with no such provider fails with an error instead of falling back to one that trains. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. The gateway does not apply it to requests that use your own provider keys (BYOK). |
+| `vercelAiGateway.zeroDataRetention` | `false` | Sends chat requests only to providers with zero data retention agreements with Vercel, using the gateway's per-request ZDR option, which needs a Vercel Pro or Enterprise team and costs nothing extra. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Your own provider keys (BYOK) are skipped unless you mark them as ZDR in the AI Gateway dashboard. |
+| `vercelAiGateway.providerSort` | `default` | Order in which the gateway tries the providers that serve a chat model: `cost` tries the cheapest first, `ttft` the one with the lowest median time to first token, `tps` the one with the highest median tokens per second. The gateway falls back through the others in that order and tries unhealthy providers last. `default` keeps the gateway's own ranking, based on recent uptime and latency. No provider is excluded, so a request cannot fail because of this setting. |
+| `vercelAiGateway.providerOrder` | `[]` | Provider slugs the gateway tries first for a chat model, in the order listed, for example `["bedrock", "anthropic"]` to prefer Amazon Bedrock and then Anthropic. The slugs are in the gateway's [list of available providers](https://vercel.com/docs/ai-gateway/models-and-providers/provider-options#available-providers). If the listed providers fail, the gateway falls back to the others, in the `providerSort` order when that is set, so a request cannot fail because of this setting. |
 
 ## Troubleshooting
 
@@ -71,6 +75,7 @@ Run these from the Command Palette:
 - **Vercel OIDC is not offered.** The Vercel CLI is not logged in. Run `vercel login` and try again.
 - **Spend budget used up (HTTP 402).** A budget on the team, project, API key or team member has reached its limit, and the gateway refuses requests until it resets or is raised. The error names which budget, its spend and its limit.
 - **Request rejected as invalid (HTTP 400).** The gateway or the model provider refused the request; the error shows its reason. When the reason is a prompt too long for the model, start a new chat or attach fewer files.
+- **No provider meets the data policy (HTTP 400).** With `vercelAiGateway.disallowPromptTraining` or `vercelAiGateway.zeroDataRetention` on, the gateway found no provider of the chosen model that meets it. Pick another model, or turn the setting off.
 - **Request timed out.** The model sent nothing for longer than `vercelAiGateway.timeout`, either before its first output or in a pause partway through, in which case the answer above the error is incomplete. Raise the setting for slow models.
 
 ## Development
