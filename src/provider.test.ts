@@ -879,6 +879,26 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("pins inference to the chosen region", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			zeroDataRetention: true,
+			inferenceRegion: "eu",
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { zeroDataRetention: true, inferenceRegion: { scope: "zone", geoRegion: "eu" } },
+		});
+	});
+
+	it("leaves the inference region out for the global default", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { inferenceRegion: "global" })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("names the providerOnly setting when no listed provider serves the model", async () => {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,

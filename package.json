@@ -148,6 +148,26 @@
 					"scope": "application",
 					"default": [],
 					"description": "Model ids the gateway tries in this order when every provider of the chosen chat model fails, such as anthropic/claude-sonnet-4.5. The answer and its cost then come from the fallback model. Only read from user settings."
+				},
+				"vercelAiGateway.inferenceRegion": {
+					"type": "string",
+					"enum": [
+						"global",
+						"us",
+						"eu",
+						"au",
+						"jp"
+					],
+					"enumDescriptions": [
+						"Let the gateway run inference in any region, based on availability and latency.",
+						"Run inference and store any provider data in a US data center.",
+						"Run inference and store any provider data in an EU data center.",
+						"Run inference and store any provider data in an Australian data center.",
+						"Run inference and store any provider data in a Japanese data center."
+					],
+					"scope": "application",
+					"default": "global",
+					"description": "Region where the provider runs inference on chat requests and stores any data it keeps. A pinned region can cost more, and a model with no provider in that region fails with an error instead of running elsewhere. Only read from user settings."
 				}
 			}
 		}

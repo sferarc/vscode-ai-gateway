@@ -32,7 +32,7 @@ import {
 } from "vscode";
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
-import { getConfig, type ProviderSort } from "./config";
+import { getConfig, type InferenceRegion, type ProviderSort } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
@@ -257,6 +257,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					only: config.providerOnly,
 					tags: config.reportingTags,
 					models: config.fallbackModels?.filter((id) => id !== model.id),
+					region: config.inferenceRegion,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -835,6 +836,7 @@ function gatewayOptions(options: {
 	only: string[] | undefined;
 	tags: string[] | undefined;
 	models: string[] | undefined;
+	region: InferenceRegion | undefined;
 }):
 	| {
 			gateway: {
@@ -846,11 +848,20 @@ function gatewayOptions(options: {
 				only?: string[];
 				tags?: string[];
 				models?: string[];
+				inferenceRegion?: { scope: "zone"; geoRegion: InferenceRegion };
 			};
 	  }
 	| undefined {
-	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort, order, only, tags } =
-		options;
+	const {
+		autoCaching,
+		disallowPromptTraining,
+		zeroDataRetention,
+		sort,
+		order,
+		only,
+		tags,
+		region,
+	} = options;
 	// A list holding only the requested model has nothing to fall back to.
 	const models = options.models?.length ? options.models : undefined;
 	if (
@@ -861,7 +872,8 @@ function gatewayOptions(options: {
 		!order &&
 		!only &&
 		!tags &&
-		!models
+		!models &&
+		!region
 	) {
 		return undefined;
 	}
@@ -875,6 +887,7 @@ function gatewayOptions(options: {
 			...(only && { only }),
 			...(tags && { tags }),
 			...(models && { models }),
+			...(region && { inferenceRegion: { scope: "zone", geoRegion: region } }),
 		},
 	};
 }

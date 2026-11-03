@@ -23,6 +23,8 @@ export function getConfig() {
 		reportingTags: reportingTags(config.inspect<unknown>("reportingTags")?.globalValue),
 		// A fallback can bill a pricier model, so a cloned repo must not pick one for the user.
 		fallbackModels: modelIds(config.inspect<unknown>("fallbackModels")?.globalValue),
+		// A pinned region can cost more and fails requests it cannot serve, so a cloned repo must not set one.
+		inferenceRegion: inferenceRegion(config.inspect<unknown>("inferenceRegion")?.globalValue),
 	};
 }
 
@@ -33,6 +35,15 @@ export type ProviderSort = (typeof PROVIDER_SORTS)[number];
 // "default", like any value outside the manifest's enum, leaves the gateway's own ranking.
 function providerSort(value: unknown): ProviderSort | undefined {
 	return PROVIDER_SORTS.find((sort) => sort === value);
+}
+
+const INFERENCE_REGIONS = ["us", "eu", "au", "jp"] as const;
+
+export type InferenceRegion = (typeof INFERENCE_REGIONS)[number];
+
+// "global", like any value outside the manifest's enum, lets the gateway pick the region.
+function inferenceRegion(value: unknown): InferenceRegion | undefined {
+	return INFERENCE_REGIONS.find((region) => region === value);
 }
 
 // settings.json can hold any value; slugs are lowercase, and an empty list leaves the gateway's ranking.
