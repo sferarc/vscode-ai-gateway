@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.23
+
+### Patch Changes
+
+- f4cf6e0: Add the `vercelAiGateway.providerOnly` setting, a list of provider slugs chat requests are restricted to, with no fallback to other providers. It is read from user settings only.
+
 ## 0.5.22
 
 ### Patch Changes
