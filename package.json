@@ -118,6 +118,15 @@
 					},
 					"default": [],
 					"description": "Provider slugs the gateway tries first for a chat model, in this order, such as bedrock or anthropic. The gateway falls back to the other providers afterwards, in its own ranking or the providerSort order; no provider is excluded."
+				},
+				"vercelAiGateway.providerOnly": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"scope": "application",
+					"default": [],
+					"description": "Provider slugs a chat request may use, such as anthropic. The gateway never falls back outside the list, so a model none of them serve fails. Only read from user settings."
 				}
 			}
 		}

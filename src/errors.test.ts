@@ -277,6 +277,20 @@ describe("describeGatewayError", () => {
 		);
 	});
 
+	it("names the providerOnly setting and its slugs when the request was restricted", async () => {
+		const message = "No providers available for model: example/model-name";
+		const { error } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+		});
+		expect(describeGatewayError(error, { providerOnly: ["anthropic", "vertex"] }).userMessage).toBe(
+			`No provider of this model is in the "vercelAiGateway.providerOnly" setting (anthropic, vertex) and meets the request's data policy (HTTP 400). Pick another model, add a provider that serves it to "vercelAiGateway.providerOnly", or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. Details: ${message}`,
+		);
+		expect(describeGatewayError(error, { providerOnly: [] }).userMessage).not.toContain(
+			"providerOnly",
+		);
+	});
+
 	it("calls a 5xx retryable", () => {
 		const { userMessage } = describeGatewayError(apiCallError(503));
 		expect(userMessage).toContain("(HTTP 503)");

@@ -815,6 +815,64 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("restricts the request to the listed providers, ordered and sorted inside them", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			providerSort: "cost",
+			providerOrder: ["vertex"],
+			providerOnly: ["anthropic", "vertex"],
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { sort: "cost", order: ["vertex"], only: ["anthropic", "vertex"] },
+		});
+	});
+
+	it("leaves the provider restriction out when the list is empty", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { providerOnly: [] })).providerOptions,
+		).toBeUndefined();
+	});
+
+	it("names the providerOnly setting when no listed provider serves the model", async () => {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: (key: string) =>
+				key === "providerOnly" ? { globalValue: ["anthropic"] } : undefined,
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+		const { APICallError, streamText } = await import("ai");
+		const cause = new APICallError({
+			message: "Bad Request",
+			url: "https://ai-gateway.vercel.sh/v1/ai/language-model",
+			requestBodyValues: {},
+			statusCode: 400,
+			responseBody: JSON.stringify({
+				error: "No providers available for model: openai/gpt-4o",
+				type: "no_providers_available",
+			}),
+		});
+		vi.mocked(streamText).mockReturnValue({
+			fullStream: [{ type: "error", error: cause }],
+		} as never);
+
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+
+		expect(report.mock.calls[0]?.[0].value).toContain(
+			'is in the "vercelAiGateway.providerOnly" setting (anthropic)',
+		);
+	});
+
 	async function respondWithTimeout(
 		isCancellationRequested: boolean,
 		textBeforeStall?: string,

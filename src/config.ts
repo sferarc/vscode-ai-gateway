@@ -17,6 +17,8 @@ export function getConfig() {
 		zeroDataRetention: anyScopeEnabled(config.inspect<unknown>("zeroDataRetention")),
 		providerSort: providerSort(config.get<unknown>("providerSort")),
 		providerOrder: providerSlugs(config.get<unknown>("providerOrder")),
+		// A cloned repo's list could fail every request or move spend to another provider account.
+		providerOnly: providerSlugs(config.inspect<unknown>("providerOnly")?.globalValue),
 	};
 }
 

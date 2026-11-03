@@ -67,6 +67,8 @@ export interface ChatRequestContext {
 	generationId?: string;
 	/** An error is already in the chat, so a finish reason of `error` adds nothing. */
 	errorReported?: boolean;
+	/** The `providerOnly` slugs the request was sent with, which the error text names. */
+	providerOnly?: string[];
 }
 
 // The gateway's docs say it tags the first content chunk, so the id is known before a mid-stream failure.
@@ -227,6 +229,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			}
 
 			const config = getConfig();
+			request.providerOnly = config.providerOnly;
 			const gateway = createGatewayProvider({
 				apiKey,
 				baseURL: `${config.endpoint}/v1/ai`,
@@ -251,6 +254,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					zeroDataRetention: config.zeroDataRetention,
 					sort: config.providerSort,
 					order: config.providerOrder,
+					only: config.providerOnly,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -568,7 +572,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		request?: ChatRequestContext,
 	): void {
 		const { statusCode, url, isRetryable, modelNotFound, generationId, userMessage } =
-			describeGatewayError(error);
+			describeGatewayError(error, { providerOnly: request?.providerOnly });
 		// A model the gateway dropped stays in the picker until the cached list expires.
 		if (modelNotFound) this.refreshModels();
 		// The error object is not logged: an APICallError carries the request body and headers.
@@ -826,6 +830,7 @@ function gatewayOptions(options: {
 	zeroDataRetention: boolean;
 	sort: ProviderSort | undefined;
 	order: string[] | undefined;
+	only: string[] | undefined;
 }):
 	| {
 			gateway: {
@@ -834,11 +839,12 @@ function gatewayOptions(options: {
 				zeroDataRetention?: true;
 				sort?: ProviderSort;
 				order?: string[];
+				only?: string[];
 			};
 	  }
 	| undefined {
-	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort, order } = options;
-	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention && !sort && !order) {
+	const { autoCaching, disallowPromptTraining, zeroDataRetention, sort, order, only } = options;
+	if (!autoCaching && !disallowPromptTraining && !zeroDataRetention && !sort && !order && !only) {
 		return undefined;
 	}
 	return {
@@ -848,6 +854,7 @@ function gatewayOptions(options: {
 			...(zeroDataRetention && { zeroDataRetention: true }),
 			...(sort && { sort }),
 			...(order && { order }),
+			...(only && { only }),
 		},
 	};
 }
