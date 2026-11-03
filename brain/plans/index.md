@@ -8,4 +8,4 @@ Add a phase here, with a tracking issue labelled `roadmap`, when work is planned
 
 ## Phases
 
-- Gaps left open after the first release: [#123](https://github.com/sferarc/vscode-ai-gateway/issues/123), with [#122](https://github.com/sferarc/vscode-ai-gateway/issues/122) (whether a dismissed sign-in picker is logged as a cancel, [[architecture/chat-provider]]) and [#124](https://github.com/sferarc/vscode-ai-gateway/issues/124) (a Release run on a superseded commit).
+- Gaps left open after the first release: [#123](https://github.com/sferarc/vscode-ai-gateway/issues/123), closed 2026-11-03 with both children done ([#122](https://github.com/sferarc/vscode-ai-gateway/issues/122), [#124](https://github.com/sferarc/vscode-ai-gateway/issues/124) via #127).

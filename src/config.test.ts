@@ -269,3 +269,54 @@ describe("getConfig providerOrder", () => {
 		).toMatchObject({ type: "array", items: { type: "string" }, default: [] });
 	});
 });
+
+describe("getConfig providerOnly", () => {
+	function restricted(scopes: {
+		globalValue?: unknown;
+		workspaceValue?: unknown;
+		workspaceFolderValue?: unknown;
+	}) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "providerOnly" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("restricts requests to the user's provider slugs", () => {
+		getConfiguration.mockReturnValue(restricted({ globalValue: [" Anthropic ", "vertex", 2] }));
+
+		expect(getConfig().providerOnly).toEqual(["anthropic", "vertex"]);
+	});
+
+	it("ignores a list set in workspace or folder settings", () => {
+		getConfiguration.mockReturnValue(
+			restricted({
+				globalValue: ["anthropic"],
+				workspaceValue: ["openai"],
+				workspaceFolderValue: ["xai"],
+			}),
+		);
+		expect(getConfig().providerOnly).toEqual(["anthropic"]);
+
+		getConfiguration.mockReturnValue(restricted({ workspaceValue: ["openai"] }));
+		expect(getConfig().providerOnly).toBeUndefined();
+	});
+
+	it.each([[[]], [undefined], ["anthropic"], [["", null]]])("restricts nothing for %o", (value) => {
+		getConfiguration.mockReturnValue(restricted({ globalValue: value }));
+
+		expect(getConfig().providerOnly).toBeUndefined();
+	});
+
+	it("declares an application scoped empty list of strings in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.providerOnly"],
+		).toMatchObject({
+			type: "array",
+			items: { type: "string" },
+			scope: "application",
+			default: [],
+		});
+	});
+});

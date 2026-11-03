@@ -13,6 +13,7 @@ const MANAGE_AUTH_COMMAND = "Vercel AI Gateway: Manage Authentication";
 const ENDPOINT_SETTING = `${EXTENSION_ID}.endpoint`;
 const PROMPT_TRAINING_SETTING = `${EXTENSION_ID}.disallowPromptTraining`;
 const ZERO_DATA_RETENTION_SETTING = `${EXTENSION_ID}.zeroDataRetention`;
+const PROVIDER_ONLY_SETTING = `${EXTENSION_ID}.providerOnly`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -26,7 +27,15 @@ export interface GatewayErrorDescription {
 	userMessage: string;
 }
 
-export function describeGatewayError(error: unknown): GatewayErrorDescription {
+export interface GatewayRequestOptions {
+	/** Provider slugs the request was restricted to with the gateway's `only` option. */
+	providerOnly?: readonly string[];
+}
+
+export function describeGatewayError(
+	error: unknown,
+	request: GatewayRequestOptions = {},
+): GatewayErrorDescription {
 	// streamText retries retryable failures and then throws a RetryError holding the last one.
 	const failure = RetryError.isInstance(error) ? error.lastError : error;
 	const apiCall = findApiCallError(failure);
@@ -54,11 +63,19 @@ export function describeGatewayError(error: unknown): GatewayErrorDescription {
 			: modelNotFound
 				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
 				: noProviders !== undefined
-					? `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "${PROMPT_TRAINING_SETTING}" or "${ZERO_DATA_RETENTION_SETTING}" setting if it is on. Details: ${noProviders || detail}`
+					? `${noProvidersMessage(request.providerOnly)} Details: ${noProviders || detail}`
 					: GatewayForbiddenError.isInstance(failure)
 						? policyMessage(statusCode, failure.ruleId, detail)
 						: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
 	};
+}
+
+function noProvidersMessage(providerOnly: readonly string[] | undefined): string {
+	const dataPolicy = `turn off the "${PROMPT_TRAINING_SETTING}" or "${ZERO_DATA_RETENTION_SETTING}" setting if it is on`;
+	if (!providerOnly?.length) {
+		return `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or ${dataPolicy}.`;
+	}
+	return `No provider of this model is in the "${PROVIDER_ONLY_SETTING}" setting (${providerOnly.join(", ")}) and meets the request's data policy (HTTP 400). Pick another model, add a provider that serves it to "${PROVIDER_ONLY_SETTING}", or ${dataPolicy}.`;
 }
 
 // A forbidden error is a gateway rule refusing the request, so signing in again would not help.
