@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.5.25
+
+### Patch Changes
+
+- e7fae9c: Add the `vercelAiGateway.inferenceRegion` setting, which pins chat inference, and any data the provider stores, to the US, the EU, Australia or Japan. A pinned region can cost more, and a model with no provider there fails instead of running elsewhere. It is read from user settings only.
+- ee54f97: When `vercelAiGateway.inferenceRegion` pins a region and the gateway rejects a chat request as invalid (HTTP 400), the chat error now says the model may have no provider in that region and that the setting can be set to `global` or another region.
+
 ## 0.5.24
 
 ### Patch Changes
