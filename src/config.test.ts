@@ -463,3 +463,54 @@ describe("getConfig inferenceRegion", () => {
 		});
 	});
 });
+
+describe("getConfig excludeQuantizations", () => {
+	function excluding(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) =>
+				key === "excludeQuantizations" ? { key, ...scopes } : undefined,
+			),
+		};
+	}
+
+	it("lowercases and trims the user's formats and keeps their order", () => {
+		getConfiguration.mockReturnValue(excluding({ globalValue: [" FP8 ", "int4", "q4_k.m-1"] }));
+
+		expect(getConfig().excludeQuantizations).toEqual(["fp8", "int4", "q4_k.m-1"]);
+	});
+
+	it("drops repeated, non-string and formats the gateway would refuse", () => {
+		getConfiguration.mockReturnValue(
+			excluding({
+				globalValue: ["fp8", "Fp8", 4, null, "", "!quantization:fp8", "fp 8", "x".repeat(33)],
+			}),
+		);
+
+		expect(getConfig().excludeQuantizations).toEqual(["fp8"]);
+	});
+
+	it("ignores formats set in workspace settings", () => {
+		getConfiguration.mockReturnValue(excluding({ workspaceValue: ["fp8"] }));
+
+		expect(getConfig().excludeQuantizations).toBeUndefined();
+	});
+
+	it.each([[[]], [undefined], ["fp8"], [["", 1]]])("excludes nothing for %o", (value) => {
+		getConfiguration.mockReturnValue(excluding({ globalValue: value }));
+
+		expect(getConfig().excludeQuantizations).toBeUndefined();
+	});
+
+	it("declares an application scoped empty list of gateway formats in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.excludeQuantizations"],
+		).toMatchObject({
+			type: "array",
+			items: { type: "string", pattern: "^[a-zA-Z0-9._-]{1,32}$" },
+			scope: "application",
+			default: [],
+		});
+	});
+});

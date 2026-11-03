@@ -891,6 +891,26 @@ describe("provideLanguageModelChatResponse", () => {
 		});
 	});
 
+	it("asks the gateway to skip providers serving the excluded weight formats", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			zeroDataRetention: true,
+			excludeQuantizations: ["fp8", "INT4"],
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { zeroDataRetention: true, has: ["!quantization:fp8", "!quantization:int4"] },
+		});
+	});
+
+	it("sends no capability filter when no weight format is excluded", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { excludeQuantizations: [] })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("leaves the inference region out for the global default", async () => {
 		const text = new hoisted.MockLanguageModelTextPart("Hello");
 
