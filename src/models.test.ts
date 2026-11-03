@@ -395,6 +395,48 @@ describe("ModelsClient", () => {
 			expect(freeForm?.tooltip).toBe("Text");
 		});
 
+		it("shows the inference regions the gateway lists in the tooltip", async () => {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{
+							...baseModel,
+							id: "regional",
+							description: "Regional",
+							knowledge: "2025-04",
+							regions: ["eu", "us"],
+							no_training: "all",
+							zdr: "all",
+						},
+						{ ...baseModel, id: "one", description: "One", regions: ["US", "us"] },
+						{ ...baseModel, id: "missing", description: "Missing" },
+						{ ...baseModel, id: "empty", description: "Empty", regions: [] },
+						{ ...baseModel, id: "invalid", description: "Invalid", regions: "eu" },
+						{
+							...baseModel,
+							id: "odd",
+							description: "Odd",
+							regions: [1, null, "", "eu west <b>", "jp"],
+						},
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const [regional, one, missing, empty, invalid, odd] = await new ModelsClient().getModels(
+				"test-key",
+			);
+
+			expect(regional?.tooltip).toBe(
+				"Regional\n\nKnowledge cutoff: 2025-04.\n\nRegions: EU, US.\n\nData: no provider trains on prompts; zero data retention with every provider.",
+			);
+			expect(one?.tooltip).toBe("One\n\nRegions: US.");
+			expect(missing?.tooltip).toBe("Missing");
+			expect(empty?.tooltip).toBe("Empty");
+			expect(invalid?.tooltip).toBe("Invalid");
+			expect(odd?.tooltip).toBe("Odd\n\nRegions: JP.");
+		});
+
 		it("says whether the providers may train on prompts or retain data", async () => {
 			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,
