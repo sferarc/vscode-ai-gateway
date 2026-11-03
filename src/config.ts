@@ -21,6 +21,8 @@ export function getConfig() {
 		providerOnly: providerSlugs(config.inspect<unknown>("providerOnly")?.globalValue),
 		// The gateway bills each tag, so a cloned repo must not add charges to the user's account.
 		reportingTags: reportingTags(config.inspect<unknown>("reportingTags")?.globalValue),
+		// A fallback can bill a pricier model, so a cloned repo must not pick one for the user.
+		fallbackModels: modelIds(config.inspect<unknown>("fallbackModels")?.globalValue),
 	};
 }
 
@@ -55,6 +57,15 @@ function reportingTags(value: unknown): string[] | undefined {
 		.filter((tag) => tag.length > 0 && tag.length <= MAX_REPORTING_TAG_LENGTH);
 	const unique = [...new Set(tags)].slice(0, MAX_REPORTING_TAGS);
 	return unique.length > 0 ? unique : undefined;
+}
+
+function modelIds(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const ids = value
+		.filter((entry): entry is string => typeof entry === "string")
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+	return ids.length > 0 ? [...new Set(ids)] : undefined;
 }
 
 // A workspace may turn a filter on but not off, so a cloned repo cannot route the user's prompts past the user's data policy.

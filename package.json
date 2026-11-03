@@ -139,6 +139,15 @@
 					"scope": "application",
 					"default": [],
 					"description": "Tags recorded with each chat request in the gateway's usage reports, such as team:platform, so you can filter or group the extension's spend. The gateway bills each tag on a request as a reporting write. Up to 10 tags of 64 characters; others are dropped. Only read from user settings."
+				},
+				"vercelAiGateway.fallbackModels": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"scope": "application",
+					"default": [],
+					"description": "Model ids the gateway tries in this order when every provider of the chosen chat model fails, such as anthropic/claude-sonnet-4.5. The answer and its cost then come from the fallback model. Only read from user settings."
 				}
 			}
 		}
