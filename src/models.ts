@@ -43,6 +43,8 @@ export interface Model {
 	temperature?: boolean;
 	/** Training data cutoff, as `YYYY-MM` or `YYYY-MM-DD`; absent for many models. */
 	knowledge?: string | null;
+	/** Regions with a provider for regional inference, e.g. `["eu", "us"]`; absent when the model has none. */
+	regions?: string[];
 	/** When the gateway deprecates the model, in milliseconds since the epoch, unlike `created`. */
 	deprecated_at?: number;
 	/** How many of the providers serving the model do not train on prompts: `all`, `some` or `none`. */
@@ -161,6 +163,14 @@ function deprecationDate(model: Model): string | undefined {
 function knowledgeCutoff(model: Model): string | undefined {
 	const value = model.knowledge;
 	return typeof value === "string" && /^\d{4}-\d{2}(-\d{2})?$/.test(value) ? value : undefined;
+}
+
+// Region codes only, so a free-form value cannot reach the tooltip.
+function describeRegions(model: Model): string | undefined {
+	const regions = Array.isArray(model.regions)
+		? model.regions.filter((region) => typeof region === "string" && /^[a-z]{2,8}$/.test(region))
+		: [];
+	return regions.length > 0 ? `Regions: ${regions.join(", ").toUpperCase()}.` : undefined;
 }
 
 const TRAINING_POLICY = new Map<unknown, string>([
@@ -357,6 +367,7 @@ export class ModelsClient {
 				description,
 				describePricing(model),
 				cutoff && `Knowledge cutoff: ${cutoff}.`,
+				describeRegions(model),
 				describeDataPolicy(model),
 				deprecated && `The gateway marks this model as deprecated from ${deprecated}.`,
 			].filter(Boolean);
