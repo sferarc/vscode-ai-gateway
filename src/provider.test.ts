@@ -856,6 +856,29 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("sends the fallback models without the requested model", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			providerOrder: ["bedrock"],
+			fallbackModels: ["anthropic/claude-sonnet-4.5", "openai/gpt-4o", "google/gemini-2.5-pro"],
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: {
+				order: ["bedrock"],
+				models: ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"],
+			},
+		});
+	});
+
+	it("leaves the fallback models out when the list holds only the requested model", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { fallbackModels: ["openai/gpt-4o"] })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("names the providerOnly setting when no listed provider serves the model", async () => {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,

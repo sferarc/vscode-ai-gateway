@@ -369,3 +369,55 @@ describe("getConfig reportingTags", () => {
 		});
 	});
 });
+
+describe("getConfig fallbackModels", () => {
+	function withFallbacks(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "fallbackModels" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("trims the user's model ids and keeps their order", () => {
+		getConfiguration.mockReturnValue(
+			withFallbacks({ globalValue: [" openai/gpt-5 ", "anthropic/claude-sonnet-4.5"] }),
+		);
+
+		expect(getConfig().fallbackModels).toEqual(["openai/gpt-5", "anthropic/claude-sonnet-4.5"]);
+	});
+
+	it("drops empty, repeated and non-string entries", () => {
+		getConfiguration.mockReturnValue(
+			withFallbacks({ globalValue: ["", " ", 3, null, "openai/gpt-5", "openai/gpt-5 "] }),
+		);
+
+		expect(getConfig().fallbackModels).toEqual(["openai/gpt-5"]);
+	});
+
+	it("ignores fallback models set in workspace settings", () => {
+		getConfiguration.mockReturnValue(withFallbacks({ workspaceValue: ["openai/gpt-5"] }));
+
+		expect(getConfig().fallbackModels).toBeUndefined();
+	});
+
+	it.each([[[]], [undefined], ["openai/gpt-5"], [["", 1]]])(
+		"sends no fallbacks for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(withFallbacks({ globalValue: value }));
+
+			expect(getConfig().fallbackModels).toBeUndefined();
+		},
+	);
+
+	it("declares an application scoped empty list of strings in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.fallbackModels"],
+		).toMatchObject({
+			type: "array",
+			items: { type: "string" },
+			scope: "application",
+			default: [],
+		});
+	});
+});
