@@ -19,6 +19,8 @@ export function getConfig() {
 		providerOrder: providerSlugs(config.get<unknown>("providerOrder")),
 		// A cloned repo's list could fail every request or move spend to another provider account.
 		providerOnly: providerSlugs(config.inspect<unknown>("providerOnly")?.globalValue),
+		// The gateway bills each tag, so a cloned repo must not add charges to the user's account.
+		reportingTags: reportingTags(config.inspect<unknown>("reportingTags")?.globalValue),
 	};
 }
 
@@ -39,6 +41,20 @@ function providerSlugs(value: unknown): string[] | undefined {
 		.map((entry) => entry.trim().toLowerCase())
 		.filter(Boolean);
 	return slugs.length > 0 ? [...new Set(slugs)] : undefined;
+}
+
+// The gateway answers 400 to more than 10 tags or one outside 1 to 64 characters, which would fail every chat request.
+const MAX_REPORTING_TAGS = 10;
+const MAX_REPORTING_TAG_LENGTH = 64;
+
+function reportingTags(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const tags = value
+		.filter((entry): entry is string => typeof entry === "string")
+		.map((entry) => entry.trim())
+		.filter((tag) => tag.length > 0 && tag.length <= MAX_REPORTING_TAG_LENGTH);
+	const unique = [...new Set(tags)].slice(0, MAX_REPORTING_TAGS);
+	return unique.length > 0 ? unique : undefined;
 }
 
 // A workspace may turn a filter on but not off, so a cloned repo cannot route the user's prompts past the user's data policy.
