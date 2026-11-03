@@ -69,6 +69,8 @@ export interface ChatRequestContext {
 	errorReported?: boolean;
 	/** The `providerOnly` slugs the request was sent with, which the error text names. */
 	providerOnly?: string[];
+	/** The pinned inference region, which the error text names. */
+	inferenceRegion?: string;
 }
 
 // The gateway's docs say it tags the first content chunk, so the id is known before a mid-stream failure.
@@ -230,6 +232,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 			const config = getConfig();
 			request.providerOnly = config.providerOnly;
+			request.inferenceRegion = config.inferenceRegion;
 			const gateway = createGatewayProvider({
 				apiKey,
 				baseURL: `${config.endpoint}/v1/ai`,
@@ -575,7 +578,10 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		request?: ChatRequestContext,
 	): void {
 		const { statusCode, url, isRetryable, modelNotFound, generationId, userMessage } =
-			describeGatewayError(error, { providerOnly: request?.providerOnly });
+			describeGatewayError(error, {
+				providerOnly: request?.providerOnly,
+				inferenceRegion: request?.inferenceRegion,
+			});
 		// A model the gateway dropped stays in the picker until the cached list expires.
 		if (modelNotFound) this.refreshModels();
 		// The error object is not logged: an APICallError carries the request body and headers.
