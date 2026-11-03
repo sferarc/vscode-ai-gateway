@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.5.24
+
+### Patch Changes
+
+- 7e60418: Add the `vercelAiGateway.fallbackModels` setting, a list of models AI Gateway tries in order when every provider of the chosen chat model fails. The answer is then billed at the fallback model's price. It is read from user settings only.
+- 24652d8: Add the `vercelAiGateway.reportingTags` setting, a list of tags recorded with each chat request in AI Gateway's usage reports. The gateway bills each tag as a reporting write. It is read from user settings only.
+
 ## 0.5.23
 
 ### Patch Changes
