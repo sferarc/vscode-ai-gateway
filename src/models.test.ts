@@ -407,34 +407,33 @@ describe("ModelsClient", () => {
 							knowledge: "2025-04",
 							regions: ["eu", "us"],
 							no_training: "all",
-							zdr: "all",
 						},
-						{ ...baseModel, id: "one", description: "One", regions: ["US", "us"] },
-						{ ...baseModel, id: "missing", description: "Missing" },
+						{ ...baseModel, id: "single", description: "Single", regions: ["us"] },
 						{ ...baseModel, id: "empty", description: "Empty", regions: [] },
+						{ ...baseModel, id: "missing", description: "Missing" },
 						{ ...baseModel, id: "invalid", description: "Invalid", regions: "eu" },
 						{
 							...baseModel,
-							id: "odd",
-							description: "Odd",
-							regions: [1, null, "", "eu west <b>", "jp"],
+							id: "mixed",
+							description: "Mixed",
+							regions: ["jp", 1, null, "eu-west 1", "au"],
 						},
 					],
 				}),
 			}) as unknown as typeof fetch;
 
-			const [regional, one, missing, empty, invalid, odd] = await new ModelsClient().getModels(
+			const [regional, single, empty, missing, invalid, mixed] = await new ModelsClient().getModels(
 				"test-key",
 			);
 
 			expect(regional?.tooltip).toBe(
-				"Regional\n\nKnowledge cutoff: 2025-04.\n\nRegions: EU, US.\n\nData: no provider trains on prompts; zero data retention with every provider.",
+				"Regional\n\nKnowledge cutoff: 2025-04.\n\nRegions: EU, US.\n\nData: no provider trains on prompts.",
 			);
-			expect(one?.tooltip).toBe("One\n\nRegions: US.");
-			expect(missing?.tooltip).toBe("Missing");
+			expect(single?.tooltip).toBe("Single\n\nRegions: US.");
 			expect(empty?.tooltip).toBe("Empty");
+			expect(missing?.tooltip).toBe("Missing");
 			expect(invalid?.tooltip).toBe("Invalid");
-			expect(odd?.tooltip).toBe("Odd\n\nRegions: JP.");
+			expect(mixed?.tooltip).toBe("Mixed\n\nRegions: JP, AU.");
 		});
 
 		it("says whether the providers may train on prompts or retain data", async () => {

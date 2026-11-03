@@ -43,7 +43,7 @@ export interface Model {
 	temperature?: boolean;
 	/** Training data cutoff, as `YYYY-MM` or `YYYY-MM-DD`; absent for many models. */
 	knowledge?: string | null;
-	/** Inference regions the model serves, e.g. `["eu", "us"]`; absent when it has no regional routing. */
+	/** Regions with a provider for regional inference, e.g. `["eu", "us"]`; absent when the model has none. */
 	regions?: string[];
 	/** When the gateway deprecates the model, in milliseconds since the epoch, unlike `created`. */
 	deprecated_at?: number;
@@ -165,17 +165,12 @@ function knowledgeCutoff(model: Model): string | undefined {
 	return typeof value === "string" && /^\d{4}-\d{2}(-\d{2})?$/.test(value) ? value : undefined;
 }
 
-// Only short letter codes are shown, so a free-form value cannot reach the tooltip.
+// Region codes only, so a free-form value cannot reach the tooltip.
 function describeRegions(model: Model): string | undefined {
-	const value: unknown = model.regions;
-	if (!Array.isArray(value)) return undefined;
-	const codes = value
-		.filter(
-			(region): region is string => typeof region === "string" && /^[a-z]{2,8}$/i.test(region),
-		)
-		.map((region) => region.toUpperCase());
-	const unique = [...new Set(codes)];
-	return unique.length ? `Regions: ${unique.join(", ")}.` : undefined;
+	const regions = Array.isArray(model.regions)
+		? model.regions.filter((region) => typeof region === "string" && /^[a-z]{2,8}$/.test(region))
+		: [];
+	return regions.length > 0 ? `Regions: ${regions.join(", ").toUpperCase()}.` : undefined;
 }
 
 const TRAINING_POLICY = new Map<unknown, string>([
