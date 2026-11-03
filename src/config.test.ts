@@ -421,3 +421,45 @@ describe("getConfig fallbackModels", () => {
 		});
 	});
 });
+
+describe("getConfig inferenceRegion", () => {
+	function pinned(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "inferenceRegion" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it.each([["us"], ["eu"], ["au"], ["jp"]])("passes the %s region through", (value) => {
+		getConfiguration.mockReturnValue(pinned({ globalValue: value }));
+
+		expect(getConfig().inferenceRegion).toBe(value);
+	});
+
+	it.each([["global"], [undefined], ["EU"], ["apac"], [1], [null]])(
+		"lets the gateway pick the region for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(pinned({ globalValue: value }));
+
+			expect(getConfig().inferenceRegion).toBeUndefined();
+		},
+	);
+
+	it("ignores a region set in workspace settings", () => {
+		getConfiguration.mockReturnValue(pinned({ workspaceValue: "eu" }));
+
+		expect(getConfig().inferenceRegion).toBeUndefined();
+	});
+
+	it("declares an application scoped global default and the gateway's four regions", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.inferenceRegion"],
+		).toMatchObject({
+			type: "string",
+			scope: "application",
+			default: "global",
+			enum: ["global", "us", "eu", "au", "jp"],
+		});
+	});
+});
