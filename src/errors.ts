@@ -14,6 +14,7 @@ const ENDPOINT_SETTING = `${EXTENSION_ID}.endpoint`;
 const PROMPT_TRAINING_SETTING = `${EXTENSION_ID}.disallowPromptTraining`;
 const ZERO_DATA_RETENTION_SETTING = `${EXTENSION_ID}.zeroDataRetention`;
 const PROVIDER_ONLY_SETTING = `${EXTENSION_ID}.providerOnly`;
+const INFERENCE_REGION_SETTING = `${EXTENSION_ID}.inferenceRegion`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -30,6 +31,8 @@ export interface GatewayErrorDescription {
 export interface GatewayRequestOptions {
 	/** Provider slugs the request was restricted to with the gateway's `only` option. */
 	providerOnly?: readonly string[];
+	/** Region the request pinned inference to with the gateway's `inferenceRegion` option. */
+	inferenceRegion?: string;
 }
 
 export function describeGatewayError(
@@ -45,6 +48,11 @@ export function describeGatewayError(
 	const statusCode = unreachable ? undefined : (gateway?.statusCode ?? apiCall?.statusCode);
 	const modelNotFound = GatewayModelNotFoundError.isInstance(failure);
 	const noProviders = statusCode === 400 ? noProvidersAvailable(apiCall) : undefined;
+	// The gateway's body for a model with no provider in the pinned region is not documented, so any 400 names the setting.
+	const regionHint =
+		statusCode === 400 && request.inferenceRegion
+			? ` ${regionMessage(request.inferenceRegion)}`
+			: "";
 	// A budget or invalid request message is the gateway's own text; the cause chain only repeats it as raw JSON.
 	const ownMessage = statusCode === 402 || GatewayInvalidRequestError.isInstance(failure);
 	const detail = GatewayAuthenticationError.isInstance(failure)
@@ -63,10 +71,10 @@ export function describeGatewayError(
 			: modelNotFound
 				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
 				: noProviders !== undefined
-					? `${noProvidersMessage(request.providerOnly)} Details: ${noProviders || detail}`
+					? `${noProvidersMessage(request.providerOnly)}${regionHint} Details: ${noProviders || detail}`
 					: GatewayForbiddenError.isInstance(failure)
 						? policyMessage(statusCode, failure.ruleId, detail)
-						: userMessageFor(statusCode, detail, retryAfterMs(apiCall)),
+						: userMessageFor(statusCode, detail, retryAfterMs(apiCall), regionHint),
 	};
 }
 
@@ -76,6 +84,10 @@ function noProvidersMessage(providerOnly: readonly string[] | undefined): string
 		return `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or ${dataPolicy}.`;
 	}
 	return `No provider of this model is in the "${PROVIDER_ONLY_SETTING}" setting (${providerOnly.join(", ")}) and meets the request's data policy (HTTP 400). Pick another model, add a provider that serves it to "${PROVIDER_ONLY_SETTING}", or ${dataPolicy}.`;
+}
+
+function regionMessage(region: string): string {
+	return `The "${INFERENCE_REGION_SETTING}" setting pins inference to the ${region} region, and this model may have no provider there; set it to "global" or another region.`;
 }
 
 // A forbidden error is a gateway rule refusing the request, so signing in again would not help.
@@ -168,9 +180,10 @@ function userMessageFor(
 	statusCode: number | undefined,
 	detail: string,
 	retryAfter: number | undefined,
+	regionHint: string,
 ): string {
 	if (statusCode === 400) {
-		return `The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less. Details: ${detail}`;
+		return `The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less.${regionHint} Details: ${detail}`;
 	}
 	if (statusCode === 401 || statusCode === 403) {
 		return `The gateway rejected the credentials (HTTP ${statusCode}). Run "${MANAGE_AUTH_COMMAND}" to sign in again or replace the API key. Details: ${detail}`;

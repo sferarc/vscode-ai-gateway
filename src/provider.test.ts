@@ -936,6 +936,38 @@ describe("provideLanguageModelChatResponse", () => {
 		);
 	});
 
+	it("names the inferenceRegion setting when a pinned region fails the request", async () => {
+		hoisted.mockGetConfiguration.mockReturnValue({
+			get: (_: string, d?: unknown) => d,
+			inspect: (key: string) => (key === "inferenceRegion" ? { globalValue: "eu" } : undefined),
+		});
+		const vscode = await import("vscode");
+		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
+		const { APICallError, streamText } = await import("ai");
+		const cause = new APICallError({
+			message: "Bad Request",
+			url: "https://ai-gateway.vercel.sh/v1/ai/language-model",
+			requestBodyValues: {},
+			statusCode: 400,
+		});
+		vi.mocked(streamText).mockReturnValue({
+			fullStream: [{ type: "error", error: cause }],
+		} as never);
+
+		const report = vi.fn();
+		await createProvider().provideLanguageModelChatResponse(
+			{ id: "openai/gpt-4o" } as never,
+			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
+			{} as never,
+			{ report },
+			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
+		);
+
+		expect(report.mock.calls[0]?.[0].value).toContain(
+			'The "vercelAiGateway.inferenceRegion" setting pins inference to the eu region',
+		);
+	});
+
 	async function respondWithTimeout(
 		isCancellationRequested: boolean,
 		textBeforeStall?: string,

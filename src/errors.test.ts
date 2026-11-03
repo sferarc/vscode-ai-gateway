@@ -291,6 +291,36 @@ describe("describeGatewayError", () => {
 		);
 	});
 
+	it("names the inferenceRegion setting when a 400 comes back for a pinned region", async () => {
+		const message = "Model is not available in the requested region";
+		const { error } = await gatewayResponseError(400, {
+			error: { message, type: "invalid_request_error" },
+		});
+		expect(describeGatewayError(error, { inferenceRegion: "eu" }).userMessage).toBe(
+			`The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less. The "vercelAiGateway.inferenceRegion" setting pins inference to the eu region, and this model may have no provider there; set it to "global" or another region. Details: ${message}`,
+		);
+		expect(describeGatewayError(error).userMessage).not.toContain("inferenceRegion");
+	});
+
+	it("names the inferenceRegion setting next to the data policy when no provider is available", async () => {
+		const message = "No providers available for model: example/model-name";
+		const { error } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+		});
+		expect(describeGatewayError(error, { inferenceRegion: "jp" }).userMessage).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. The "vercelAiGateway.inferenceRegion" setting pins inference to the jp region, and this model may have no provider there; set it to "global" or another region. Details: ${message}`,
+		);
+	});
+
+	it("leaves the inferenceRegion setting out of errors other than a 400", () => {
+		for (const status of [401, 429, 500]) {
+			expect(
+				describeGatewayError(apiCallError(status), { inferenceRegion: "us" }).userMessage,
+			).not.toContain("inferenceRegion");
+		}
+	});
+
 	it("calls a 5xx retryable", () => {
 		const { userMessage } = describeGatewayError(apiCallError(503));
 		expect(userMessage).toContain("(HTTP 503)");
