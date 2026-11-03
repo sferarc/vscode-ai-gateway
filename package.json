@@ -168,6 +168,16 @@
 					"scope": "application",
 					"default": "global",
 					"description": "Region where the provider runs inference on chat requests and stores any data it keeps. A pinned region can cost more, and a model with no provider in that region fails with an error instead of running elsewhere. Only read from user settings."
+				},
+				"vercelAiGateway.excludeQuantizations": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"pattern": "^[a-zA-Z0-9._-]{1,32}$"
+					},
+					"scope": "application",
+					"default": [],
+					"description": "Weight formats, such as fp8 or int4, that a provider must not serve a chat model in. The gateway skips providers that report a listed format and keeps those that report none; a model whose every provider is excluded fails with an error. Only read from user settings."
 				}
 			}
 		}

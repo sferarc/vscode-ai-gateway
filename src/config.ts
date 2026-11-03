@@ -25,6 +25,10 @@ export function getConfig() {
 		fallbackModels: modelIds(config.inspect<unknown>("fallbackModels")?.globalValue),
 		// A pinned region can cost more and fails requests it cannot serve, so a cloned repo must not set one.
 		inferenceRegion: inferenceRegion(config.inspect<unknown>("inferenceRegion")?.globalValue),
+		// An exclusion can move a request to a pricier provider or fail it, so a cloned repo must not set one.
+		excludeQuantizations: weightFormats(
+			config.inspect<unknown>("excludeQuantizations")?.globalValue,
+		),
 	};
 }
 
@@ -68,6 +72,18 @@ function reportingTags(value: unknown): string[] | undefined {
 		.filter((tag) => tag.length > 0 && tag.length <= MAX_REPORTING_TAG_LENGTH);
 	const unique = [...new Set(tags)].slice(0, MAX_REPORTING_TAGS);
 	return unique.length > 0 ? unique : undefined;
+}
+
+// The gateway answers 400 to a format outside this pattern, which would fail every chat request.
+const WEIGHT_FORMAT = /^[a-z0-9._-]{1,32}$/;
+
+function weightFormats(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const formats = value
+		.filter((entry): entry is string => typeof entry === "string")
+		.map((entry) => entry.trim().toLowerCase())
+		.filter((format) => WEIGHT_FORMAT.test(format));
+	return formats.length > 0 ? [...new Set(formats)] : undefined;
 }
 
 function modelIds(value: unknown): string[] | undefined {

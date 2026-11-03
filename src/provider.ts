@@ -261,6 +261,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					tags: config.reportingTags,
 					models: config.fallbackModels?.filter((id) => id !== model.id),
 					region: config.inferenceRegion,
+					excludeQuantizations: config.excludeQuantizations,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -843,6 +844,7 @@ function gatewayOptions(options: {
 	tags: string[] | undefined;
 	models: string[] | undefined;
 	region: InferenceRegion | undefined;
+	excludeQuantizations: string[] | undefined;
 }):
 	| {
 			gateway: {
@@ -855,6 +857,7 @@ function gatewayOptions(options: {
 				tags?: string[];
 				models?: string[];
 				inferenceRegion?: { scope: "zone"; geoRegion: InferenceRegion };
+				has?: `!quantization:${string}`[];
 			};
 	  }
 	| undefined {
@@ -867,6 +870,7 @@ function gatewayOptions(options: {
 		only,
 		tags,
 		region,
+		excludeQuantizations,
 	} = options;
 	// A list holding only the requested model has nothing to fall back to.
 	const models = options.models?.length ? options.models : undefined;
@@ -879,7 +883,8 @@ function gatewayOptions(options: {
 		!only &&
 		!tags &&
 		!models &&
-		!region
+		!region &&
+		!excludeQuantizations
 	) {
 		return undefined;
 	}
@@ -894,6 +899,9 @@ function gatewayOptions(options: {
 			...(tags && { tags }),
 			...(models && { models }),
 			...(region && { inferenceRegion: { scope: "zone", geoRegion: region } }),
+			...(excludeQuantizations && {
+				has: excludeQuantizations.map((format) => `!quantization:${format}` as const),
+			}),
 		},
 	};
 }
