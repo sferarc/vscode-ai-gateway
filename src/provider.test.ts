@@ -836,6 +836,26 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("tags the request for the gateway's usage reports", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			providerOnly: ["anthropic"],
+			reportingTags: ["team:platform", "tool:vscode"],
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { only: ["anthropic"], tags: ["team:platform", "tool:vscode"] },
+		});
+	});
+
+	it("leaves the reporting tags out when the list is empty", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { reportingTags: [] })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("names the providerOnly setting when no listed provider serves the model", async () => {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (_: string, d?: unknown) => d,

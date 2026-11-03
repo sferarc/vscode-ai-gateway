@@ -320,3 +320,52 @@ describe("getConfig providerOnly", () => {
 		});
 	});
 });
+
+describe("getConfig reportingTags", () => {
+	function tagged(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "reportingTags" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("trims the user's tags and keeps their case", () => {
+		getConfiguration.mockReturnValue(tagged({ globalValue: [" team:Platform ", "tool:vscode"] }));
+
+		expect(getConfig().reportingTags).toEqual(["team:Platform", "tool:vscode"]);
+	});
+
+	it("drops empty, repeated, non-string and over 64 character tags and keeps the first 10", () => {
+		const many = Array.from({ length: 12 }, (_, i) => `t${i}`);
+		getConfiguration.mockReturnValue(
+			tagged({ globalValue: ["", " ", 3, null, "a".repeat(65), "a".repeat(64), "t0", ...many] }),
+		);
+
+		expect(getConfig().reportingTags).toEqual(["a".repeat(64), ...many.slice(0, 9)]);
+	});
+
+	it("ignores tags set in workspace settings", () => {
+		getConfiguration.mockReturnValue(tagged({ workspaceValue: ["repo:cloned"] }));
+
+		expect(getConfig().reportingTags).toBeUndefined();
+	});
+
+	it.each([[[]], [undefined], ["team:platform"], [["", 1]]])("sends no tags for %o", (value) => {
+		getConfiguration.mockReturnValue(tagged({ globalValue: value }));
+
+		expect(getConfig().reportingTags).toBeUndefined();
+	});
+
+	it("declares an application scoped empty list of strings in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.reportingTags"],
+		).toMatchObject({
+			type: "array",
+			items: { type: "string", minLength: 1, maxLength: 64 },
+			maxItems: 10,
+			scope: "application",
+			default: [],
+		});
+	});
+});
