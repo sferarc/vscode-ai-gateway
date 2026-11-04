@@ -32,7 +32,13 @@ import {
 } from "vscode";
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
-import { getConfig, type InferenceRegion, type ProviderSort, type ServiceTier } from "./config";
+import {
+	getConfig,
+	type InferenceRegion,
+	type ModelCapability,
+	type ProviderSort,
+	type ServiceTier,
+} from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
@@ -273,6 +279,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					models: config.fallbackModels?.filter((id) => id !== model.id),
 					region: config.inferenceRegion,
 					excludeQuantizations: config.excludeQuantizations,
+					requiredCapabilities: config.requiredCapabilities,
 					serviceTier: config.serviceTier,
 				}),
 				abortSignal: abortController.signal,
@@ -864,6 +871,7 @@ function gatewayOptions(options: {
 	models: string[] | undefined;
 	region: InferenceRegion | undefined;
 	excludeQuantizations: string[] | undefined;
+	requiredCapabilities: ModelCapability[] | undefined;
 	serviceTier: ServiceTier | undefined;
 }):
 	| {
@@ -878,7 +886,7 @@ function gatewayOptions(options: {
 				user?: string;
 				models?: string[];
 				inferenceRegion?: { scope: "zone"; geoRegion: InferenceRegion };
-				has?: `!quantization:${string}`[];
+				has?: (ModelCapability | `!quantization:${string}`)[];
 				serviceTier?: ServiceTier;
 			};
 	  }
@@ -894,6 +902,7 @@ function gatewayOptions(options: {
 		user,
 		region,
 		excludeQuantizations,
+		requiredCapabilities,
 		serviceTier,
 	} = options;
 	// A list holding only the requested model has nothing to fall back to.
@@ -910,6 +919,7 @@ function gatewayOptions(options: {
 		!models &&
 		!region &&
 		!excludeQuantizations &&
+		!requiredCapabilities &&
 		!serviceTier
 	) {
 		return undefined;
@@ -926,8 +936,11 @@ function gatewayOptions(options: {
 			...(user && { user }),
 			...(models && { models }),
 			...(region && { inferenceRegion: { scope: "zone", geoRegion: region } }),
-			...(excludeQuantizations && {
-				has: excludeQuantizations.map((format) => `!quantization:${format}` as const),
+			...((requiredCapabilities || excludeQuantizations) && {
+				has: [
+					...(requiredCapabilities ?? []),
+					...(excludeQuantizations ?? []).map((format) => `!quantization:${format}` as const),
+				],
 			}),
 			...(serviceTier && { serviceTier }),
 		},

@@ -31,6 +31,10 @@ export function getConfig() {
 		excludeQuantizations: weightFormats(
 			config.inspect<unknown>("excludeQuantizations")?.globalValue,
 		),
+		// A requirement can move a request to a pricier provider or fail it, so a cloned repo must not set one.
+		requiredCapabilities: modelCapabilities(
+			config.inspect<unknown>("requiredCapabilities")?.globalValue,
+		),
 		// The priority tier bills more, so a cloned repo must not pick it for the user.
 		serviceTier: serviceTier(config.inspect<unknown>("serviceTier")?.globalValue),
 	};
@@ -106,6 +110,26 @@ function weightFormats(value: unknown): string[] | undefined {
 		.map((entry) => entry.trim().toLowerCase())
 		.filter((format) => WEIGHT_FORMAT.test(format));
 	return formats.length > 0 ? [...new Set(formats)] : undefined;
+}
+
+const MODEL_CAPABILITIES = [
+	"free",
+	"implicit-caching",
+	"reasoning",
+	"structured-output",
+	"tool-use",
+	"vision",
+] as const;
+
+export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
+
+// The gateway answers 400 to an unknown capability, which would fail every chat request.
+function modelCapabilities(value: unknown): ModelCapability[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const capabilities = value.filter((entry): entry is ModelCapability =>
+		MODEL_CAPABILITIES.some((capability) => capability === entry),
+	);
+	return capabilities.length > 0 ? [...new Set(capabilities)] : undefined;
 }
 
 function modelIds(value: unknown): string[] | undefined {

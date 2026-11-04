@@ -603,3 +603,66 @@ describe("getConfig serviceTier", () => {
 		});
 	});
 });
+
+describe("getConfig requiredCapabilities", () => {
+	function requiring(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) =>
+				key === "requiredCapabilities" ? { key, ...scopes } : undefined,
+			),
+		};
+	}
+
+	it("keeps the user's capabilities in order", () => {
+		getConfiguration.mockReturnValue(requiring({ globalValue: ["vision", "tool-use", "free"] }));
+
+		expect(getConfig().requiredCapabilities).toEqual(["vision", "tool-use", "free"]);
+	});
+
+	it("drops repeated, non-string and capabilities the gateway would refuse", () => {
+		getConfiguration.mockReturnValue(
+			requiring({
+				globalValue: [
+					"reasoning",
+					"reasoning",
+					1,
+					null,
+					"",
+					"Vision",
+					" tool-use",
+					"quantization:fp8",
+				],
+			}),
+		);
+
+		expect(getConfig().requiredCapabilities).toEqual(["reasoning"]);
+	});
+
+	it("ignores capabilities set in workspace settings", () => {
+		getConfiguration.mockReturnValue(requiring({ workspaceValue: ["free"] }));
+
+		expect(getConfig().requiredCapabilities).toBeUndefined();
+	});
+
+	it.each([[[]], [undefined], ["free"], [["", 1]]])("requires nothing for %o", (value) => {
+		getConfiguration.mockReturnValue(requiring({ globalValue: value }));
+
+		expect(getConfig().requiredCapabilities).toBeUndefined();
+	});
+
+	it("declares an application scoped empty list of the gateway's capabilities in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.requiredCapabilities"],
+		).toMatchObject({
+			type: "array",
+			items: {
+				type: "string",
+				enum: ["free", "implicit-caching", "reasoning", "structured-output", "tool-use", "vision"],
+			},
+			scope: "application",
+			default: [],
+		});
+	});
+});

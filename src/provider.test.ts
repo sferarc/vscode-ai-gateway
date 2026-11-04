@@ -931,6 +931,37 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("asks the gateway for providers whose model has the required capabilities", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			requiredCapabilities: ["tool-use", "implicit-caching"],
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { has: ["tool-use", "implicit-caching"] },
+		});
+	});
+
+	it("sends required capabilities and excluded weight formats in one capability filter", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			requiredCapabilities: ["free"],
+			excludeQuantizations: ["fp8"],
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { has: ["free", "!quantization:fp8"] },
+		});
+	});
+
+	it("sends no capability filter when no capability is required", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { requiredCapabilities: [] })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("asks the gateway for the chosen service tier", async () => {
 		const text = new hoisted.MockLanguageModelTextPart("Hello");
 
