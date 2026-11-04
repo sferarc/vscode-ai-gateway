@@ -178,6 +178,22 @@
 					"scope": "application",
 					"default": [],
 					"description": "Weight formats, such as fp8 or int4, that a provider must not serve a chat model in. The gateway skips providers that report a listed format and keeps those that report none; a model whose every provider is excluded fails with an error. Only read from user settings."
+				},
+				"vercelAiGateway.serviceTier": {
+					"type": "string",
+					"enum": [
+						"default",
+						"flex",
+						"priority"
+					],
+					"enumDescriptions": [
+						"Use the provider's standard processing tier.",
+						"Ask for the lower cost tier, which can respond more slowly.",
+						"Ask for the faster, more available tier, which costs more."
+					],
+					"scope": "application",
+					"default": "default",
+					"description": "Processing tier the gateway asks for on chat requests. Only OpenAI, Google AI Studio, Google Vertex AI and SpaceXAI models offer tiers, and a provider may still serve the standard tier; the gateway bills the tier actually served. Only read from user settings."
 				}
 			}
 		}
