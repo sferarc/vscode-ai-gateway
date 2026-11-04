@@ -1,6 +1,14 @@
 # Vercel AI Gateway for VS Code
 
-A VS Code extension that makes [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) models available through the Language Model API, so they appear in VS Code's built-in chat and to any extension that uses that API.
+Use [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) models in VS Code's built-in chat, for anyone with an AI Gateway API key or a Vercel project. The models are served through VS Code's Language Model API, so any extension that uses that API can call them too.
+
+This is a community extension. It is not made by Vercel.
+
+## Quick start
+
+1. Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SferaDev.vscode-extension-vercel-ai).
+2. Run **Vercel AI Gateway: Manage Authentication** from the Command Palette and add your AI Gateway API key, or sign in with Vercel OIDC. To get a key, see [AI Gateway authentication](https://vercel.com/docs/ai-gateway/authentication-and-byok).
+3. Open the chat view and pick a gateway model in the model picker.
 
 ## Features
 
