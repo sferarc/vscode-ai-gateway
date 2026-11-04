@@ -82,6 +82,13 @@ function gatewayGenerationId(chunk: StreamChunk): string | undefined {
 	return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
+// The gateway's docs say it sets this only for a non-standard tier, so a missing value means the default tier.
+function servedServiceTier(chunk: StreamChunk): string {
+	const tier =
+		chunk.type === "finish-step" ? chunk.providerMetadata?.gateway?.serviceTier : undefined;
+	return typeof tier === "string" && tier.length > 0 ? tier : "default";
+}
+
 function usageFields(usage: LanguageModelUsage | undefined): string[] {
 	const count = (value: number | undefined) => value ?? "unknown";
 	return [
@@ -273,9 +280,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 
 			const sources = new Map<string, string | undefined>();
 			let usage: LanguageModelUsage | undefined;
+			let servedTier = "default";
 			for await (const chunk of response.fullStream) {
 				request.generationId ??= gatewayGenerationId(chunk);
 				if (chunk.type === "finish") usage = chunk.totalUsage;
+				if (chunk.type === "finish-step") servedTier = servedServiceTier(chunk);
 				if (chunk.type === "source" && chunk.sourceType === "url") {
 					if (!sources.has(chunk.url)) sources.set(chunk.url, chunk.title);
 				}
@@ -305,6 +314,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				`model=${model.id}`,
 				`generation=${request.generationId ?? "none"}`,
 				...usageFields(usage),
+				...(config.serviceTier
+					? [`requestedTier=${config.serviceTier}`, `servedTier=${servedTier}`]
+					: []),
 				`elapsedMs=${Date.now() - request.startedAt}`,
 			];
 			logger.info(`Chat request completed: ${fields.join(" ")}`);
