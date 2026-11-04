@@ -2,7 +2,7 @@
 	"name": "vscode-extension-vercel-ai",
 	"private": true,
 	"displayName": "Vercel AI Gateway",
-	"description": "VS Code extension that provides Vercel AI models via the Language Model API",
+	"description": "Use Vercel AI Gateway models in VS Code chat with your gateway API key or Vercel OIDC. Community extension, not made by Vercel.",
 	"version": "0.5.30",
 	"publisher": "SferaDev",
 	"license": "MIT",
