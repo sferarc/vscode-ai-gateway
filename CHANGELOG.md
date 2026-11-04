@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.30
+
+### Patch Changes
+
+- 6659430: Add the `vercelAiGateway.reportingUser` setting, a user ID recorded with each chat request in AI Gateway's usage reports so a team sharing a key can split spend per person. The gateway bills it as a reporting write. It is read from user settings only.
+
 ## 0.5.29
 
 ### Patch Changes
