@@ -20,6 +20,10 @@ describe("VSIX contents", () => {
 
 interface Manifest {
 	engines: { vscode: string };
+	keywords: string[];
+	pricing?: string;
+	qna?: string | false;
+	bugs: { url: string };
 	devDependencies: Record<string, string>;
 	activationEvents: string[];
 	contributes: {
@@ -74,5 +78,14 @@ describe("manifest", () => {
 		const pkg = await readManifest();
 
 		expect(pkg.activationEvents).toEqual([`onLanguageModelChatProvider:${EXTENSION_ID}`]);
+	});
+
+	it("sends Marketplace questions to the issue tracker and keeps at most 30 unique keywords", async () => {
+		const pkg = await readManifest();
+
+		expect(pkg.pricing).toBe("Free");
+		expect(pkg.qna).toBe(pkg.bugs.url);
+		expect(pkg.keywords.length).toBeLessThanOrEqual(30);
+		expect(new Set(pkg.keywords).size).toBe(pkg.keywords.length);
 	});
 });
