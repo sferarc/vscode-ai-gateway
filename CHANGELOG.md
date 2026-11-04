@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.27
+
+### Patch Changes
+
+- 4ba5405: When `vercelAiGateway.excludeQuantizations` leaves a model with no provider, the chat error now names the setting and the excluded formats instead of blaming only the data policy settings.
+
 ## 0.5.26
 
 ### Patch Changes
