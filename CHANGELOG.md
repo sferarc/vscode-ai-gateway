@@ -1,5 +1,13 @@
 # vscode-extension-vercel-ai
 
+## 0.5.31
+
+### Patch Changes
+
+- f005577: Reword the Marketplace description and open the README with a three step quick start and a link to create an AI Gateway API key. Both now say the extension is a community extension, not made by Vercel.
+- ca13dd6: Show the Free badge and a banner on the Marketplace listing, send Q and A to GitHub issues, and add search keywords such as copilot, byok and the provider names.
+- d03b63b: Add the `vercelAiGateway.requiredCapabilities` setting, which routes chat requests only to providers whose model has every listed capability, such as `free`, `tool-use` or `implicit-caching`. A model with no such provider fails instead of running on another. It is read from user settings only.
+
 ## 0.5.30
 
 ### Patch Changes
