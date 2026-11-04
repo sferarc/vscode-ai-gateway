@@ -1120,10 +1120,14 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(report).not.toHaveBeenCalled();
 	});
 
-	async function respondWithStream(fullStream: unknown[]) {
+	async function respondWithStream(
+		fullStream: unknown[],
+		userSettings: Record<string, unknown> = {},
+	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
-			get: (_: string, d?: unknown) => d,
-			inspect: () => undefined,
+			get: (key: string, d?: unknown) => (key in userSettings ? userSettings[key] : d),
+			inspect: (key: string) =>
+				key in userSettings ? { globalValue: userSettings[key] } : undefined,
 		});
 		const vscode = await import("vscode");
 		vi.mocked(vscode.authentication.getSession).mockResolvedValue({ accessToken: "key" } as never);
@@ -1199,6 +1203,66 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(line?.[0]).toMatch(
 			/^Chat request completed: model=perplexity\/sonar generation=gen_01abc inputTokens=1200 cacheReadTokens=1000 cacheWriteTokens=0 outputTokens=80 reasoningTokens=30 elapsedMs=\d+$/,
 		);
+		logInfo.mockRestore();
+	});
+
+	it("logs the service tier the provider served next to the requested one", async () => {
+		const { logger } = await import("./logger");
+		const logInfo = vi.spyOn(logger, "info").mockImplementation(() => {});
+		await respondWithStream(
+			[
+				{ type: "text-delta", text: "Answer" },
+				{
+					type: "finish-step",
+					finishReason: "stop",
+					providerMetadata: { gateway: { serviceTier: "flex" } },
+				},
+				{ type: "finish", finishReason: "stop" },
+			],
+			{ serviceTier: "priority" },
+		);
+
+		const line = logInfo.mock.calls.find(([message]) =>
+			message.startsWith("Chat request completed"),
+		);
+		expect(line?.[0]).toMatch(/ requestedTier=priority servedTier=flex elapsedMs=\d+$/);
+		logInfo.mockRestore();
+	});
+
+	it("logs the default tier as served when the gateway reports no tier", async () => {
+		const { logger } = await import("./logger");
+		const logInfo = vi.spyOn(logger, "info").mockImplementation(() => {});
+		await respondWithStream(
+			[
+				{ type: "text-delta", text: "Answer" },
+				{ type: "finish-step", finishReason: "stop", providerMetadata: { gateway: {} } },
+			],
+			{ serviceTier: "flex" },
+		);
+
+		const line = logInfo.mock.calls.find(([message]) =>
+			message.startsWith("Chat request completed"),
+		);
+		expect(line?.[0]).toContain(" requestedTier=flex servedTier=default ");
+		logInfo.mockRestore();
+	});
+
+	it("logs no service tier for a request that asked for none", async () => {
+		const { logger } = await import("./logger");
+		const logInfo = vi.spyOn(logger, "info").mockImplementation(() => {});
+		await respondWithStream([
+			{ type: "text-delta", text: "Answer" },
+			{
+				type: "finish-step",
+				finishReason: "stop",
+				providerMetadata: { gateway: { serviceTier: "priority" } },
+			},
+		]);
+
+		const line = logInfo.mock.calls.find(([message]) =>
+			message.startsWith("Chat request completed"),
+		);
+		expect(line?.[0]).not.toContain("Tier=");
 		logInfo.mockRestore();
 	});
 
