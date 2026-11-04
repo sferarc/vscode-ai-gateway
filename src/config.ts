@@ -21,6 +21,8 @@ export function getConfig() {
 		providerOnly: providerSlugs(config.inspect<unknown>("providerOnly")?.globalValue),
 		// The gateway bills each tag, so a cloned repo must not add charges to the user's account.
 		reportingTags: reportingTags(config.inspect<unknown>("reportingTags")?.globalValue),
+		// The gateway bills each user ID too, and a cloned repo must not attribute the user's spend to someone else.
+		reportingUser: reportingUser(config.inspect<unknown>("reportingUser")?.globalValue),
 		// A fallback can bill a pricier model, so a cloned repo must not pick one for the user.
 		fallbackModels: modelIds(config.inspect<unknown>("fallbackModels")?.globalValue),
 		// A pinned region can cost more and fails requests it cannot serve, so a cloned repo must not set one.
@@ -83,6 +85,15 @@ function reportingTags(value: unknown): string[] | undefined {
 		.filter((tag) => tag.length > 0 && tag.length <= MAX_REPORTING_TAG_LENGTH);
 	const unique = [...new Set(tags)].slice(0, MAX_REPORTING_TAGS);
 	return unique.length > 0 ? unique : undefined;
+}
+
+// The gateway answers 400 to a user longer than this, which would fail every chat request.
+const MAX_REPORTING_USER_LENGTH = 256;
+
+function reportingUser(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const user = value.trim();
+	return user.length > 0 && user.length <= MAX_REPORTING_USER_LENGTH ? user : undefined;
 }
 
 // The gateway answers 400 to a format outside this pattern, which would fail every chat request.

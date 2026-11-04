@@ -856,6 +856,26 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("attributes the request to the reporting user", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			reportingTags: ["tool:vscode"],
+			reportingUser: "dev-ana",
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { tags: ["tool:vscode"], user: "dev-ana" },
+		});
+	});
+
+	it("leaves the reporting user out when it is empty", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { reportingUser: " " })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("sends the fallback models without the requested model", async () => {
 		const text = new hoisted.MockLanguageModelTextPart("Hello");
 

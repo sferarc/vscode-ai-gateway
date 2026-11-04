@@ -370,6 +370,53 @@ describe("getConfig reportingTags", () => {
 	});
 });
 
+describe("getConfig reportingUser", () => {
+	function attributed(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "reportingUser" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("trims the user's ID and keeps its case", () => {
+		getConfiguration.mockReturnValue(attributed({ globalValue: "  Dev-Ana  " }));
+
+		expect(getConfig().reportingUser).toBe("Dev-Ana");
+	});
+
+	it("keeps a 256 character ID and drops a longer one", () => {
+		getConfiguration.mockReturnValue(attributed({ globalValue: "a".repeat(256) }));
+		expect(getConfig().reportingUser).toBe("a".repeat(256));
+
+		getConfiguration.mockReturnValue(attributed({ globalValue: "a".repeat(257) }));
+		expect(getConfig().reportingUser).toBeUndefined();
+	});
+
+	it("ignores an ID set in workspace settings", () => {
+		getConfiguration.mockReturnValue(attributed({ workspaceValue: "someone-else" }));
+
+		expect(getConfig().reportingUser).toBeUndefined();
+	});
+
+	it.each([[""], ["   "], [undefined], [42], [["dev"]]])("sends no user for %o", (value) => {
+		getConfiguration.mockReturnValue(attributed({ globalValue: value }));
+
+		expect(getConfig().reportingUser).toBeUndefined();
+	});
+
+	it("declares an application scoped empty string in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.reportingUser"],
+		).toMatchObject({
+			type: "string",
+			maxLength: 256,
+			scope: "application",
+			default: "",
+		});
+	});
+});
+
 describe("getConfig fallbackModels", () => {
 	function withFallbacks(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
 		return {
