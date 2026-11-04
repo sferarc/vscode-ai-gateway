@@ -911,6 +911,26 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("asks the gateway for the chosen service tier", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			zeroDataRetention: true,
+			serviceTier: "flex",
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { zeroDataRetention: true, serviceTier: "flex" },
+		});
+	});
+
+	it("leaves the service tier out for the default tier", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { serviceTier: "default" })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("leaves the inference region out for the global default", async () => {
 		const text = new hoisted.MockLanguageModelTextPart("Hello");
 

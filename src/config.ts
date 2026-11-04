@@ -29,6 +29,8 @@ export function getConfig() {
 		excludeQuantizations: weightFormats(
 			config.inspect<unknown>("excludeQuantizations")?.globalValue,
 		),
+		// The priority tier bills more, so a cloned repo must not pick it for the user.
+		serviceTier: serviceTier(config.inspect<unknown>("serviceTier")?.globalValue),
 	};
 }
 
@@ -39,6 +41,15 @@ export type ProviderSort = (typeof PROVIDER_SORTS)[number];
 // "default", like any value outside the manifest's enum, leaves the gateway's own ranking.
 function providerSort(value: unknown): ProviderSort | undefined {
 	return PROVIDER_SORTS.find((sort) => sort === value);
+}
+
+const SERVICE_TIERS = ["flex", "priority"] as const;
+
+export type ServiceTier = (typeof SERVICE_TIERS)[number];
+
+// "default", like any value outside the manifest's enum, leaves the provider's standard tier.
+function serviceTier(value: unknown): ServiceTier | undefined {
+	return SERVICE_TIERS.find((tier) => tier === value);
 }
 
 const INFERENCE_REGIONS = ["us", "eu", "au", "jp"] as const;

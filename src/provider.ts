@@ -32,7 +32,7 @@ import {
 } from "vscode";
 
 import { VERCEL_AI_AUTH_PROVIDER_ID } from "./auth";
-import { getConfig, type InferenceRegion, type ProviderSort } from "./config";
+import { getConfig, type InferenceRegion, type ProviderSort, type ServiceTier } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
@@ -265,6 +265,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					models: config.fallbackModels?.filter((id) => id !== model.id),
 					region: config.inferenceRegion,
 					excludeQuantizations: config.excludeQuantizations,
+					serviceTier: config.serviceTier,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -849,6 +850,7 @@ function gatewayOptions(options: {
 	models: string[] | undefined;
 	region: InferenceRegion | undefined;
 	excludeQuantizations: string[] | undefined;
+	serviceTier: ServiceTier | undefined;
 }):
 	| {
 			gateway: {
@@ -862,6 +864,7 @@ function gatewayOptions(options: {
 				models?: string[];
 				inferenceRegion?: { scope: "zone"; geoRegion: InferenceRegion };
 				has?: `!quantization:${string}`[];
+				serviceTier?: ServiceTier;
 			};
 	  }
 	| undefined {
@@ -875,6 +878,7 @@ function gatewayOptions(options: {
 		tags,
 		region,
 		excludeQuantizations,
+		serviceTier,
 	} = options;
 	// A list holding only the requested model has nothing to fall back to.
 	const models = options.models?.length ? options.models : undefined;
@@ -888,7 +892,8 @@ function gatewayOptions(options: {
 		!tags &&
 		!models &&
 		!region &&
-		!excludeQuantizations
+		!excludeQuantizations &&
+		!serviceTier
 	) {
 		return undefined;
 	}
@@ -906,6 +911,7 @@ function gatewayOptions(options: {
 			...(excludeQuantizations && {
 				has: excludeQuantizations.map((format) => `!quantization:${format}` as const),
 			}),
+			...(serviceTier && { serviceTier }),
 		},
 	};
 }

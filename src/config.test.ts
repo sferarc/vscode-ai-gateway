@@ -514,3 +514,45 @@ describe("getConfig excludeQuantizations", () => {
 		});
 	});
 });
+
+describe("getConfig serviceTier", () => {
+	function tiered(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "serviceTier" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it.each([["flex"], ["priority"]])("passes the %s tier through", (value) => {
+		getConfiguration.mockReturnValue(tiered({ globalValue: value }));
+
+		expect(getConfig().serviceTier).toBe(value);
+	});
+
+	it.each([["default"], [undefined], ["Priority"], ["fast"], ["ultrafast"], [1], [null]])(
+		"leaves the standard tier for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(tiered({ globalValue: value }));
+
+			expect(getConfig().serviceTier).toBeUndefined();
+		},
+	);
+
+	it("ignores a tier set in workspace settings", () => {
+		getConfiguration.mockReturnValue(tiered({ workspaceValue: "priority" }));
+
+		expect(getConfig().serviceTier).toBeUndefined();
+	});
+
+	it("declares an application scoped default tier and the gateway's two tiers", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.serviceTier"],
+		).toMatchObject({
+			type: "string",
+			scope: "application",
+			default: "default",
+			enum: ["default", "flex", "priority"],
+		});
+	});
+});
