@@ -15,6 +15,7 @@ const PROMPT_TRAINING_SETTING = `${EXTENSION_ID}.disallowPromptTraining`;
 const ZERO_DATA_RETENTION_SETTING = `${EXTENSION_ID}.zeroDataRetention`;
 const PROVIDER_ONLY_SETTING = `${EXTENSION_ID}.providerOnly`;
 const INFERENCE_REGION_SETTING = `${EXTENSION_ID}.inferenceRegion`;
+const EXCLUDE_QUANTIZATIONS_SETTING = `${EXTENSION_ID}.excludeQuantizations`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -33,6 +34,8 @@ export interface GatewayRequestOptions {
 	providerOnly?: readonly string[];
 	/** Region the request pinned inference to with the gateway's `inferenceRegion` option. */
 	inferenceRegion?: string;
+	/** Weight formats the request excluded with the gateway's `has` option. */
+	excludeQuantizations?: readonly string[];
 }
 
 export function describeGatewayError(
@@ -71,7 +74,7 @@ export function describeGatewayError(
 			: modelNotFound
 				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
 				: noProviders !== undefined
-					? `${noProvidersMessage(request.providerOnly)}${regionHint} Details: ${noProviders || detail}`
+					? `${noProvidersMessage(request.providerOnly)}${regionHint}${quantizationHint(request.excludeQuantizations)} Details: ${noProviders || detail}`
 					: GatewayForbiddenError.isInstance(failure)
 						? policyMessage(statusCode, failure.ruleId, detail)
 						: userMessageFor(statusCode, detail, retryAfterMs(apiCall), regionHint),
@@ -84,6 +87,11 @@ function noProvidersMessage(providerOnly: readonly string[] | undefined): string
 		return `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or ${dataPolicy}.`;
 	}
 	return `No provider of this model is in the "${PROVIDER_ONLY_SETTING}" setting (${providerOnly.join(", ")}) and meets the request's data policy (HTTP 400). Pick another model, add a provider that serves it to "${PROVIDER_ONLY_SETTING}", or ${dataPolicy}.`;
+}
+
+function quantizationHint(formats: readonly string[] | undefined): string {
+	if (!formats?.length) return "";
+	return ` The "${EXCLUDE_QUANTIZATIONS_SETTING}" setting skips providers serving ${formats.join(", ")} weights, which may leave this model none; remove a format from it.`;
 }
 
 function regionMessage(region: string): string {

@@ -313,6 +313,31 @@ describe("describeGatewayError", () => {
 		);
 	});
 
+	it("names the excludeQuantizations setting and its formats when no provider is available", async () => {
+		const message = "No providers available for model: example/model-name";
+		const { error } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+		});
+		expect(describeGatewayError(error, { excludeQuantizations: ["fp8", "int4"] }).userMessage).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. The "vercelAiGateway.excludeQuantizations" setting skips providers serving fp8, int4 weights, which may leave this model none; remove a format from it. Details: ${message}`,
+		);
+		expect(describeGatewayError(error, { excludeQuantizations: [] }).userMessage).not.toContain(
+			"excludeQuantizations",
+		);
+	});
+
+	it("leaves the excludeQuantizations setting out of other errors", async () => {
+		const { error } = await gatewayResponseError(400, {
+			error: { message: "Bad input", type: "invalid_request_error" },
+		});
+		for (const failure of [error, apiCallError(401), apiCallError(500)]) {
+			expect(
+				describeGatewayError(failure, { excludeQuantizations: ["fp8"] }).userMessage,
+			).not.toContain("excludeQuantizations");
+		}
+	});
+
 	it("leaves the inferenceRegion setting out of errors other than a 400", () => {
 		for (const status of [401, 429, 500]) {
 			expect(

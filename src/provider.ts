@@ -71,6 +71,8 @@ export interface ChatRequestContext {
 	providerOnly?: string[];
 	/** The pinned inference region, which the error text names. */
 	inferenceRegion?: string;
+	/** The excluded weight formats, which the error text names. */
+	excludeQuantizations?: string[];
 }
 
 // The gateway's docs say it tags the first content chunk, so the id is known before a mid-stream failure.
@@ -233,6 +235,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			const config = getConfig();
 			request.providerOnly = config.providerOnly;
 			request.inferenceRegion = config.inferenceRegion;
+			request.excludeQuantizations = config.excludeQuantizations;
 			const gateway = createGatewayProvider({
 				apiKey,
 				baseURL: `${config.endpoint}/v1/ai`,
@@ -582,6 +585,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			describeGatewayError(error, {
 				providerOnly: request?.providerOnly,
 				inferenceRegion: request?.inferenceRegion,
+				excludeQuantizations: request?.excludeQuantizations,
 			});
 		// A model the gateway dropped stays in the picker until the cached list expires.
 		if (modelNotFound) this.refreshModels();
