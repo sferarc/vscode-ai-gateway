@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.5.28
+
+### Patch Changes
+
+- eeeff14: Add the `vercelAiGateway.serviceTier` setting, which asks the gateway for the lower cost `flex` tier or the faster `priority` tier on OpenAI, Google and SpaceXAI models. The gateway bills the tier the provider actually served. It is read from user settings only.
+
 ## 0.5.27
 
 ### Patch Changes
