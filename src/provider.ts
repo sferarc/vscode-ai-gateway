@@ -269,6 +269,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					order: config.providerOrder,
 					only: config.providerOnly,
 					tags: config.reportingTags,
+					user: config.reportingUser,
 					models: config.fallbackModels?.filter((id) => id !== model.id),
 					region: config.inferenceRegion,
 					excludeQuantizations: config.excludeQuantizations,
@@ -859,6 +860,7 @@ function gatewayOptions(options: {
 	order: string[] | undefined;
 	only: string[] | undefined;
 	tags: string[] | undefined;
+	user: string | undefined;
 	models: string[] | undefined;
 	region: InferenceRegion | undefined;
 	excludeQuantizations: string[] | undefined;
@@ -873,6 +875,7 @@ function gatewayOptions(options: {
 				order?: string[];
 				only?: string[];
 				tags?: string[];
+				user?: string;
 				models?: string[];
 				inferenceRegion?: { scope: "zone"; geoRegion: InferenceRegion };
 				has?: `!quantization:${string}`[];
@@ -888,6 +891,7 @@ function gatewayOptions(options: {
 		order,
 		only,
 		tags,
+		user,
 		region,
 		excludeQuantizations,
 		serviceTier,
@@ -902,6 +906,7 @@ function gatewayOptions(options: {
 		!order &&
 		!only &&
 		!tags &&
+		!user &&
 		!models &&
 		!region &&
 		!excludeQuantizations &&
@@ -918,6 +923,7 @@ function gatewayOptions(options: {
 			...(order && { order }),
 			...(only && { only }),
 			...(tags && { tags }),
+			...(user && { user }),
 			...(models && { models }),
 			...(region && { inferenceRegion: { scope: "zone", geoRegion: region } }),
 			...(excludeQuantizations && {
