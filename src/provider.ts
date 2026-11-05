@@ -79,6 +79,8 @@ export interface ChatRequestContext {
 	inferenceRegion?: string;
 	/** The excluded weight formats, which the error text names. */
 	excludeQuantizations?: string[];
+	/** The required capabilities, which the error text names. */
+	requiredCapabilities?: string[];
 }
 
 // The gateway's docs say it tags the first content chunk, so the id is known before a mid-stream failure.
@@ -249,6 +251,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			request.providerOnly = config.providerOnly;
 			request.inferenceRegion = config.inferenceRegion;
 			request.excludeQuantizations = config.excludeQuantizations;
+			request.requiredCapabilities = config.requiredCapabilities;
 			const gateway = createGatewayProvider({
 				apiKey,
 				baseURL: `${config.endpoint}/v1/ai`,
@@ -607,6 +610,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				providerOnly: request?.providerOnly,
 				inferenceRegion: request?.inferenceRegion,
 				excludeQuantizations: request?.excludeQuantizations,
+				requiredCapabilities: request?.requiredCapabilities,
 			});
 		// A model the gateway dropped stays in the picker until the cached list expires.
 		if (modelNotFound) this.refreshModels();

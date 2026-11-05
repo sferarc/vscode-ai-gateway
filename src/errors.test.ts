@@ -327,6 +327,33 @@ describe("describeGatewayError", () => {
 		);
 	});
 
+	it("names the requiredCapabilities setting and its capabilities when no provider is available", async () => {
+		const message = "No providers available for model: example/model-name";
+		const { error } = await gatewayResponseError(400, {
+			error: message,
+			type: "no_providers_available",
+		});
+		expect(
+			describeGatewayError(error, { requiredCapabilities: ["free", "vision"] }).userMessage,
+		).toBe(
+			`No provider of this model meets the request's data policy (HTTP 400). Pick another model, or turn off the "vercelAiGateway.disallowPromptTraining" or "vercelAiGateway.zeroDataRetention" setting if it is on. The "vercelAiGateway.requiredCapabilities" setting keeps only providers with free, vision, which may leave this model none; remove a capability from it. Details: ${message}`,
+		);
+		expect(describeGatewayError(error, { requiredCapabilities: [] }).userMessage).not.toContain(
+			"requiredCapabilities",
+		);
+	});
+
+	it("leaves the requiredCapabilities setting out of other errors", async () => {
+		const { error } = await gatewayResponseError(400, {
+			error: { message: "Bad input", type: "invalid_request_error" },
+		});
+		for (const failure of [error, apiCallError(401), apiCallError(500)]) {
+			expect(
+				describeGatewayError(failure, { requiredCapabilities: ["vision"] }).userMessage,
+			).not.toContain("requiredCapabilities");
+		}
+	});
+
 	it("leaves the excludeQuantizations setting out of other errors", async () => {
 		const { error } = await gatewayResponseError(400, {
 			error: { message: "Bad input", type: "invalid_request_error" },
