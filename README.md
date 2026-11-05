@@ -46,6 +46,10 @@ The extension requests an OIDC token for that project using the Vercel CLI's log
 
 Keys and tokens are kept in VS Code's secret storage.
 
+### Environment variable
+
+In a dev container, Codespace, remote host or scripted setup, set `AI_GATEWAY_API_KEY` in the environment VS Code's extension host starts with, the same variable the AI SDK reads. When no session is stored, the extension uses it as a session named `AI_GATEWAY_API_KEY`, checked with the gateway like a typed key and never saved. A stored session always wins over it. If the gateway rejects the key, it is ignored and a warning says so; set a valid key and reload the window. To stop using it, unset the variable and reload the window.
+
 ## Multiple sessions
 
 Run **Vercel AI Gateway: Manage Authentication** again once a session exists. The menu shows the active session and offers:

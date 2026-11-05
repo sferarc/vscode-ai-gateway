@@ -19,6 +19,12 @@
   - Every `api.vercel.com` request (each teams or projects page, and the token `POST`) runs through `withVercelTimeout`: it aborts the fetch and rejects with `VercelOidcTokenError` `Timed out contacting Vercel after 15000 ms` once `VERCEL_API_TIMEOUT_MS` passes, covering the body read too. The rejection is raced against the request, so it settles even if the fetch ignores the abort. Refresh runs on the chat request path, so before this a stalled connection hung chat and, because `inflightRefresh` shares one request, every waiter with it; now the shared promise rejects, its entry is dropped in `finally`, waiters keep the old token and the next call starts a new request. Tests: `Vercel API timeout` in `src/vercel-auth.test.ts` and "starts a new OIDC refresh after a shared one times out" in `src/auth.test.ts`.
   - Tests: `createInteractiveOidcSession` in `src/vercel-auth.test.ts` ("offers projects from every page and passes pagination.next as until", "offers teams from every page", "stops at the page cap when pagination.next never ends", "includes the HTTP status when statusText is empty").
 
+## Environment variable session
+
+With no stored session, `getActiveSession` and `getSessions` in `src/auth.ts` fall back to `AI_GATEWAY_API_KEY` from the extension host's `process.env`, trimmed, the variable the AI SDK and ai-gateway-proxy read (#198). It becomes an in-memory session with id and account id `vercelAiGateway.environment`, label `AI_GATEWAY_API_KEY` and method `environment` (`[Environment]` in the manage menu); it is never written to `SecretStorage`. A stored session always wins, and the variable is not read at all while one exists.
+
+The key is checked once per value per provider instance with the same `GET {endpoint}/v1/models` as a typed key (`fetchApiKeyStatus`), without the progress notification. A 401 drops it: the session reads as none, a warning names the variable, and the result is cached so it is not checked again until the window reloads; the chat provider then falls back to the sign-in prompt. A network failure or any other status logs `Using AI_GATEWAY_API_KEY unchecked` at warn and uses the key. The manage menu shows the environment session as active and offers only add and cancel; `removeSession` on its id stores nothing and tells the user to unset the variable. Tests: `environment API key` in `src/auth.test.ts`, which also assert the key never reaches the logger.
+
 ## Adding a session
 
 `createSession` in `src/auth.ts` is what VS Code calls on sign-in, and what the manage command's add action calls.
@@ -55,7 +61,7 @@ The chat provider reads the active session straight from this provider through t
 
 ## Manage command
 
-`vercelAiGateway.manage` opens a quick pick: add, switch ("Switch active session", only with more than one session), remove, cancel. With no sessions it goes straight to add.
+`vercelAiGateway.manage` opens a quick pick: add, switch ("Switch active session", only with more than one session), remove, cancel. With no stored session and no environment session it goes straight to add; remove is offered only when a session is stored.
 
 ## Tests
 
