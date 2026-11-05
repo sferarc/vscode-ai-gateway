@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.8.0
+
+### Minor Changes
+
+- 247429b: Add the read-only Vercel AI Gateway Status tool for agent mode (`#gatewayStatus`): it returns the active session's credit balance and the per million token prices and context windows of the gateway models it is asked about.
+
 ## 0.7.1
 
 ### Patch Changes
