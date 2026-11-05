@@ -72,7 +72,7 @@ Run these from the Command Palette:
 
 ## Agent tool
 
-In agent mode, models can call the read-only **Vercel AI Gateway Status** tool, or you can attach it with `#gatewayStatus`. It returns the active session's credit balance, its spend since the first of the month (UTC) with the three models it went to most, and, for the gateway model ids it is given or up to 20 models whose id or name contains a search term such as `claude`, the price per million input and output tokens and the context window, so an agent can check the budget and what has been spent before a long task, find a model or compare models by cost. It makes no chat request. Without a session it tells the agent to have you sign in.
+In agent mode, models can call the read-only **Vercel AI Gateway Status** tool, or you can attach it with `#gatewayStatus`. It returns the active session's credit balance, its spend since the first of the month (UTC) with the three models it went to most, and, for the gateway model ids it is given or up to 20 models whose id or name contains a search term such as `claude`, the price per million input and output tokens, the context window and whether the model supports tool calling, image input and reasoning, so an agent can check the budget and what has been spent before a long task, find a model or compare models by cost and capability. It makes no chat request. Without a session it tells the agent to have you sign in.
 
 ## Settings
 

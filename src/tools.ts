@@ -222,5 +222,20 @@ function describeModel(
 		contextWindow > 0
 			? `context window ${contextWindow} tokens, up to ${model.maxOutputTokens} output`
 			: "context window not listed";
-	return `- ${model.id} (${model.name}): ${input}, ${output}; ${context}.`;
+	return `- ${model.id} (${model.name}): ${input}, ${output}; ${context}; ${describeCapabilities(model)}.`;
+}
+
+function describeCapabilities(model: vscode.LanguageModelChatInformation): string {
+	// models.ts also sets reasoning, which the stable vscode capabilities type does not declare.
+	const capabilities = model.capabilities as vscode.LanguageModelChatCapabilities & {
+		reasoning?: boolean;
+	};
+	const supported = [
+		capabilities.toolCalling && "tool calling",
+		capabilities.imageInput && "image input",
+		capabilities.reasoning && "reasoning",
+	].filter((name): name is string => typeof name === "string");
+	if (supported.length === 0) return "no tool calling, image input or reasoning";
+	const last = supported.pop();
+	return `supports ${supported.length > 0 ? `${supported.join(", ")} and ${last}` : last}`;
 }
