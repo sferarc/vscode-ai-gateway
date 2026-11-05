@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.10.0
+
+### Minor Changes
+
+- 8020299: Show the gateway's cache read and cache write prices per million tokens in the model tooltip when it lists them.
+
 ## 0.9.2
 
 ### Patch Changes
