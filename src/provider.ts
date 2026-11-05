@@ -288,6 +288,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					excludeQuantizations: config.excludeQuantizations,
 					requiredCapabilities: config.requiredCapabilities,
 					serviceTier: config.serviceTier,
+					sessionAffinity: config.sessionAffinity,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -881,6 +882,7 @@ function gatewayOptions(options: {
 	excludeQuantizations: string[] | undefined;
 	requiredCapabilities: ModelCapability[] | undefined;
 	serviceTier: ServiceTier | undefined;
+	sessionAffinity: boolean;
 }):
 	| {
 			gateway: {
@@ -896,6 +898,7 @@ function gatewayOptions(options: {
 				inferenceRegion?: { scope: "zone"; geoRegion: InferenceRegion };
 				has?: (ModelCapability | `!quantization:${string}`)[];
 				serviceTier?: ServiceTier;
+				sessionAffinity?: false;
 			};
 	  }
 	| undefined {
@@ -912,6 +915,7 @@ function gatewayOptions(options: {
 		excludeQuantizations,
 		requiredCapabilities,
 		serviceTier,
+		sessionAffinity,
 	} = options;
 	// A list holding only the requested model has nothing to fall back to.
 	const models = options.models?.length ? options.models : undefined;
@@ -928,7 +932,8 @@ function gatewayOptions(options: {
 		!region &&
 		!excludeQuantizations &&
 		!requiredCapabilities &&
-		!serviceTier
+		!serviceTier &&
+		sessionAffinity
 	) {
 		return undefined;
 	}
@@ -951,6 +956,7 @@ function gatewayOptions(options: {
 				],
 			}),
 			...(serviceTier && { serviceTier }),
+			...(!sessionAffinity && { sessionAffinity: false }),
 		},
 	};
 }

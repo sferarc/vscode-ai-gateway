@@ -712,3 +712,40 @@ describe("getConfig reasoningEffort", () => {
 		expect(setting.enumDescriptions).toHaveLength(setting.enum.length);
 	});
 });
+
+describe("getConfig sessionAffinity", () => {
+	function affinity(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "sessionAffinity" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("turns session affinity off when the user sets false", () => {
+		getConfiguration.mockReturnValue(affinity({ globalValue: false }));
+
+		expect(getConfig().sessionAffinity).toBe(false);
+	});
+
+	it.each([[true], [undefined], ["false"], [0], [null]])(
+		"keeps session affinity on for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(affinity({ globalValue: value }));
+
+			expect(getConfig().sessionAffinity).toBe(true);
+		},
+	);
+
+	it("ignores false set in workspace settings", () => {
+		getConfiguration.mockReturnValue(affinity({ workspaceValue: false }));
+
+		expect(getConfig().sessionAffinity).toBe(true);
+	});
+
+	it("declares an application scoped boolean that is on by default", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.sessionAffinity"],
+		).toMatchObject({ type: "boolean", scope: "application", default: true });
+	});
+});

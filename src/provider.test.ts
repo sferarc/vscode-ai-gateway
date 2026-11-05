@@ -982,6 +982,23 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("asks the gateway to keep the provider order when session affinity is off", async () => {
+		const options = await requestOptions({}, {}, undefined, {
+			providerOrder: ["bedrock", "anthropic"],
+			sessionAffinity: false,
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { order: ["bedrock", "anthropic"], sessionAffinity: false },
+		});
+	});
+
+	it("leaves session affinity to the gateway by default", async () => {
+		expect(
+			(await requestOptions({}, {}, undefined, { sessionAffinity: true })).providerOptions,
+		).toBeUndefined();
+		expect((await requestOptions({})).providerOptions).toBeUndefined();
+	});
+
 	it("asks the model for the chosen reasoning effort", async () => {
 		const options = await requestOptions({}, {}, undefined, { reasoningEffort: "high" });
 		expect(options.reasoning).toBe("high");
