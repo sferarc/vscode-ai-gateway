@@ -319,6 +319,32 @@
 					"scope": "application",
 					"default": "default",
 					"description": "Processing tier the gateway asks for on chat requests. Only OpenAI, Google AI Studio, Google Vertex AI and SpaceXAI models offer tiers, and a provider may still serve the standard tier; the gateway bills the tier actually served. Only read from user settings."
+				},
+				"vercelAiGateway.reasoningEffort": {
+					"type": "string",
+					"enum": [
+						"provider-default",
+						"none",
+						"minimal",
+						"low",
+						"medium",
+						"high",
+						"xhigh",
+						"max"
+					],
+					"enumDescriptions": [
+						"Leave reasoning to the provider's default.",
+						"Turn reasoning off where the model allows it.",
+						"Reason as little as the model allows.",
+						"Reason briefly.",
+						"Reason with a balanced effort.",
+						"Reason thoroughly.",
+						"Reason more than high.",
+						"Reason as much as the model allows, which uses the most output tokens."
+					],
+					"scope": "application",
+					"default": "provider-default",
+					"description": "How much a chat model reasons before it answers. Each provider maps the level to its own reasoning control, and models without configurable reasoning ignore it. More reasoning uses more output tokens, which are billed, and takes longer. Only read from user settings."
 				}
 			}
 		}

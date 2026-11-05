@@ -124,6 +124,16 @@ Which providers and models serve a chat request, and in what order. `providerSor
 - `requiredCapabilities`: see AI Gateway's [model filtering](https://vercel.com/docs/ai-gateway/models-and-providers/model-filtering). A provider must have every listed capability, so a model with no such provider fails with an error. Unknown and repeated entries are dropped, since the gateway refuses them. Only read from user settings, so a workspace cannot move requests to another provider.
 - `serviceTier`: see AI Gateway's [service tiers](https://vercel.com/docs/ai-gateway/models-and-providers/service-tiers). Only OpenAI, Google AI Studio, Google Vertex AI and SpaceXAI models offer tiers, and SpaceXAI has no `flex`; on other models the setting has no effect. A provider can still serve the standard tier, and the gateway bills the tier actually served; the output channel logs the requested and served tier when each request completes. A slow `flex` answer can run past `vercelAiGateway.timeout`. Only read from user settings, so a workspace cannot raise your price.
 
+### Reasoning
+
+How much a chat model thinks before it answers.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `vercelAiGateway.reasoningEffort` | `provider-default` | Reasoning level asked of each chat model: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. `provider-default` leaves the provider's own default. |
+
+- `reasoningEffort`: each provider maps the level to its own control, such as OpenAI's reasoning effort or an Anthropic thinking budget, and a model whose provider has no matching tier gets the closest one. Models without configurable reasoning ignore it. More reasoning uses more output tokens, which are billed, takes longer and can reach the model's output limit, and a long silent thinking phase can run past `vercelAiGateway.timeout`. Only read from user settings, so a workspace cannot raise your spend.
+
 ### Spend reporting
 
 Label the extension's chat requests in AI Gateway's [usage reports](https://vercel.com/docs/ai-gateway/observability-and-spend/custom-reporting), so you can filter or group its spend. The gateway bills each tag and each user ID on a request as a reporting write, at $0.075 per 1,000 according to that page.

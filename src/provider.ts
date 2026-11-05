@@ -272,6 +272,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				toolChoice,
 				temperature: this.temperatureFor(model.id, options.modelOptions?.temperature),
 				maxOutputTokens: outputTokenLimit(model, options.modelOptions?.maxOutputTokens),
+				reasoning: config.reasoningEffort,
 				tools: Object.keys(tools).length > 0 ? tools : undefined,
 				providerOptions: gatewayOptions({
 					autoCaching: hasCacheBreakpoint(chatMessages),
