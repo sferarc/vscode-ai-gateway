@@ -372,7 +372,16 @@ describe("ModelsClient", () => {
 								input_tiers: [tier("0.0000012", 0), tier("0.0000024", 32001)],
 								output: "0.00000004",
 								output_tiers: [tier("0.00000004", 0)],
+								input_cache_read: "0.00000012",
+								input_cache_read_tiers: [tier("0.00000012", 0), tier("0.00000024", 32001)],
+								input_cache_write: "0",
 							},
+						},
+						{
+							...baseModel,
+							id: "cache-only",
+							description: "Cache",
+							pricing: { input_cache_read: "nope", input_cache_write: "0.00000375" },
 						},
 						{ ...baseModel, id: "output-only", description: "Out", pricing: { output: "x" } },
 						{ ...baseModel, id: "unpriced", description: "None", pricing: undefined },
@@ -381,7 +390,7 @@ describe("ModelsClient", () => {
 			}) as unknown as typeof fetch;
 
 			const client = new ModelsClient();
-			const [priced, tiered, invalid, unpriced] = await client.getModels("test-key");
+			const [priced, tiered, cacheOnly, invalid, unpriced] = await client.getModels("test-key");
 
 			expect(client.priceOf("priced")).toEqual({ input: "$2.00", output: "$10.00" });
 			expect(client.priceOf("tiered")).toEqual({ input: "from $1.20", output: "$0.04" });
@@ -389,11 +398,12 @@ describe("ModelsClient", () => {
 			expect(client.priceOf("missing")).toBeUndefined();
 
 			expect(priced?.tooltip).toBe(
-				"Fast\n\nPrice: $2.00 per million input tokens, $10.00 per million output tokens.\n\nThe gateway marks this model as deprecated from 2026-11-18.",
+				"Fast\n\nPrice: $2.00 per million input tokens, $10.00 per million output tokens, $0.10 per million cache read tokens.\n\nThe gateway marks this model as deprecated from 2026-11-18.",
 			);
 			expect(tiered?.tooltip).toBe(
-				"Long\n\nPrice: from $1.20 per million input tokens, $0.04 per million output tokens.",
+				"Long\n\nPrice: from $1.20 per million input tokens, $0.04 per million output tokens, from $0.12 per million cache read tokens.",
 			);
+			expect(cacheOnly?.tooltip).toBe("Cache\n\nPrice: $3.75 per million cache write tokens.");
 			expect(invalid?.tooltip).toBe("Out");
 			expect(unpriced?.tooltip).toBe("None");
 		});
