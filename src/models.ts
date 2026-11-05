@@ -96,7 +96,9 @@ function describeErrorBody(body: string): string {
 }
 
 /** Whether the model picker offers this entry; the gateway also lists embedding, image, video and other models. */
-export function isChatModel(model: { type?: unknown }): boolean {
+export function isChatModel(model: { id?: unknown; type?: unknown }): boolean {
+	// A `-batch` id only runs in the gateway's batch API, which rejects it on a synchronous request.
+	if (typeof model.id === "string" && model.id.endsWith("-batch")) return false;
 	return model.type === "chat" || model.type === "language" || model.type === undefined;
 }
 
