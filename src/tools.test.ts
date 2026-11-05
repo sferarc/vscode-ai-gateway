@@ -115,7 +115,7 @@ describe("StatusTool", () => {
 		const text = await invoke({ accessToken: TOKEN }, { modelIds: [42, ""] });
 
 		expect(text).toBe(
-			"Credits: 12.5 left, 3.25 used.\nModels: 2 chat models available. Pass their ids in modelIds for prices and context windows.",
+			"Credits: 12.5 left, 3.25 used.\nModels: 2 chat models available. Pass search to find ids, or ids in modelIds, for prices and context windows.",
 		);
 	});
 
@@ -126,6 +126,76 @@ describe("StatusTool", () => {
 		const text = await invoke({ accessToken: TOKEN }, { modelIds: ids });
 
 		expect(text.split("\n").filter((line) => line.startsWith("- "))).toHaveLength(20);
+	});
+
+	it("finds chat models by a search term in the id", async () => {
+		routeFetch({});
+
+		const text = await invoke({ accessToken: TOKEN }, { search: " ANTHROPIC/ " });
+
+		expect(text).toBe(
+			[
+				"Credits: 12.5 left, 3.25 used.",
+				'Models matching "ANTHROPIC/": 1.',
+				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output.",
+			].join("\n"),
+		);
+	});
+
+	it("finds chat models by a search term in the name and leaves out other model types", async () => {
+		routeFetch({});
+
+		const byName = await invoke({ accessToken: TOKEN }, { search: "sonnet 4.5" });
+		const embedding = await invoke({ accessToken: TOKEN }, { search: "embedding" });
+
+		expect(byName).toContain("- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5):");
+		expect(embedding.split("\n")[1]).toBe(
+			'Models matching "embedding": none of the 2 chat models.',
+		);
+	});
+
+	it("lists search matches before the requested ids", async () => {
+		routeFetch({});
+
+		const text = await invoke(
+			{ accessToken: TOKEN },
+			{ search: "unpriced", modelIds: ["anthropic/claude-sonnet-4.5"] },
+		);
+
+		expect(text.split("\n").slice(1)).toEqual([
+			'Models matching "unpriced": 1.',
+			"- openai/unpriced (Unpriced): input price not listed, output price not listed; context window not listed.",
+			"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output.",
+		]);
+	});
+
+	it("treats a blank or non string search as no search", async () => {
+		routeFetch({});
+
+		const blank = await invoke({ accessToken: TOKEN }, { search: "  " });
+		const number = await invoke({ accessToken: TOKEN }, { search: 5 });
+
+		expect(blank.split("\n")[1]).toMatch(/^Models: 2 chat models available\./);
+		expect(number).toBe(blank);
+	});
+
+	it("caps search matches at the manifest's maxItems and says how many matched", async () => {
+		const many = Array.from({ length: 25 }, (_, i) => ({
+			id: `xai/grok-${i}`,
+			name: `Grok ${i}`,
+			type: "language",
+		}));
+		routeFetch({
+			models: async () => ({ ok: true, status: 200, json: async () => ({ data: many }) }),
+		});
+
+		const text = await invoke({ accessToken: TOKEN }, { search: "grok" });
+		const lines = text.split("\n");
+
+		expect(lines[1]).toBe(
+			'Models matching "grok": 25, showing the first 20. Use a longer search term to narrow them.',
+		);
+		expect(lines.filter((line) => line.startsWith("- "))).toHaveLength(20);
 	});
 
 	it("tells the model to have the user sign in when there is no session", async () => {
