@@ -16,6 +16,7 @@ const ZERO_DATA_RETENTION_SETTING = `${EXTENSION_ID}.zeroDataRetention`;
 const PROVIDER_ONLY_SETTING = `${EXTENSION_ID}.providerOnly`;
 const INFERENCE_REGION_SETTING = `${EXTENSION_ID}.inferenceRegion`;
 const EXCLUDE_QUANTIZATIONS_SETTING = `${EXTENSION_ID}.excludeQuantizations`;
+const REQUIRED_CAPABILITIES_SETTING = `${EXTENSION_ID}.requiredCapabilities`;
 const MAX_CAUSE_DEPTH = 3;
 
 export interface GatewayErrorDescription {
@@ -36,6 +37,8 @@ export interface GatewayRequestOptions {
 	inferenceRegion?: string;
 	/** Weight formats the request excluded with the gateway's `has` option. */
 	excludeQuantizations?: readonly string[];
+	/** Capabilities the request required with the gateway's `has` option. */
+	requiredCapabilities?: readonly string[];
 }
 
 export function describeGatewayError(
@@ -74,7 +77,7 @@ export function describeGatewayError(
 			: modelNotFound
 				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
 				: noProviders !== undefined
-					? `${noProvidersMessage(request.providerOnly)}${regionHint}${quantizationHint(request.excludeQuantizations)} Details: ${noProviders || detail}`
+					? `${noProvidersMessage(request.providerOnly)}${regionHint}${quantizationHint(request.excludeQuantizations)}${capabilityHint(request.requiredCapabilities)} Details: ${noProviders || detail}`
 					: GatewayForbiddenError.isInstance(failure)
 						? policyMessage(statusCode, failure.ruleId, detail)
 						: userMessageFor(statusCode, detail, retryAfterMs(apiCall), regionHint),
@@ -92,6 +95,11 @@ function noProvidersMessage(providerOnly: readonly string[] | undefined): string
 function quantizationHint(formats: readonly string[] | undefined): string {
 	if (!formats?.length) return "";
 	return ` The "${EXCLUDE_QUANTIZATIONS_SETTING}" setting skips providers serving ${formats.join(", ")} weights, which may leave this model none; remove a format from it.`;
+}
+
+function capabilityHint(capabilities: readonly string[] | undefined): string {
+	if (!capabilities?.length) return "";
+	return ` The "${REQUIRED_CAPABILITIES_SETTING}" setting keeps only providers with ${capabilities.join(", ")}, which may leave this model none; remove a capability from it.`;
 }
 
 function regionMessage(region: string): string {
