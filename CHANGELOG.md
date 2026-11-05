@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.6.0
+
+### Minor Changes
+
+- e955f13: Use the `AI_GATEWAY_API_KEY` environment variable as the session when none is stored, so dev containers, Codespaces and scripted setups can sign in without prompts. A stored session always wins, and the key is checked with the gateway and never saved.
+
 ## 0.5.31
 
 ### Patch Changes
