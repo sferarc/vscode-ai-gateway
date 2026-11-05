@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.9.2
+
+### Patch Changes
+
+- 1c9c571: Leave the gateway's batch only models, whose ids end in `-batch`, out of the chat model picker. The gateway rejects them on chat requests, so picking one always failed.
+- 964a52b: Add the `vercelAiGateway.sessionAffinity` setting. The gateway keeps a chat on the provider that holds its prompt cache, ahead of `providerOrder` and `providerSort`; turning the setting off keeps that order on every turn. It is read from user settings only.
+
 ## 0.9.1
 
 ### Patch Changes
