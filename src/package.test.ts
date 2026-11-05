@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listFiles, PackageManager } from "@vscode/vsce";
 import { describe, expect, it } from "vitest";
-import { EXTENSION_ID, SIGNED_IN_CONTEXT_KEY } from "./constants";
+import { EXTENSION_ID, SIGNED_IN_CONTEXT_KEY, STATUS_TOOL_NAME } from "./constants";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -40,6 +40,11 @@ interface Manifest {
 	activationEvents: string[];
 	contributes: {
 		commands: { command: string }[];
+		languageModelTools: {
+			name: string;
+			canBeReferencedInPrompt?: boolean;
+			inputSchema: { properties: { modelIds: { maxItems: number } } };
+		}[];
 		languageModelChatProviders: { vendor: string; icon?: unknown }[];
 		authentication: { id: string }[];
 		walkthroughs: {
@@ -85,6 +90,20 @@ describe("manifest", () => {
 		expect(auth).toMatch(/registerAuthenticationProvider\(\s*EXTENSION_ID\b/);
 		expect(pkg.contributes.languageModelChatProviders.map((p) => p.vendor)).toEqual([EXTENSION_ID]);
 		expect(pkg.contributes.authentication.map((a) => a.id)).toEqual([EXTENSION_ID]);
+	});
+
+	it("contributes the status tool that activate() registers, referenceable in prompts", async () => {
+		const pkg = await readManifest();
+		const extension = await readFile(join(root, "src/extension.ts"), "utf8");
+		const tools = await readFile(join(root, "src/tools.ts"), "utf8");
+
+		expect(extension.match(/registerTool\(/g)).toHaveLength(1);
+		expect(extension).toMatch(/registerTool\(\s*STATUS_TOOL_NAME\b/);
+		expect(pkg.contributes.languageModelTools.map((t) => t.name)).toEqual([STATUS_TOOL_NAME]);
+		expect(pkg.contributes.languageModelTools[0]?.canBeReferencedInPrompt).toBe(true);
+		const maxItems =
+			pkg.contributes.languageModelTools[0]?.inputSchema.properties.modelIds.maxItems;
+		expect(tools).toContain(`const MAX_MODEL_IDS = ${maxItems};`);
 	});
 
 	it("gives the chat provider a theme icon for the model picker", async () => {

@@ -152,7 +152,6 @@ function isThinkingPart(part: object): boolean {
 }
 
 export class VercelAIChatModelProvider implements LanguageModelChatProvider, vscode.Disposable {
-	private modelsClient = new ModelsClient();
 	private readonly modelInfoChangeEmitter = new vscode.EventEmitter<void>();
 	readonly onDidChangeLanguageModelChatInformation = this.modelInfoChangeEmitter.event;
 	private readonly sessionChangeSubscription: vscode.Disposable;
@@ -162,8 +161,12 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	 * @param getActiveSession Resolves the session the user has made active, read straight from the
 	 * authentication provider this extension registers, so requests use that session rather than
 	 * whichever one VS Code happens to prefer.
+	 * @param modelsClient Shared with the status tool, so both read one model list cache.
 	 */
-	constructor(private readonly getActiveSession?: () => Promise<ActiveSession | null>) {
+	constructor(
+		private readonly getActiveSession?: () => Promise<ActiveSession | null>,
+		private readonly modelsClient = new ModelsClient(),
+	) {
 		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
 			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
 			this.refreshModels();

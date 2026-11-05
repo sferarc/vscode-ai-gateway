@@ -208,10 +208,22 @@ function perMillionTokens(perToken: unknown, tiers: unknown): string | undefined
 	return Array.isArray(tiers) && tiers.length > 1 ? `from ${price}` : price;
 }
 
-function describePricing(model: Model): string | undefined {
+/** Prices per million tokens as the tooltip shows them; a side the gateway does not list is absent. */
+export interface ModelPrice {
+	input?: string;
+	output?: string;
+}
+
+function modelPrice(model: Model): ModelPrice {
 	const pricing = model.pricing;
-	const input = perMillionTokens(pricing?.input, pricing?.input_tiers);
-	const output = perMillionTokens(pricing?.output, pricing?.output_tiers);
+	return {
+		input: perMillionTokens(pricing?.input, pricing?.input_tiers),
+		output: perMillionTokens(pricing?.output, pricing?.output_tiers),
+	};
+}
+
+function describePricing(model: Model): string | undefined {
+	const { input, output } = modelPrice(model);
 	const parts = [
 		input && `${input} per million input tokens`,
 		output && `${output} per million output tokens`,
@@ -240,10 +252,16 @@ export class ModelsClient {
 	private inflightFetch?: { apiKey: string; promise: Promise<LanguageModelChatInformation[]> };
 	private generation = 0;
 	private temperatureUnsupported = new Set<string>();
+	private prices = new Map<string, ModelPrice>();
 
 	/** False only for a model the last fetched list marked as taking no temperature. */
 	acceptsTemperature(modelId: string): boolean {
 		return !this.temperatureUnsupported.has(modelId);
+	}
+
+	/** The price the last fetched list gives for a chat model, or undefined for a model it did not list. */
+	priceOf(modelId: string): ModelPrice | undefined {
+		return this.prices.get(modelId);
 	}
 
 	invalidateCache(): void {
@@ -316,6 +334,7 @@ export class ModelsClient {
 		this.temperatureUnsupported = new Set(
 			data.filter((model) => !acceptsTemperature(model)).map((model) => model.id),
 		);
+		this.prices = new Map(data.filter(isChatModel).map((model) => [model.id, modelPrice(model)]));
 
 		logger.info(`Models fetched in ${Date.now() - startTime}ms, count: ${models.length}`);
 		return models;
