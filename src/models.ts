@@ -58,6 +58,10 @@ export interface Model {
 		/** Prompt size bands, cheapest first; the plain `input` is the first band's cost. */
 		input_tiers?: unknown[];
 		output_tiers?: unknown[];
+		input_cache_read?: string;
+		input_cache_read_tiers?: unknown[];
+		input_cache_write?: string;
+		input_cache_write_tiers?: unknown[];
 	};
 }
 
@@ -226,9 +230,14 @@ function modelPrice(model: Model): ModelPrice {
 
 function describePricing(model: Model): string | undefined {
 	const { input, output } = modelPrice(model);
+	const pricing = model.pricing;
+	const cacheRead = perMillionTokens(pricing?.input_cache_read, pricing?.input_cache_read_tiers);
+	const cacheWrite = perMillionTokens(pricing?.input_cache_write, pricing?.input_cache_write_tiers);
 	const parts = [
 		input && `${input} per million input tokens`,
 		output && `${output} per million output tokens`,
+		cacheRead && `${cacheRead} per million cache read tokens`,
+		cacheWrite && `${cacheWrite} per million cache write tokens`,
 	].filter(Boolean);
 	return parts.length > 0 ? `Price: ${parts.join(", ")}.` : undefined;
 }
