@@ -92,6 +92,7 @@ describe("checkConnection", () => {
 			json: async () => ({
 				data: [
 					{ id: "openai/gpt-5", type: "language" },
+					{ id: "openai/gpt-5-batch", type: "language" },
 					{ id: "legacy/chat", type: "chat" },
 					{ id: "untyped/model" },
 					{ id: "openai/text-embedding-3-small", type: "embedding" },
@@ -103,7 +104,7 @@ describe("checkConnection", () => {
 
 		const result = await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
 
-		expect(result).toMatchObject({ ok: true, modelCount: 6, chatModelCount: 3 });
+		expect(result).toMatchObject({ ok: true, modelCount: 7, chatModelCount: 3 });
 	});
 
 	it("reports the OIDC token expiry", async () => {

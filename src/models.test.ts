@@ -143,6 +143,33 @@ describe("ModelsClient", () => {
 		expect(result.map((m) => m.id)).toEqual(["a:chat", "c:undef"]);
 	});
 
+	it("leaves out batch only model ids, which synchronous requests reject", async () => {
+		const model = (id: string): Model => ({
+			id,
+			object: "model",
+			created: 0,
+			owned_by: "anthropic",
+			name: id,
+			description: "",
+			context_window: 1000,
+			max_tokens: 100,
+			type: "language",
+			pricing: { input: "0.000001", output: "0.000005" },
+		});
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				data: [model("anthropic/claude-haiku-4.5"), model("anthropic/claude-haiku-4.5-batch")],
+			}),
+		}) as unknown as typeof fetch;
+
+		const client = new ModelsClient();
+		const result = await client.getModels("test-key");
+
+		expect(result.map((m) => m.id)).toEqual(["anthropic/claude-haiku-4.5"]);
+		expect(client.priceOf("anthropic/claude-haiku-4.5-batch")).toBeUndefined();
+	});
+
 	describe("token limits", () => {
 		async function limitsOf(context_window: number, max_tokens: number) {
 			const model: Model = {
