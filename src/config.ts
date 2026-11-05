@@ -39,6 +39,8 @@ export function getConfig() {
 		serviceTier: serviceTier(config.inspect<unknown>("serviceTier")?.globalValue),
 		// Higher effort bills more output tokens, so a cloned repo must not raise it for the user.
 		reasoningEffort: reasoningEffort(config.inspect<unknown>("reasoningEffort")?.globalValue),
+		// Turning it off can send later turns to a cold prompt cache, so a cloned repo must not do it for the user.
+		sessionAffinity: config.inspect<unknown>("sessionAffinity")?.globalValue !== false,
 	};
 }
 

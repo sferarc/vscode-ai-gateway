@@ -209,7 +209,7 @@
 						"type": "string"
 					},
 					"default": [],
-					"description": "Provider slugs the gateway tries first for a chat model, in this order, such as bedrock or anthropic. The gateway falls back to the other providers afterwards, in its own ranking or the providerSort order; no provider is excluded."
+					"description": "Provider slugs the gateway tries first for a chat model, in this order, such as bedrock or anthropic. The gateway falls back to the other providers afterwards, in its own ranking or the providerSort order; no provider is excluded. Later turns of a conversation try the provider that holds its prompt cache first unless vercelAiGateway.sessionAffinity is off."
 				},
 				"vercelAiGateway.providerOnly": {
 					"type": "array",
@@ -345,6 +345,12 @@
 					"scope": "application",
 					"default": "provider-default",
 					"description": "How much a chat model reasons before it answers. Each provider maps the level to its own reasoning control, and models without configurable reasoning ignore it. More reasoning uses more output tokens, which are billed, and takes longer. Only read from user settings."
+				},
+				"vercelAiGateway.sessionAffinity": {
+					"type": "boolean",
+					"scope": "application",
+					"default": true,
+					"description": "Lets the gateway send later turns of a conversation to the provider that holds its prompt cache, ahead of providerOrder and providerSort. Turn it off to keep that order exactly; later turns may then hit a cold cache and bill the full prompt again. Only read from user settings."
 				}
 			}
 		}
