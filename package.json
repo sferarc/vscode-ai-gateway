@@ -75,7 +75,7 @@
 				"canBeReferencedInPrompt": true,
 				"icon": "$(triangle-up)",
 				"userDescription": "Credit balance of the active Vercel AI Gateway session, and the price and context window of gateway models.",
-				"modelDescription": "Reads the Vercel AI Gateway credit balance left and used for the user's active session, and for each gateway model id passed in modelIds, its price per million input and output tokens and its context window. Use it before a long or expensive task, or to compare the cost of gateway models, such as anthropic/claude-sonnet-4.5 against openai/gpt-5. It only reads and makes no chat request. Without modelIds it returns the balance and how many chat models are available. Ids it does not know are reported as not listed. When the user is not signed in, or the gateway cannot be reached, it returns the step the user should take instead.",
+				"modelDescription": "Reads the Vercel AI Gateway credit balance left and used for the user's active session, and for each gateway model id passed in modelIds, its price per million input and output tokens and its context window. Use it before a long or expensive task, or to compare the cost of gateway models, such as anthropic/claude-sonnet-4.5 against openai/gpt-5. To find model ids, pass search, such as claude or gpt: it lists up to 20 chat models whose id or name contains it, with the same prices and context windows. It only reads and makes no chat request. Without modelIds or search it returns the balance and how many chat models are available. Ids it does not know are reported as not listed. When the user is not signed in, or the gateway cannot be reached, it returns the step the user should take instead.",
 				"tags": [
 					"vercel-ai-gateway",
 					"credits",
@@ -91,6 +91,10 @@
 							},
 							"maxItems": 20,
 							"description": "Gateway model ids, in provider/model form such as anthropic/claude-sonnet-4.5, to report prices and context windows for."
+						},
+						"search": {
+							"type": "string",
+							"description": "Text to find in gateway model ids and names, case insensitive, such as claude or gpt-5. Lists up to 20 matching chat models with prices and context windows."
 						}
 					}
 				}
