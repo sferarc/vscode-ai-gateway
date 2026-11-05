@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.7.0
+
+### Minor Changes
+
+- 9606141: Add a Get Started walkthrough that links to creating a gateway key, signs in with Manage Authentication and opens chat. Each step ticks once it is done.
+
 ## 0.6.0
 
 ### Minor Changes
