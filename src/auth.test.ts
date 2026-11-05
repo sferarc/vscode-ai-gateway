@@ -117,6 +117,7 @@ describe("VercelAIAuthenticationProvider", () => {
 		vi.clearAllMocks();
 		fetchMock = vi.fn(async () => new Response('{"data":[]}', { status: 200 }));
 		vi.stubGlobal("fetch", fetchMock);
+		vi.stubEnv("AI_GATEWAY_API_KEY", "");
 		ctx = createMockContext();
 		provider = new VercelAIAuthenticationProvider(ctx);
 	});
@@ -124,6 +125,7 @@ describe("VercelAIAuthenticationProvider", () => {
 	afterEach(() => {
 		vi.useRealTimers();
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 	});
 
 	it("returns empty sessions when none exist", async () => {
@@ -706,6 +708,109 @@ describe("VercelAIAuthenticationProvider", () => {
 			for (const call of vi.mocked(logger.warn).mock.calls) {
 				expect(JSON.stringify(call)).not.toContain("vck_offline");
 			}
+		});
+	});
+
+	describe("environment API key", () => {
+		const ENV_KEY = "vck_from_environment";
+
+		function expectKeyNeverLogged() {
+			for (const method of ["error", "warn", "info", "debug"] as const) {
+				for (const call of vi.mocked(logger[method]).mock.calls) {
+					expect(JSON.stringify(call)).not.toContain(ENV_KEY);
+				}
+			}
+		}
+
+		beforeEach(() => {
+			vi.stubEnv("AI_GATEWAY_API_KEY", ` ${ENV_KEY}\n`);
+		});
+
+		it("serves the trimmed variable as the active session when none is stored", async () => {
+			const active = await provider.getActiveSession();
+
+			expect(active).toMatchObject({
+				accessToken: ENV_KEY,
+				method: "environment",
+				account: { label: "AI_GATEWAY_API_KEY" },
+			});
+			expect((await provider.getSessions())[0]?.accessToken).toBe(ENV_KEY);
+			const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+			expect(url).toBe("https://gateway.test/v1/models");
+			expect(init.headers).toEqual({ Authorization: `Bearer ${ENV_KEY}` });
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(ctx.secrets.store).not.toHaveBeenCalled();
+			expect(window.withProgress).not.toHaveBeenCalled();
+			expectKeyNeverLogged();
+		});
+
+		it("prefers a stored session over the variable", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+
+			expect((await provider.getActiveSession())?.id).toBe("s1");
+			const sessions = await provider.getSessions();
+			expect(sessions.map((s) => s.id)).toEqual(["s1"]);
+			expect(fetchMock).not.toHaveBeenCalled();
+		});
+
+		it("ignores a key the gateway rejects with 401 and warns once", async () => {
+			fetchMock.mockResolvedValue(new Response("", { status: 401 }));
+
+			expect(await provider.getActiveSession()).toBeNull();
+			expect(await provider.getSessions()).toEqual([]);
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
+			expect(window.showWarningMessage).toHaveBeenCalledWith(
+				expect.stringContaining("rejected the API key in AI_GATEWAY_API_KEY (HTTP 401)"),
+			);
+			expectKeyNeverLogged();
+		});
+
+		it("uses the key unchecked when the gateway cannot be reached", async () => {
+			fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+
+			expect((await provider.getActiveSession())?.accessToken).toBe(ENV_KEY);
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining("Using AI_GATEWAY_API_KEY unchecked"),
+			);
+			expectKeyNeverLogged();
+		});
+
+		it("shows the environment session in the manage menu without a remove action", async () => {
+			hoisted.mockShowQuickPick.mockResolvedValueOnce(undefined as never);
+
+			await provider.manageAuthentication();
+
+			const [options, pickOptions] = hoisted.mockShowQuickPick.mock.calls[0] as [
+				Array<{ value: string }>,
+				{ placeHolder: string },
+			];
+			expect(options.map((o) => o.value)).toEqual(["add", "cancel"]);
+			expect(pickOptions.placeHolder).toContain("AI_GATEWAY_API_KEY [Environment]");
+		});
+
+		it("does not remove or store anything when asked to remove the environment session", async () => {
+			const [session] = await provider.getSessions();
+
+			await provider.removeSession(session?.id ?? "");
+
+			expect(ctx.secrets.store).not.toHaveBeenCalled();
+			expect(hoisted.mockEventEmitterFire).not.toHaveBeenCalled();
+			expect((await provider.getActiveSession())?.accessToken).toBe(ENV_KEY);
+		});
+
+		it("makes a session added next to the variable the active one", async () => {
+			hoisted.mockShowQuickPick
+				.mockResolvedValueOnce({ label: "Add new authentication", value: "add" } as never)
+				.mockResolvedValueOnce({ label: "API Key", value: "api-key" } as never);
+			hoisted.mockShowInputBox.mockResolvedValueOnce("Work").mockResolvedValueOnce("vck_typed");
+
+			await provider.manageAuthentication();
+
+			expect((await provider.getActiveSession())?.accessToken).toBe("vck_typed");
+			const stored = await ctx.secrets.get(SESSIONS_KEY);
+			expect(stored).not.toContain(ENV_KEY);
 		});
 	});
 

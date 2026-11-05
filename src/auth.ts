@@ -32,7 +32,11 @@ const ACTIVE_SESSION_KEY = `${VERCEL_AI_AUTH_PROVIDER_ID}.activeSession`;
  */
 const LEGACY_ACCOUNT_IDS = new Set(["vercel-ai-user", "vercel-oidc-user"]);
 
-export type AuthenticationMethod = "api-key" | "oidc";
+export type AuthenticationMethod = "api-key" | "oidc" | "environment";
+
+/** The variable the AI SDK and ai-gateway-proxy read the gateway key from. */
+const ENVIRONMENT_API_KEY_VARIABLE = "AI_GATEWAY_API_KEY";
+const ENVIRONMENT_SESSION_ID = `${VERCEL_AI_AUTH_PROVIDER_ID}.environment`;
 
 interface SessionData {
 	id: string;
@@ -71,6 +75,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private writeQueue: Promise<void> = Promise.resolve();
 	private inflightRefresh = new Map<string, Promise<SessionData>>();
 	private unreadableSessionsNotified = false;
+	private environmentKeyCheck?: { apiKey: string; accepted: Promise<boolean> };
 
 	constructor(private readonly context: ExtensionContext) {
 		this._disposable = authentication.registerAuthenticationProvider(
@@ -97,6 +102,13 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		options?: AuthenticationProviderSessionOptions,
 	): Promise<AuthenticationSession[]> {
 		const snapshot = await this.getSessionsData();
+		if (snapshot.length === 0) {
+			const environment = await this.getEnvironmentSession();
+			const requestedAccountId = options?.account?.id;
+			return environment && (!requestedAccountId || requestedAccountId === environment.account.id)
+				? this.convertToAuthSessions([environment])
+				: [];
+		}
 		const refreshed = await this.refreshSessionTokens(snapshot);
 
 		let refreshedSessions = snapshot;
@@ -398,6 +410,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	async removeSession(sessionId: string): Promise<void> {
+		if (sessionId === ENVIRONMENT_SESSION_ID) {
+			window.showInformationMessage(
+				`This session comes from the ${ENVIRONMENT_API_KEY_VARIABLE} environment variable. Unset it and reload the window to sign out.`,
+			);
+			return;
+		}
 		const result = await this.withLock(async () => {
 			const sessions = await this.getSessionsData();
 			const index = sessions.findIndex((s) => s.id === sessionId);
@@ -482,13 +500,55 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	private getMethodLabel(method: AuthenticationMethod): string {
+		if (method === "environment") {
+			return "[Environment]";
+		}
 		return method === "oidc" ? "[OIDC]" : "[API Key]";
+	}
+
+	/**
+	 * A session for the key in the extension host's environment, used only while none is stored.
+	 * It lives in memory only; a key the gateway rejects with 401 is ignored until the window reloads.
+	 */
+	private async getEnvironmentSession(): Promise<SessionData | null> {
+		const apiKey = process.env[ENVIRONMENT_API_KEY_VARIABLE]?.trim();
+		if (!apiKey) {
+			return null;
+		}
+		if (this.environmentKeyCheck?.apiKey !== apiKey) {
+			this.environmentKeyCheck = { apiKey, accepted: this.checkEnvironmentKey(apiKey) };
+		}
+		if (!(await this.environmentKeyCheck.accepted)) {
+			return null;
+		}
+		return {
+			id: ENVIRONMENT_SESSION_ID,
+			accessToken: apiKey,
+			account: { id: ENVIRONMENT_SESSION_ID, label: ENVIRONMENT_API_KEY_VARIABLE },
+			scopes: [],
+			method: "environment",
+		};
+	}
+
+	private async checkEnvironmentKey(apiKey: string): Promise<boolean> {
+		const status = await fetchApiKeyStatus(
+			apiKey,
+			`Using ${ENVIRONMENT_API_KEY_VARIABLE} unchecked`,
+		);
+		if (status !== 401) {
+			return true;
+		}
+		logger.warn(`The gateway rejected ${ENVIRONMENT_API_KEY_VARIABLE} (HTTP 401); ignoring it`);
+		window.showWarningMessage(
+			`The gateway rejected the API key in ${ENVIRONMENT_API_KEY_VARIABLE} (HTTP 401). Set a valid key and reload the window, or run Manage Authentication to add one.`,
+		);
+		return false;
 	}
 
 	async manageAuthentication(): Promise<void> {
 		try {
 			const sessions = await this.getSessionsData();
-			if (sessions.length === 0) {
+			if (sessions.length === 0 && !(await this.getEnvironmentSession())) {
 				await this.createSession([]);
 				return;
 			}
@@ -541,10 +601,11 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		if (sessions.length > 1) {
 			options.push({ label: "Switch active session", value: "switch" });
 		}
-		options.push(
-			{ label: "Remove session", value: "remove" },
-			{ label: "Cancel", value: "cancel" },
-		);
+		// The environment session cannot be removed from here, only stored sessions.
+		if (sessions.length > 0) {
+			options.push({ label: "Remove session", value: "remove" });
+		}
+		options.push({ label: "Cancel", value: "cancel" });
 
 		const result = await window.showQuickPick(options, {
 			placeHolder: `Active session: ${activeSessionName} - Choose an action`,
@@ -610,7 +671,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	async getActiveSession(): Promise<SessionData | null> {
 		const sessions = await this.getSessionsData();
 		if (sessions.length === 0) {
-			return null;
+			return this.getEnvironmentSession();
 		}
 
 		const activeSessionId = await this.getActiveSessionId();
@@ -719,32 +780,40 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 // Only a 401 refuses the key, so an unreachable or failing gateway never blocks sign-in.
 async function verifyApiKey(apiKey: string): Promise<void> {
-	const { endpoint, timeout } = getConfig();
-	let status: number;
-	try {
-		const response = await window.withProgress(
-			{
-				location: ProgressLocation.Notification,
-				title: "Checking the API key with Vercel AI Gateway",
-			},
-			() =>
-				fetch(`${endpoint}${MODELS_ENDPOINT}`, {
-					headers: { Authorization: `Bearer ${apiKey}` },
-					signal: AbortSignal.timeout(timeout),
-				}),
-		);
-		status = response.status;
-		response.body?.cancel().catch(() => undefined);
-	} catch (error) {
-		logger.warn(`Saving the API key unchecked: ${extractErrorMessage(error)}`);
-		return;
-	}
+	const status = await window.withProgress(
+		{
+			location: ProgressLocation.Notification,
+			title: "Checking the API key with Vercel AI Gateway",
+		},
+		() => fetchApiKeyStatus(apiKey, "Saving the API key unchecked"),
+	);
 	if (status === 401) {
 		throw new Error(
 			"The gateway rejected this API key (HTTP 401). Copy the key again from the AI Gateway dashboard, or create a new one, and add it again.",
 		);
 	}
-	if (status < 200 || status >= 300) {
-		logger.warn(`Saving the API key unchecked: the gateway answered HTTP ${status}`);
+}
+
+/** The gateway's status for the key, or undefined when it could not be reached. */
+async function fetchApiKeyStatus(
+	apiKey: string,
+	uncheckedLog: string,
+): Promise<number | undefined> {
+	const { endpoint, timeout } = getConfig();
+	let status: number;
+	try {
+		const response = await fetch(`${endpoint}${MODELS_ENDPOINT}`, {
+			headers: { Authorization: `Bearer ${apiKey}` },
+			signal: AbortSignal.timeout(timeout),
+		});
+		status = response.status;
+		response.body?.cancel().catch(() => undefined);
+	} catch (error) {
+		logger.warn(`${uncheckedLog}: ${extractErrorMessage(error)}`);
+		return undefined;
 	}
+	if (status !== 401 && (status < 200 || status >= 300)) {
+		logger.warn(`${uncheckedLog}: the gateway answered HTTP ${status}`);
+	}
+	return status;
 }
