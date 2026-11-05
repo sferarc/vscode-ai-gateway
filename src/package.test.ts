@@ -13,6 +13,7 @@ describe("VSIX contents", () => {
 
 		expect(files).toContain("package.json");
 		expect(files).toContain("README.md");
+		expect(files).not.toContain("AGENTS.md");
 		expect(files).not.toContain("CLAUDE.md");
 		expect(files.filter((file) => file.startsWith("brain/"))).toEqual([]);
 	});

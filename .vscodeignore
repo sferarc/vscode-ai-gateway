@@ -24,6 +24,7 @@ yarn.lock
 package-lock.json
 *.vsix
 .claude/
+AGENTS.md
 CLAUDE.md
 brain/**
 .changeset/**
