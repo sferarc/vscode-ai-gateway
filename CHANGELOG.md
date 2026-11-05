@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.7.1
+
+### Patch Changes
+
+- 47318da: Group the README settings into Connection, Privacy, Routing and Spend reporting, each with a short table and its caveats listed below it, so the privacy controls are easy to find on the Marketplace page.
+- 9595250: When `vercelAiGateway.requiredCapabilities` leaves a model with no provider, the chat error now names the setting and the required capabilities instead of blaming only the data policy settings.
+
 ## 0.7.0
 
 ### Minor Changes
