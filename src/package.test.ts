@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listFiles, PackageManager } from "@vscode/vsce";
 import { describe, expect, it } from "vitest";
-import { EXTENSION_ID } from "./constants";
+import { EXTENSION_ID, SIGNED_IN_CONTEXT_KEY } from "./constants";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -15,6 +15,17 @@ describe("VSIX contents", () => {
 		expect(files).toContain("README.md");
 		expect(files).not.toContain("CLAUDE.md");
 		expect(files.filter((file) => file.startsWith("brain/"))).toEqual([]);
+	});
+
+	it("packages the walkthrough media", async () => {
+		const files = await listFiles({ cwd: root, packageManager: PackageManager.None });
+		const pkg = await readManifest();
+		const media = pkg.contributes.walkthroughs.flatMap((w) => w.steps.map((s) => s.media.markdown));
+
+		expect(media.length).toBeGreaterThan(0);
+		for (const path of media) {
+			expect(files).toContain(path);
+		}
 	});
 });
 
@@ -30,6 +41,14 @@ interface Manifest {
 		commands: { command: string }[];
 		languageModelChatProviders: { vendor: string; icon?: unknown }[];
 		authentication: { id: string }[];
+		walkthroughs: {
+			steps: {
+				id: string;
+				description: string;
+				media: { markdown: string };
+				completionEvents: string[];
+			}[];
+		}[];
 	};
 }
 
@@ -72,6 +91,24 @@ describe("manifest", () => {
 
 		// A $(name) reference needs no asset and follows the theme; VS Code before 1.143 ignores it.
 		expect(pkg.contributes.languageModelChatProviders[0]?.icon).toMatch(/^\$\([a-z0-9-]+\)$/);
+	});
+
+	it("walks through getting a key, signing in and opening chat", async () => {
+		const pkg = await readManifest();
+		const steps = pkg.contributes.walkthroughs[0]?.steps ?? [];
+		const commands = pkg.contributes.commands.map((c) => c.command);
+
+		expect(steps.map((s) => s.id)).toEqual(["getKey", "signIn", "openChat"]);
+		expect(steps[1]?.completionEvents).toEqual([`onContext:${SIGNED_IN_CONTEXT_KEY}`]);
+		expect(steps[0]?.completionEvents).toContain(`onContext:${SIGNED_IN_CONTEXT_KEY}`);
+		for (const step of steps) {
+			for (const [, command] of step.description.matchAll(/\(command:([\w.]+)\)/g)) {
+				if (command?.startsWith(`${EXTENSION_ID}.`)) {
+					expect(commands).toContain(command);
+				}
+			}
+		}
+		expect(steps[1]?.description).toContain(`(command:${EXTENSION_ID}.manage)`);
 	});
 
 	it("activates only on the contributed chat provider", async () => {

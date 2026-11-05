@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
 	logger.info("Vercel AI Gateway extension activating...");
 
 	const authProvider = new VercelAIAuthenticationProvider(context);
-	context.subscriptions.push(authProvider);
+	context.subscriptions.push(authProvider, authProvider.watchSignedInContext());
 
 	const provider = new VercelAIChatModelProvider(() => authProvider.getActiveSession());
 	context.subscriptions.push(provider);

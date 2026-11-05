@@ -10,6 +10,8 @@ This is a community extension. It is not made by Vercel.
 2. Run **Vercel AI Gateway: Manage Authentication** from the Command Palette and add your AI Gateway API key, or sign in with Vercel OIDC. To get a key, see [AI Gateway authentication](https://vercel.com/docs/ai-gateway/authentication-and-byok).
 3. Open the chat view and pick a gateway model in the model picker.
 
+The same steps open as the **Get started with Vercel AI Gateway** walkthrough on the Welcome page after install. To open it later, run **Welcome: Open Walkthrough...** and pick it.
+
 ## Features
 
 - **Models listed live from the gateway.** The model list comes from `GET {endpoint}/v1/models` on the configured gateway and is cached for five minutes. Every chat or language model the gateway returns is offered; nothing is hard-coded in the extension. A model the gateway marks as deprecated shows its deprecation date in the picker. Hovering a model shows the gateway's input and output prices per million tokens, the model's knowledge cutoff and the inference regions it serves when the gateway lists them, and whether the providers serving it may train on prompts or offer zero data retention.
