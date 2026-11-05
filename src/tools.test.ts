@@ -37,15 +37,29 @@ const MODELS = [
 	{ id: "openai/text-embedding-3-small", name: "Embedding", type: "embedding" },
 ];
 
+const REPORT = [
+	{ model: "openai/gpt-5", total_cost: 0.75, request_count: 10 },
+	{ model: "anthropic/claude-sonnet-4.5", total_cost: 2.5, request_count: 40 },
+];
+
+const SPEND_LINE =
+	"Spend this month (since 2026-11-01 UTC): $3.25 over 50 requests. Most spent on: anthropic/claude-sonnet-4.5 $2.50, openai/gpt-5 $0.75.";
+
 function routeFetch(options: {
 	credits?: () => Promise<unknown>;
 	models?: () => Promise<unknown>;
+	report?: () => Promise<unknown>;
 }) {
 	const fetchMock = vi.fn(async (url?: unknown) => {
 		if (String(url).endsWith("/v1/credits")) {
 			return options.credits
 				? options.credits()
 				: { ok: true, status: 200, json: async () => ({ balance: "12.5", total_used: "3.25" }) };
+		}
+		if (String(url).includes("/v1/report?")) {
+			return options.report
+				? options.report()
+				: { ok: true, status: 200, json: async () => ({ results: REPORT }) };
 		}
 		return options.models
 			? options.models()
@@ -74,9 +88,12 @@ async function invoke(
 describe("StatusTool", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-11-05T10:00:00Z"));
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
 
@@ -98,6 +115,7 @@ describe("StatusTool", () => {
 		expect(text).toBe(
 			[
 				"Credits: 12.5 left, 3.25 used.",
+				SPEND_LINE,
 				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output.",
 				"- openai/unpriced (Unpriced): input price not listed, output price not listed; context window not listed.",
 				"- nope/x: not in the gateway's chat model list.",
@@ -115,7 +133,11 @@ describe("StatusTool", () => {
 		const text = await invoke({ accessToken: TOKEN }, { modelIds: [42, ""] });
 
 		expect(text).toBe(
-			"Credits: 12.5 left, 3.25 used.\nModels: 2 chat models available. Pass search to find ids, or ids in modelIds, for prices and context windows.",
+			[
+				"Credits: 12.5 left, 3.25 used.",
+				SPEND_LINE,
+				"Models: 2 chat models available. Pass search to find ids, or ids in modelIds, for prices and context windows.",
+			].join("\n"),
 		);
 	});
 
@@ -136,6 +158,7 @@ describe("StatusTool", () => {
 		expect(text).toBe(
 			[
 				"Credits: 12.5 left, 3.25 used.",
+				SPEND_LINE,
 				'Models matching "ANTHROPIC/": 1.',
 				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output.",
 			].join("\n"),
@@ -149,7 +172,7 @@ describe("StatusTool", () => {
 		const embedding = await invoke({ accessToken: TOKEN }, { search: "embedding" });
 
 		expect(byName).toContain("- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5):");
-		expect(embedding.split("\n")[1]).toBe(
+		expect(embedding.split("\n")[2]).toBe(
 			'Models matching "embedding": none of the 2 chat models.',
 		);
 	});
@@ -162,7 +185,7 @@ describe("StatusTool", () => {
 			{ search: "unpriced", modelIds: ["anthropic/claude-sonnet-4.5"] },
 		);
 
-		expect(text.split("\n").slice(1)).toEqual([
+		expect(text.split("\n").slice(2)).toEqual([
 			'Models matching "unpriced": 1.',
 			"- openai/unpriced (Unpriced): input price not listed, output price not listed; context window not listed.",
 			"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output.",
@@ -175,7 +198,7 @@ describe("StatusTool", () => {
 		const blank = await invoke({ accessToken: TOKEN }, { search: "  " });
 		const number = await invoke({ accessToken: TOKEN }, { search: 5 });
 
-		expect(blank.split("\n")[1]).toMatch(/^Models: 2 chat models available\./);
+		expect(blank.split("\n")[2]).toMatch(/^Models: 2 chat models available\./);
 		expect(number).toBe(blank);
 	});
 
@@ -192,10 +215,74 @@ describe("StatusTool", () => {
 		const text = await invoke({ accessToken: TOKEN }, { search: "grok" });
 		const lines = text.split("\n");
 
-		expect(lines[1]).toBe(
+		expect(lines[2]).toBe(
 			'Models matching "grok": 25, showing the first 20. Use a longer search term to narrow them.',
 		);
 		expect(lines.filter((line) => line.startsWith("- "))).toHaveLength(20);
+	});
+
+	it("asks the gateway for this month's spend by model", async () => {
+		const fetchMock = routeFetch({});
+
+		await invoke({ accessToken: TOKEN }, {});
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			`${DEFAULT_BASE_URL}/v1/report?start_date=2026-11-01&end_date=2026-11-05&group_by=model`,
+			expect.objectContaining({ headers: { Authorization: `Bearer ${TOKEN}` } }),
+		);
+	});
+
+	it("names the top three models by spend and skips rows without a cost", async () => {
+		routeFetch({
+			report: async () => ({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					results: [
+						{ model: "a/one", total_cost: 0.0042 },
+						{ model: "b/two", total_cost: 1 },
+						{ model: "c/free", total_cost: 0 },
+						{ model: "d/three", total_cost: 0.5 },
+						{ model: "e/four", total_cost: 0.25 },
+						{ model: "f/bad", total_cost: "7" },
+						null,
+					],
+				}),
+			}),
+		});
+
+		const text = await invoke({ accessToken: TOKEN }, {});
+
+		expect(text.split("\n")[1]).toBe(
+			"Spend this month (since 2026-11-01 UTC): $1.7542. Most spent on: b/two $1.00, d/three $0.50, e/four $0.25.",
+		);
+	});
+
+	it("reports a month with no spend", async () => {
+		routeFetch({
+			report: async () => ({ ok: true, status: 200, json: async () => ({ results: [] }) }),
+		});
+
+		const text = await invoke({ accessToken: TOKEN }, {});
+
+		expect(text.split("\n")[1]).toBe("Spend this month (since 2026-11-01 UTC): $0.00.");
+	});
+
+	it("still answers when the spend report is refused or unreadable", async () => {
+		routeFetch({ report: async () => ({ ok: false, status: 403, json: async () => ({}) }) });
+		const refused = await invoke({ accessToken: TOKEN }, {});
+		routeFetch({ report: async () => ({ ok: true, status: 200, json: async () => ({}) }) });
+		const malformed = await invoke({ accessToken: TOKEN }, {});
+		routeFetch({ report: () => Promise.reject(new TypeError("fetch failed")) });
+		const failed = await invoke({ accessToken: TOKEN }, {});
+
+		for (const text of [refused, malformed, failed]) {
+			expect(text.split("\n")).toEqual([
+				"Credits: 12.5 left, 3.25 used.",
+				"Spend this month: the gateway did not return a spend report for this session.",
+				"Models: 2 chat models available. Pass search to find ids, or ids in modelIds, for prices and context windows.",
+			]);
+		}
 	});
 
 	it("tells the model to have the user sign in when there is no session", async () => {
@@ -246,7 +333,7 @@ describe("StatusTool", () => {
 			{ modelIds: ["anthropic/claude-sonnet-4.5"] },
 		);
 
-		expect(text.split("\n")[1]).toBe(
+		expect(text.split("\n")[2]).toBe(
 			"Models: the gateway rejected the session's credentials. Ask the user to run Vercel AI Gateway: Manage Authentication to add an API key or sign in with Vercel OIDC.",
 		);
 	});
@@ -256,7 +343,7 @@ describe("StatusTool", () => {
 
 		const text = await invoke({ accessToken: TOKEN }, {});
 
-		expect(text.split("\n")[1]).toBe(
+		expect(text.split("\n")[2]).toBe(
 			"Models: the model list could not be loaded. Ask the user to run Vercel AI Gateway: Check Connection to see why.",
 		);
 	});
@@ -274,7 +361,7 @@ describe("StatusTool", () => {
 		const tool = new StatusTool(async () => null, new ModelsClient());
 
 		expect(tool.prepareInvocation().invocationMessage).toBe(
-			"Reading Vercel AI Gateway credits and model prices",
+			"Reading Vercel AI Gateway credits, spend and model prices",
 		);
 	});
 });
