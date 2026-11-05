@@ -353,7 +353,13 @@ describe("ModelsClient", () => {
 				}),
 			}) as unknown as typeof fetch;
 
-			const [priced, tiered, invalid, unpriced] = await new ModelsClient().getModels("test-key");
+			const client = new ModelsClient();
+			const [priced, tiered, invalid, unpriced] = await client.getModels("test-key");
+
+			expect(client.priceOf("priced")).toEqual({ input: "$2.00", output: "$10.00" });
+			expect(client.priceOf("tiered")).toEqual({ input: "from $1.20", output: "$0.04" });
+			expect(client.priceOf("unpriced")).toEqual({ input: undefined, output: undefined });
+			expect(client.priceOf("missing")).toBeUndefined();
 
 			expect(priced?.tooltip).toBe(
 				"Fast\n\nPrice: $2.00 per million input tokens, $10.00 per million output tokens.\n\nThe gateway marks this model as deprecated from 2026-11-18.",

@@ -6,6 +6,7 @@ const manifest = require("../package.json");
 const EXTENSION_ID = `${manifest.publisher}.${manifest.name}`;
 const VENDOR = manifest.contributes.languageModelChatProviders[0].vendor;
 const COMMANDS = manifest.contributes.commands.map(({ command }) => command);
+const TOOLS = manifest.contributes.languageModelTools.map(({ name }) => name);
 
 async function run() {
 	const extension = vscode.extensions.getExtension(EXTENSION_ID);
@@ -20,6 +21,11 @@ async function run() {
 	const registered = await vscode.commands.getCommands(true);
 	for (const command of COMMANDS) {
 		assert.ok(registered.includes(command), `command ${command} is not registered`);
+	}
+
+	const tools = vscode.lm.tools.map(({ name }) => name);
+	for (const tool of TOOLS) {
+		assert.ok(tools.includes(tool), `language model tool ${tool} is not registered`);
 	}
 }
 

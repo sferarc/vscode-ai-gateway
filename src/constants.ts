@@ -1,6 +1,8 @@
 export const EXTENSION_ID = "vercelAiGateway";
 /** True while a session exists; the walkthrough's sign-in step completes on it. */
 export const SIGNED_IN_CONTEXT_KEY = `${EXTENSION_ID}.signedIn`;
+/** The `languageModelTools` name of the read-only credits and prices tool. */
+export const STATUS_TOOL_NAME = `${EXTENSION_ID}_status`;
 export const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh";
 export const MODELS_ENDPOINT = "/v1/models";
 export const MODELS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes

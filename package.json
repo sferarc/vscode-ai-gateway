@@ -67,6 +67,35 @@
 				"icon": "$(triangle-up)"
 			}
 		],
+		"languageModelTools": [
+			{
+				"name": "vercelAiGateway_status",
+				"displayName": "Vercel AI Gateway Status",
+				"toolReferenceName": "gatewayStatus",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(triangle-up)",
+				"userDescription": "Credit balance of the active Vercel AI Gateway session, and the price and context window of gateway models.",
+				"modelDescription": "Reads the Vercel AI Gateway credit balance left and used for the user's active session, and for each gateway model id passed in modelIds, its price per million input and output tokens and its context window. Use it before a long or expensive task, or to compare the cost of gateway models, such as anthropic/claude-sonnet-4.5 against openai/gpt-5. It only reads and makes no chat request. Without modelIds it returns the balance and how many chat models are available. Ids it does not know are reported as not listed. When the user is not signed in, or the gateway cannot be reached, it returns the step the user should take instead.",
+				"tags": [
+					"vercel-ai-gateway",
+					"credits",
+					"pricing"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"modelIds": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"maxItems": 20,
+							"description": "Gateway model ids, in provider/model form such as anthropic/claude-sonnet-4.5, to report prices and context windows for."
+						}
+					}
+				}
+			}
+		],
 		"commands": [
 			{
 				"command": "vercelAiGateway.manage",

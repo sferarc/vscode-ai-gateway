@@ -70,6 +70,10 @@ Run these from the Command Palette:
 - **Vercel AI Gateway: Check Connection**: checks the active session against the gateway. It shows the endpoint, the active session and its method, when an OIDC token expires, and the result of a fresh request for the model list: HTTP status, latency, and how many of the listed models are chat models the model picker offers. When the gateway answers a request for the credit balance, it also shows the balance left and the total used. The same details are written to the log; the key or token never is.
 - **Vercel AI Gateway: Show Logs**: opens the extension's log.
 
+## Agent tool
+
+In agent mode, models can call the read-only **Vercel AI Gateway Status** tool, or you can attach it with `#gatewayStatus`. It returns the active session's credit balance and, for the gateway model ids it is given, the price per million input and output tokens and the context window, so an agent can check the budget before a long task or compare models by cost. It makes no chat request. Without a session it tells the agent to have you sign in.
+
 ## Settings
 
 ### Connection

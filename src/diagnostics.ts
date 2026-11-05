@@ -88,8 +88,8 @@ export async function checkConnection(
 	return result;
 }
 
-// The balance is extra detail, so a failure here never fails the check.
-async function fetchCredits(
+/** Undefined when the balance cannot be read, so a failure here never fails the check. */
+export async function fetchCredits(
 	accessToken: string,
 	endpoint: string,
 	timeoutMs: number,

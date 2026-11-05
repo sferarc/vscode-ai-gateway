@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
 import { VercelAIAuthenticationProvider } from "./auth";
-import { EXTENSION_ID } from "./constants";
+import { EXTENSION_ID, STATUS_TOOL_NAME } from "./constants";
 import { runConnectionCheck } from "./diagnostics";
 import { initializeLogger, logger } from "./logger";
+import { ModelsClient } from "./models";
 import { VercelAIChatModelProvider } from "./provider";
+import { StatusTool } from "./tools";
 
 export function activate(context: vscode.ExtensionContext) {
 	const loggerDisposable = initializeLogger();
@@ -14,10 +16,15 @@ export function activate(context: vscode.ExtensionContext) {
 	const authProvider = new VercelAIAuthenticationProvider(context);
 	context.subscriptions.push(authProvider, authProvider.watchSignedInContext());
 
-	const provider = new VercelAIChatModelProvider(() => authProvider.getActiveSession());
+	const getActiveSession = () => authProvider.getActiveSession();
+	const modelsClient = new ModelsClient();
+	const provider = new VercelAIChatModelProvider(getActiveSession, modelsClient);
 	context.subscriptions.push(provider);
 	const providerDisposable = vscode.lm.registerLanguageModelChatProvider(EXTENSION_ID, provider);
 	context.subscriptions.push(providerDisposable);
+	context.subscriptions.push(
+		vscode.lm.registerTool(STATUS_TOOL_NAME, new StatusTool(getActiveSession, modelsClient)),
+	);
 
 	const commandDisposable = vscode.commands.registerCommand(`${EXTENSION_ID}.manage`, () => {
 		authProvider.manageAuthentication();
@@ -25,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(commandDisposable);
 	context.subscriptions.push(
 		vscode.commands.registerCommand(`${EXTENSION_ID}.checkConnection`, () =>
-			runConnectionCheck(() => authProvider.getActiveSession()),
+			runConnectionCheck(getActiveSession),
 		),
 		vscode.commands.registerCommand(`${EXTENSION_ID}.showLogs`, () => logger.show()),
 	);
