@@ -982,6 +982,19 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("asks the model for the chosen reasoning effort", async () => {
+		const options = await requestOptions({}, {}, undefined, { reasoningEffort: "high" });
+		expect(options.reasoning).toBe("high");
+		expect(options.providerOptions).toBeUndefined();
+	});
+
+	it("leaves reasoning to the provider by default", async () => {
+		expect((await requestOptions({})).reasoning).toBeUndefined();
+		expect(
+			(await requestOptions({}, {}, undefined, { reasoningEffort: "provider-default" })).reasoning,
+		).toBeUndefined();
+	});
+
 	it("leaves the inference region out for the global default", async () => {
 		const text = new hoisted.MockLanguageModelTextPart("Hello");
 

@@ -37,7 +37,18 @@ export function getConfig() {
 		),
 		// The priority tier bills more, so a cloned repo must not pick it for the user.
 		serviceTier: serviceTier(config.inspect<unknown>("serviceTier")?.globalValue),
+		// Higher effort bills more output tokens, so a cloned repo must not raise it for the user.
+		reasoningEffort: reasoningEffort(config.inspect<unknown>("reasoningEffort")?.globalValue),
 	};
+}
+
+const REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+// "provider-default", like any value outside the manifest's enum, leaves the provider's own reasoning.
+function reasoningEffort(value: unknown): ReasoningEffort | undefined {
+	return REASONING_EFFORTS.find((effort) => effort === value);
 }
 
 const PROVIDER_SORTS = ["cost", "ttft", "tps"] as const;

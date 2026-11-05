@@ -666,3 +666,49 @@ describe("getConfig requiredCapabilities", () => {
 		});
 	});
 });
+
+describe("getConfig reasoningEffort", () => {
+	function effort(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "reasoningEffort" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it.each([["none"], ["minimal"], ["low"], ["medium"], ["high"], ["xhigh"], ["max"]])(
+		"passes the %s effort through",
+		(value) => {
+			getConfiguration.mockReturnValue(effort({ globalValue: value }));
+
+			expect(getConfig().reasoningEffort).toBe(value);
+		},
+	);
+
+	it.each([["provider-default"], [undefined], ["High"], ["extreme"], [3], [null]])(
+		"leaves the provider's reasoning for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(effort({ globalValue: value }));
+
+			expect(getConfig().reasoningEffort).toBeUndefined();
+		},
+	);
+
+	it("ignores an effort set in workspace settings", () => {
+		getConfiguration.mockReturnValue(effort({ workspaceValue: "max" }));
+
+		expect(getConfig().reasoningEffort).toBeUndefined();
+	});
+
+	it("declares an application scoped provider default and the AI SDK's effort levels", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		const setting =
+			manifest.contributes.configuration.properties["vercelAiGateway.reasoningEffort"];
+		expect(setting).toMatchObject({
+			type: "string",
+			scope: "application",
+			default: "provider-default",
+			enum: ["provider-default", "none", "minimal", "low", "medium", "high", "xhigh", "max"],
+		});
+		expect(setting.enumDescriptions).toHaveLength(setting.enum.length);
+	});
+});
