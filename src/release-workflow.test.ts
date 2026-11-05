@@ -51,6 +51,15 @@ async function runHeadCheck(stepSource: string, sha: string, remoteHead: string)
 }
 
 describe("release workflow", () => {
+	it("releases only from main, inside the release environment", async () => {
+		const source = await readFile(workflow, "utf8");
+
+		expect(source).toContain(
+			"if: github.ref == 'refs/heads/main' && vars.RELEASE_ENABLED == 'true'",
+		);
+		expect(source).toMatch(/^ {4}environment: release$/m);
+	});
+
 	it("reads the changesets action's kebab-case has-changesets output", async () => {
 		const source = await readFile(workflow, "utf8");
 

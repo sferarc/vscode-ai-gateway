@@ -4,7 +4,9 @@
 
 ## The flow
 
-On a push to `main` (or a manual dispatch), `changesets/action`:
+The job runs only when `github.ref` is `refs/heads/main` as well as `RELEASE_ENABLED` is `true`, so a manual dispatch from any other branch skips it instead of publishing that branch with `VSCE_PAT` (#208, part of sferarc/hq#912). It runs in the `release` environment. The sferarc-hq App cannot create environments (HTTP 403, no Administration write, sferarc/hq#888), so GitHub creates `release` on the first run with no deployment branch policy, and the `github.ref` guard is the only control until #209 restricts it to `main`. `src/release-workflow.test.ts` checks the guard and the environment.
+
+On a push to `main` (or a manual dispatch from `main`), `changesets/action`:
 
 - with pending changesets in `.changeset/`, opens or updates a "Version Packages" pull request that bumps `package.json` and writes `CHANGELOG.md`;
 - with none, runs `pnpm release`, which is `scripts/release.sh`.
