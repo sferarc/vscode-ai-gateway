@@ -9,12 +9,14 @@ const hoisted = vi.hoisted(() => ({
 	},
 	mockShowQuickPick: vi.fn(),
 	mockShowInputBox: vi.fn(),
+	mockExecuteCommand: vi.fn(),
 }));
 
 vi.mock("vscode", () => ({
 	EventEmitter: hoisted.MockEventEmitter,
 	ProgressLocation: { Notification: 15 },
 	authentication: { registerAuthenticationProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+	commands: { executeCommand: hoisted.mockExecuteCommand },
 	window: {
 		showInputBox: hoisted.mockShowInputBox,
 		showQuickPick: hoisted.mockShowQuickPick,
@@ -1056,6 +1058,66 @@ describe("VercelAIAuthenticationProvider", () => {
 			const stored = JSON.parse((await ctx.secrets.get(SESSIONS_KEY)) ?? "[]");
 			expect(stored.map((s: { id: string }) => s.id)).toEqual(["s2"]);
 			expect(ctx.secrets.delete).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("signed in context key", () => {
+		function signedInValues() {
+			return hoisted.mockExecuteCommand.mock.calls
+				.filter(([command, key]) => command === "setContext" && key === "vercelAiGateway.signedIn")
+				.map(([, , value]) => value);
+		}
+
+		function sessionChangeListener() {
+			const listener = vi.mocked(provider.onDidChangeSessions).mock.calls[0]?.[0];
+			if (!listener) {
+				throw new Error("watchSignedInContext did not subscribe to session changes");
+			}
+			return listener;
+		}
+
+		it("is false with no session and true once one is stored", async () => {
+			provider.watchSignedInContext();
+			await vi.waitFor(() => expect(signedInValues()).toEqual([false]));
+
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			sessionChangeListener()({ added: [], removed: [], changed: [] });
+
+			await vi.waitFor(() => expect(signedInValues()).toEqual([false, true]));
+		});
+
+		it("turns false after the last session is removed", async () => {
+			await ctx.secrets.store(SESSIONS_KEY, JSON.stringify([createSession("s1")]));
+			provider.watchSignedInContext();
+			await vi.waitFor(() => expect(signedInValues()).toEqual([true]));
+
+			await provider.removeSession("s1");
+			sessionChangeListener()({ added: [], removed: [], changed: [] });
+
+			await vi.waitFor(() => expect(signedInValues()).toEqual([true, false]));
+		});
+
+		it("is true for an AI_GATEWAY_API_KEY session", async () => {
+			vi.stubEnv("AI_GATEWAY_API_KEY", "vck_from_environment");
+
+			provider.watchSignedInContext();
+
+			await vi.waitFor(() => expect(signedInValues()).toEqual([true]));
+		});
+
+		it("keeps the value of the latest session change when an earlier read finishes last", async () => {
+			let releaseFirstRead: (value: string) => void = () => {};
+			vi.mocked(ctx.secrets.get).mockImplementationOnce(
+				() => new Promise((resolve) => (releaseFirstRead = resolve)),
+			);
+
+			provider.watchSignedInContext();
+			sessionChangeListener()({ added: [], removed: [], changed: [] });
+			await vi.waitFor(() => expect(signedInValues()).toEqual([false]));
+			releaseFirstRead(JSON.stringify([createSession("s1")]));
+
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(signedInValues()).toEqual([false]);
 		});
 	});
 });

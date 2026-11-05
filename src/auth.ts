@@ -4,6 +4,7 @@ import {
 	type AuthenticationProviderSessionOptions,
 	type AuthenticationSession,
 	authentication,
+	commands,
 	type Disposable,
 	type Event,
 	EventEmitter,
@@ -12,7 +13,7 @@ import {
 	window,
 } from "vscode";
 import { getConfig } from "./config";
-import { ERROR_MESSAGES, EXTENSION_ID, MODELS_ENDPOINT } from "./constants";
+import { ERROR_MESSAGES, EXTENSION_ID, MODELS_ENDPOINT, SIGNED_IN_CONTEXT_KEY } from "./constants";
 import { AuthCancelledError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
 import {
@@ -76,6 +77,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private inflightRefresh = new Map<string, Promise<SessionData>>();
 	private unreadableSessionsNotified = false;
 	private environmentKeyCheck?: { apiKey: string; accepted: Promise<boolean> };
+	private signedInContextUpdates = 0;
 
 	constructor(private readonly context: ExtensionContext) {
 		this._disposable = authentication.registerAuthenticationProvider(
@@ -95,6 +97,26 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	dispose(): void {
 		this._disposable.dispose();
 		this._sessionChangeEmitter.dispose();
+	}
+
+	/** Sets the signed in context key now and again after every session change. */
+	watchSignedInContext(): Disposable {
+		void this.updateSignedInContext();
+		return this.onDidChangeSessions(() => void this.updateSignedInContext());
+	}
+
+	private async updateSignedInContext(): Promise<void> {
+		const update = ++this.signedInContextUpdates;
+		try {
+			const signedIn =
+				(await this.getSessionsData()).length > 0 || (await this.getEnvironmentSession()) !== null;
+			// A later session change may have finished first, and its value is the current one.
+			if (update === this.signedInContextUpdates) {
+				await commands.executeCommand("setContext", SIGNED_IN_CONTEXT_KEY, signedIn);
+			}
+		} catch (error) {
+			logger.warn(`Failed to update the signed in context key: ${extractErrorMessage(error)}`);
+		}
 	}
 
 	async getSessions(

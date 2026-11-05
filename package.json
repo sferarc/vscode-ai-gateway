@@ -84,6 +84,49 @@
 				"category": "Vercel AI Gateway"
 			}
 		],
+		"walkthroughs": [
+			{
+				"id": "getStarted",
+				"title": "Get started with Vercel AI Gateway",
+				"description": "Sign in with an AI Gateway key or Vercel OIDC and chat with a gateway model.",
+				"steps": [
+					{
+						"id": "getKey",
+						"title": "Get an AI Gateway API key",
+						"description": "Create a key that starts with vck_ in your Vercel dashboard. Skip this if the Vercel CLI is logged in and you will sign in with Vercel OIDC.\n[Open AI Gateway authentication](https://vercel.com/docs/ai-gateway/authentication-and-byok)",
+						"media": {
+							"markdown": "media/walkthrough/get-key.md"
+						},
+						"completionEvents": [
+							"onLink:https://vercel.com/docs/ai-gateway/authentication-and-byok",
+							"onContext:vercelAiGateway.signedIn"
+						]
+					},
+					{
+						"id": "signIn",
+						"title": "Sign in",
+						"description": "Add your key, or sign in with Vercel OIDC. The step completes once a session exists.\n[Manage Authentication](command:vercelAiGateway.manage)",
+						"media": {
+							"markdown": "media/walkthrough/sign-in.md"
+						},
+						"completionEvents": [
+							"onContext:vercelAiGateway.signedIn"
+						]
+					},
+					{
+						"id": "openChat",
+						"title": "Open chat and pick a gateway model",
+						"description": "Open the chat view and choose a model listed under Vercel AI Gateway in the model picker.\n[Open Chat](command:workbench.action.chat.open)",
+						"media": {
+							"markdown": "media/walkthrough/open-chat.md"
+						},
+						"completionEvents": [
+							"onCommand:workbench.action.chat.open"
+						]
+					}
+				]
+			}
+		],
 		"configuration": {
 			"title": "Vercel AI Gateway",
 			"properties": {
