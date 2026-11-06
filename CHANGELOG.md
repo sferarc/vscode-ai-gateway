@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.15.0
+
+### Minor Changes
+
+- 70bac89: PDF attachments and PDF tool results now reach models that the gateway lists as taking PDF input, such as Claude, Gemini and GPT models, instead of being replaced with a placeholder. Other models still get the placeholder.
+
 ## 0.14.0
 
 ### Minor Changes
