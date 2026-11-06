@@ -19,6 +19,7 @@ The same steps open as the **Get started with Vercel AI Gateway** walkthrough on
 - **Streaming responses**, including reasoning output where the model provides it.
 - **Cited sources.** When a search model cites web pages, they are listed as numbered links under the answer.
 - **Tool calling** with VS Code's tools.
+- **PDF input.** A PDF in a message or a tool result is sent as a file to models the gateway lists as taking PDF input; other models get a placeholder saying the content is unsupported.
 - **Prompt caching.** When VS Code marks cache breakpoints in a request, the gateway is asked to cache the prompt for models that support it.
 
 ## Install

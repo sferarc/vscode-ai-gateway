@@ -328,6 +328,36 @@ describe("ModelsClient", () => {
 			expect(client.acceptsTemperature("not-listed")).toBe(true);
 		});
 
+		it("reads which models take PDF input from their input modalities, then the file-input tag", async () => {
+			globalThis.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({
+					data: [
+						{ ...baseModel, id: "pdf", modalities: { input: ["text", "image", "pdf"] } },
+						{ ...baseModel, id: "image-only", modalities: { input: ["text", "image"] } },
+						{
+							...baseModel,
+							id: "modalities-win",
+							tags: ["file-input"],
+							modalities: { input: ["text"] },
+						},
+						{ ...baseModel, id: "file-input-tag", tags: ["file-input"] },
+						{ ...baseModel, id: "no-metadata", tags: [] },
+					],
+				}),
+			}) as unknown as typeof fetch;
+
+			const client = new ModelsClient();
+			await client.getModels("test-key");
+
+			expect(client.acceptsPdf("pdf")).toBe(true);
+			expect(client.acceptsPdf("image-only")).toBe(false);
+			expect(client.acceptsPdf("modalities-win")).toBe(false);
+			expect(client.acceptsPdf("file-input-tag")).toBe(true);
+			expect(client.acceptsPdf("no-metadata")).toBe(false);
+			expect(client.acceptsPdf("not-listed")).toBe(false);
+		});
+
 		it("names the deprecation date of a model the gateway marks as deprecated", async () => {
 			globalThis.fetch = vi.fn().mockResolvedValue({
 				ok: true,

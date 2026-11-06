@@ -57,6 +57,7 @@ const hoisted = vi.hoisted(() => {
 		MockEventEmitter,
 		mockGetConfiguration: vi.fn(),
 		mockAcceptsTemperature: vi.fn((_modelId: string) => true),
+		mockAcceptsPdf: vi.fn((_modelId: string) => false),
 		MockLanguageModelTextPart,
 		MockLanguageModelToolCallPart,
 		MockLanguageModelToolResultPart,
@@ -109,6 +110,7 @@ vi.mock("./models", () => ({
 		getModels = vi.fn();
 		invalidateCache = vi.fn();
 		acceptsTemperature = hoisted.mockAcceptsTemperature;
+		acceptsPdf = hoisted.mockAcceptsPdf;
 	},
 }));
 
@@ -684,6 +686,23 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(hoisted.mockAcceptsTemperature).toHaveBeenLastCalledWith("openai/gpt-4o");
 		expect(options.temperature).toBeUndefined();
 		expect(options.maxOutputTokens).toBe(1000);
+	});
+
+	it("sends a PDF as a file only to a model the gateway lists as taking PDF input", async () => {
+		const pdf = new hoisted.MockLanguageModelDataPart(
+			new Uint8Array([37, 80, 68, 70]),
+			"application/pdf",
+		);
+		const userContent = async () =>
+			((await requestOptions({}, {}, [pdf])).messages as any)?.[0]?.content;
+
+		expect(await userContent()).toBe("[Unsupported application/pdf content]");
+		expect(hoisted.mockAcceptsPdf).toHaveBeenLastCalledWith("openai/gpt-4o");
+
+		hoisted.mockAcceptsPdf.mockReturnValueOnce(true);
+		expect(await userContent()).toEqual([
+			{ type: "file", mediaType: "application/pdf", data: { type: "data", data: pdf.data } },
+		]);
 	});
 
 	it("asks the gateway for automatic caching when VS Code marks a cache breakpoint", async () => {
@@ -2069,12 +2088,15 @@ describe("tool message conversion", () => {
 		return { role, content } as unknown as LanguageModelChatMessage;
 	}
 
-	function toolResultOutput(content: unknown[]) {
-		const { messages } = convertMessages([
-			message(1, [new MockLanguageModelTextPart("Run it")]),
-			message(2, [new MockLanguageModelToolCallPart("c1", "readFile", {})]),
-			message(1, [new MockLanguageModelToolResultPart("c1", content)]),
-		]);
+	function toolResultOutput(content: unknown[], options?: { pdfInput?: boolean }) {
+		const { messages } = convertMessages(
+			[
+				message(1, [new MockLanguageModelTextPart("Run it")]),
+				message(2, [new MockLanguageModelToolCallPart("c1", "readFile", {})]),
+				message(1, [new MockLanguageModelToolResultPart("c1", content)]),
+			],
+			options,
+		);
 		const tool = messages.find((m) => m.role === "tool");
 		expect(tool).toBeDefined();
 		return (tool?.content as any)?.[0]?.output;
@@ -2098,6 +2120,26 @@ describe("tool message conversion", () => {
 			value: [
 				{ type: "text", text: "Screenshot:" },
 				{ type: "file", mediaType: "image/png", data: { type: "data", data: bytes } },
+			],
+		});
+	});
+
+	it("sends a PDF tool result as file content only when the model takes PDF input", () => {
+		const bytes = new Uint8Array([37, 80, 68, 70]);
+		const content = [
+			new MockLanguageModelTextPart("Report:"),
+			new MockLanguageModelDataPart(bytes, "Application/PDF"),
+		];
+
+		expect(toolResultOutput(content)).toEqual({
+			type: "text",
+			value: "Report:[Unsupported tool result content]",
+		});
+		expect(toolResultOutput(content, { pdfInput: true })).toEqual({
+			type: "content",
+			value: [
+				{ type: "text", text: "Report:" },
+				{ type: "file", mediaType: "application/pdf", data: { type: "data", data: bytes } },
 			],
 		});
 	});
