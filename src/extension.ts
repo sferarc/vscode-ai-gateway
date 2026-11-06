@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { VercelAIAuthenticationProvider } from "./auth";
 import { EXTENSION_ID, STATUS_TOOL_NAME } from "./constants";
 import { runConnectionCheck } from "./diagnostics";
+import { LastChatRequestStore } from "./last-request";
 import { initializeLogger, logger } from "./logger";
 import { ModelsClient } from "./models";
 import { VercelAIChatModelProvider } from "./provider";
@@ -18,12 +19,16 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const getActiveSession = () => authProvider.getActiveSession();
 	const modelsClient = new ModelsClient();
-	const provider = new VercelAIChatModelProvider(getActiveSession, modelsClient);
+	const lastRequest = new LastChatRequestStore();
+	const provider = new VercelAIChatModelProvider(getActiveSession, modelsClient, lastRequest);
 	context.subscriptions.push(provider);
 	const providerDisposable = vscode.lm.registerLanguageModelChatProvider(EXTENSION_ID, provider);
 	context.subscriptions.push(providerDisposable);
 	context.subscriptions.push(
-		vscode.lm.registerTool(STATUS_TOOL_NAME, new StatusTool(getActiveSession, modelsClient)),
+		vscode.lm.registerTool(
+			STATUS_TOOL_NAME,
+			new StatusTool(getActiveSession, modelsClient, lastRequest),
+		),
 	);
 
 	const commandDisposable = vscode.commands.registerCommand(`${EXTENSION_ID}.manage`, () => {

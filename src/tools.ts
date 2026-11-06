@@ -1,6 +1,11 @@
 import * as vscode from "vscode";
 import { getConfig } from "./config";
 import { describeMonthSpend, fetchCredits, fetchMonthSpend, type MonthSpend } from "./diagnostics";
+import {
+	describeLastRequest,
+	fetchGenerationCost,
+	type LastChatRequestStore,
+} from "./last-request";
 import { extractErrorMessage, logger } from "./logger";
 import { type ModelsClient, ModelsFetchError } from "./models";
 
@@ -20,11 +25,12 @@ const SIGN_IN =
 	"Ask the user to run Vercel AI Gateway: Manage Authentication to add an API key or sign in with Vercel OIDC.";
 const CHECK_CONNECTION = "Ask the user to run Vercel AI Gateway: Check Connection to see why.";
 
-/** Read-only agent tool: the active session's credit balance, this month's spend and the price of the models it names. */
+/** Read-only agent tool: the active session's credit balance, this month's spend, the last request's cost and the price of the models it names. */
 export class StatusTool implements vscode.LanguageModelTool<StatusToolInput> {
 	constructor(
 		private readonly getActiveSession: () => Promise<StatusSession | null>,
 		private readonly modelsClient: ModelsClient,
+		private readonly lastRequest?: LastChatRequestStore,
 	) {}
 
 	prepareInvocation(): vscode.PreparedToolInvocation {
@@ -54,15 +60,32 @@ export class StatusTool implements vscode.LanguageModelTool<StatusToolInput> {
 		}
 
 		const { endpoint, timeout } = getConfig();
-		const [credits, spend, models] = await Promise.all([
+		const [credits, spend, last, models] = await Promise.all([
 			fetchCredits(session.accessToken, endpoint, timeout),
 			fetchMonthSpend(session.accessToken, endpoint, timeout),
+			this.describeLast(session.accessToken, endpoint, timeout),
 			this.describeModels(session.accessToken, modelIds, search),
 		]);
 		const creditLine = credits
 			? `Credits: ${credits.balance} left, ${credits.totalUsed} used.`
 			: `Credits: the gateway did not return a balance. ${CHECK_CONNECTION}`;
-		return [creditLine, describeSpend(spend), ...models].join("\n");
+		return [creditLine, describeSpend(spend), ...last, ...models].join("\n");
+	}
+
+	private async describeLast(
+		accessToken: string,
+		endpoint: string,
+		timeout: number,
+	): Promise<string[]> {
+		if (!this.lastRequest) return [];
+		const request = this.lastRequest.get();
+		if (!request) {
+			return [
+				"Last chat request: none has completed through this extension since VS Code started.",
+			];
+		}
+		const cost = await fetchGenerationCost(accessToken, endpoint, timeout, request.generationId);
+		return [describeLastRequest(request, cost)];
 	}
 
 	private async describeModels(

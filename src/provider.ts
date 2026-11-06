@@ -41,6 +41,7 @@ import {
 } from "./config";
 import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
+import type { LastChatRequestStore } from "./last-request";
 import { extractErrorMessage, logger } from "./logger";
 import { ModelsClient, ModelsFetchError } from "./models";
 
@@ -162,10 +163,12 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	 * authentication provider this extension registers, so requests use that session rather than
 	 * whichever one VS Code happens to prefer.
 	 * @param modelsClient Shared with the status tool, so both read one model list cache.
+	 * @param lastRequest Shared with the status tool, which reports the last completed request's cost.
 	 */
 	constructor(
 		private readonly getActiveSession?: () => Promise<ActiveSession | null>,
 		private readonly modelsClient = new ModelsClient(),
+		private readonly lastRequest?: LastChatRequestStore,
 	) {
 		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
 			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
@@ -338,6 +341,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				`elapsedMs=${Date.now() - request.startedAt}`,
 			];
 			logger.info(`Chat request completed: ${fields.join(" ")}`);
+			if (request.generationId) {
+				this.lastRequest?.record({ generationId: request.generationId, model: model.id });
+			}
 		} catch (error) {
 			if (token.isCancellationRequested || abortController.signal.aborted) {
 				logger.debug("Request was cancelled");

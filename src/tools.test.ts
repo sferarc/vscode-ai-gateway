@@ -19,6 +19,7 @@ vi.mock("./logger", async (importOriginal) => ({
 
 import type * as vscode from "vscode";
 import { DEFAULT_BASE_URL } from "./constants";
+import { LastChatRequestStore } from "./last-request";
 import { ModelsClient } from "./models";
 import { StatusTool, type StatusToolInput } from "./tools";
 
@@ -52,12 +53,39 @@ const REPORT = [
 const SPEND_LINE =
 	"Spend this month (since 2026-11-01 UTC): $3.25 over 50 requests. Most spent on: anthropic/claude-sonnet-4.5 $2.50, openai/gpt-5 $0.75.";
 
+const GENERATION = {
+	id: "gen_01abc",
+	total_cost: 0.004215,
+	upstream_inference_cost: 0,
+	usage: 0.004215,
+	created_at: "2026-11-05T09:59:58Z",
+	model: "anthropic/claude-sonnet-4.5",
+	is_byok: false,
+	provider_name: "bedrock",
+	streamed: true,
+	finish_reason: "stop",
+	latency: 640,
+	generation_time: 2100,
+	native_tokens_prompt: 1200,
+	native_tokens_completion: 80,
+	native_tokens_reasoning: 0,
+	native_tokens_cached: 1000,
+	native_tokens_cache_creation: 0,
+	billable_web_search_calls: 0,
+};
+
 function routeFetch(options: {
 	credits?: () => Promise<unknown>;
 	models?: () => Promise<unknown>;
 	report?: () => Promise<unknown>;
+	generation?: () => Promise<unknown>;
 }) {
 	const fetchMock = vi.fn(async (url?: unknown) => {
+		if (String(url).includes("/v1/generation?")) {
+			return options.generation
+				? options.generation()
+				: { ok: true, status: 200, json: async () => ({ data: GENERATION }) };
+		}
 		if (String(url).endsWith("/v1/credits")) {
 			return options.credits
 				? options.credits()
@@ -79,10 +107,11 @@ function routeFetch(options: {
 async function invoke(
 	session: { accessToken: string } | null | Error,
 	input: StatusToolInput,
+	lastRequest?: LastChatRequestStore,
 ): Promise<string> {
 	const getSession = () =>
 		session instanceof Error ? Promise.reject(session) : Promise.resolve(session);
-	const tool = new StatusTool(getSession, new ModelsClient());
+	const tool = new StatusTool(getSession, new ModelsClient(), lastRequest);
 	const result = await tool.invoke({
 		input,
 		toolInvocationToken: undefined,
@@ -315,6 +344,86 @@ describe("StatusTool", () => {
 			expect(text.split("\n")).toEqual([
 				"Credits: 12.5 left, 3.25 used.",
 				"Spend this month: the gateway did not return a spend report for this session.",
+				"Models: 2 chat models available. Pass search to find ids, or ids in modelIds, for prices and context windows.",
+			]);
+		}
+	});
+
+	it("reports the cost of the last chat request after the spend", async () => {
+		const fetchMock = routeFetch({});
+		const lastRequest = new LastChatRequestStore();
+		lastRequest.record({ generationId: "gen_01abc", model: "anthropic/claude-sonnet-4.5" });
+
+		const text = await invoke({ accessToken: TOKEN }, {}, lastRequest);
+
+		expect(text.split("\n")[2]).toBe(
+			"Last chat request: anthropic/claude-sonnet-4.5 served by bedrock, cost $0.004215; 1200 input tokens, 1000 cache read, 80 output tokens.",
+		);
+		expect(fetchMock).toHaveBeenCalledWith(
+			`${DEFAULT_BASE_URL}/v1/generation?id=gen_01abc`,
+			expect.objectContaining({ headers: { Authorization: `Bearer ${TOKEN}` } }),
+		);
+	});
+
+	it("names the served model, the team's own key and reasoning tokens", async () => {
+		routeFetch({
+			generation: async () => ({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					data: {
+						...GENERATION,
+						model: "openai/gpt-5",
+						is_byok: true,
+						total_cost: 0,
+						native_tokens_cached: 0,
+						native_tokens_cache_creation: 300,
+						native_tokens_reasoning: 40,
+					},
+				}),
+			}),
+		});
+		const lastRequest = new LastChatRequestStore();
+		lastRequest.record({ generationId: "gen_01abc", model: "anthropic/claude-sonnet-4.5" });
+
+		const text = await invoke({ accessToken: TOKEN }, {}, lastRequest);
+
+		expect(text.split("\n")[2]).toBe(
+			"Last chat request: openai/gpt-5 served by bedrock with the team's own provider key, cost $0.00; 1200 input tokens, 300 cache write, 80 output tokens, 40 reasoning.",
+		);
+	});
+
+	it("says no chat request has completed yet", async () => {
+		const fetchMock = routeFetch({});
+
+		const text = await invoke({ accessToken: TOKEN }, {}, new LastChatRequestStore());
+
+		expect(text.split("\n")[2]).toBe(
+			"Last chat request: none has completed through this extension since VS Code started.",
+		);
+		expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContainEqual(
+			expect.stringContaining("/v1/generation"),
+		);
+	});
+
+	it("still answers when the generation lookup is refused or unreadable", async () => {
+		const lastRequest = new LastChatRequestStore();
+		lastRequest.record({ generationId: "gen_01abc", model: "anthropic/claude-sonnet-4.5" });
+		const expected =
+			"Last chat request: anthropic/claude-sonnet-4.5, generation gen_01abc; the gateway did not return its cost.";
+
+		routeFetch({ generation: async () => ({ ok: false, status: 404, json: async () => ({}) }) });
+		const refused = await invoke({ accessToken: TOKEN }, {}, lastRequest);
+		routeFetch({ generation: async () => ({ ok: true, status: 200, json: async () => ({}) }) });
+		const malformed = await invoke({ accessToken: TOKEN }, {}, lastRequest);
+		routeFetch({ generation: () => Promise.reject(new TypeError("fetch failed")) });
+		const failed = await invoke({ accessToken: TOKEN }, {}, lastRequest);
+
+		for (const text of [refused, malformed, failed]) {
+			expect(text.split("\n")).toEqual([
+				"Credits: 12.5 left, 3.25 used.",
+				SPEND_LINE,
+				expected,
 				"Models: 2 chat models available. Pass search to find ids, or ids in modelIds, for prices and context windows.",
 			]);
 		}
