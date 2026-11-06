@@ -31,7 +31,12 @@ const MODELS = [
 		type: "language",
 		context_window: 200000,
 		max_tokens: 64000,
-		pricing: { input: "0.000003", output: "0.000015" },
+		pricing: {
+			input: "0.000003",
+			output: "0.000015",
+			input_cache_read: "0.0000003",
+			input_cache_write: "0.00000375",
+		},
 		modalities: { input: ["text", "image"] },
 		supported_parameters: ["tools", "reasoning"],
 	},
@@ -118,7 +123,7 @@ describe("StatusTool", () => {
 			[
 				"Credits: 12.5 left, 3.25 used.",
 				SPEND_LINE,
-				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output; supports tool calling, image input and reasoning.",
+				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens, $0.30 per million cache read tokens, $3.75 per million cache write tokens; context window 200000 tokens, up to 64000 output; supports tool calling, image input and reasoning.",
 				"- openai/unpriced (Unpriced): input price not listed, output price not listed; context window not listed; no tool calling, image input or reasoning.",
 				"- nope/x: not in the gateway's chat model list.",
 			].join("\n"),
@@ -190,7 +195,7 @@ describe("StatusTool", () => {
 				"Credits: 12.5 left, 3.25 used.",
 				SPEND_LINE,
 				'Models matching "ANTHROPIC/": 1.',
-				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output; supports tool calling, image input and reasoning.",
+				"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens, $0.30 per million cache read tokens, $3.75 per million cache write tokens; context window 200000 tokens, up to 64000 output; supports tool calling, image input and reasoning.",
 			].join("\n"),
 		);
 	});
@@ -218,7 +223,7 @@ describe("StatusTool", () => {
 		expect(text.split("\n").slice(2)).toEqual([
 			'Models matching "unpriced": 1.',
 			"- openai/unpriced (Unpriced): input price not listed, output price not listed; context window not listed; no tool calling, image input or reasoning.",
-			"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens; context window 200000 tokens, up to 64000 output; supports tool calling, image input and reasoning.",
+			"- anthropic/claude-sonnet-4.5 (Claude Sonnet 4.5): $3.00 per million input tokens, $15.00 per million output tokens, $0.30 per million cache read tokens, $3.75 per million cache write tokens; context window 200000 tokens, up to 64000 output; supports tool calling, image input and reasoning.",
 		]);
 	});
 

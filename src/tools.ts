@@ -217,12 +217,19 @@ function describeModel(
 	const output = price?.output
 		? `${price.output} per million output tokens`
 		: "output price not listed";
+	// Many models list no cache price, so an absent one is left out rather than called unlisted.
+	const cache = [
+		price?.cacheRead && `, ${price.cacheRead} per million cache read tokens`,
+		price?.cacheWrite && `, ${price.cacheWrite} per million cache write tokens`,
+	]
+		.filter(Boolean)
+		.join("");
 	const contextWindow = model.maxInputTokens + model.maxOutputTokens;
 	const context =
 		contextWindow > 0
 			? `context window ${contextWindow} tokens, up to ${model.maxOutputTokens} output`
 			: "context window not listed";
-	return `- ${model.id} (${model.name}): ${input}, ${output}; ${context}; ${describeCapabilities(model)}.`;
+	return `- ${model.id} (${model.name}): ${input}, ${output}${cache}; ${context}; ${describeCapabilities(model)}.`;
 }
 
 function describeCapabilities(model: vscode.LanguageModelChatInformation): string {
