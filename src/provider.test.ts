@@ -876,6 +876,26 @@ describe("provideLanguageModelChatResponse", () => {
 		).toBeUndefined();
 	});
 
+	it("tracks quota against the quota entity", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		const options = await requestOptions({}, {}, [text], {
+			reportingUser: "dev-ana",
+			quotaEntity: "project-docs",
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { user: "dev-ana", quotaEntityId: "project-docs" },
+		});
+	});
+
+	it("leaves the quota entity out when it is empty", async () => {
+		const text = new hoisted.MockLanguageModelTextPart("Hello");
+
+		expect(
+			(await requestOptions({}, {}, [text], { quotaEntity: " " })).providerOptions,
+		).toBeUndefined();
+	});
+
 	it("sends the fallback models without the requested model", async () => {
 		const text = new hoisted.MockLanguageModelTextPart("Hello");
 

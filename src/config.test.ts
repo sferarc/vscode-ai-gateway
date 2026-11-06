@@ -417,6 +417,40 @@ describe("getConfig reportingUser", () => {
 	});
 });
 
+describe("getConfig quotaEntity", () => {
+	function entity(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "quotaEntity" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("trims the entity ID and keeps its case", () => {
+		getConfiguration.mockReturnValue(entity({ globalValue: "  Project-Docs  " }));
+
+		expect(getConfig().quotaEntity).toBe("Project-Docs");
+	});
+
+	it("ignores an entity set in workspace settings", () => {
+		getConfiguration.mockReturnValue(entity({ workspaceValue: "someone-else" }));
+
+		expect(getConfig().quotaEntity).toBeUndefined();
+	});
+
+	it.each([[""], ["   "], [undefined], [42], [["project"]]])("sends no entity for %o", (value) => {
+		getConfiguration.mockReturnValue(entity({ globalValue: value }));
+
+		expect(getConfig().quotaEntity).toBeUndefined();
+	});
+
+	it("declares an application scoped empty string in the manifest", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.quotaEntity"],
+		).toMatchObject({ type: "string", scope: "application", default: "" });
+	});
+});
+
 describe("getConfig fallbackModels", () => {
 	function withFallbacks(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
 		return {

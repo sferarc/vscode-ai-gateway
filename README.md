@@ -146,9 +146,11 @@ Label the extension's chat requests in AI Gateway's [usage reports](https://verc
 | --- | --- | --- |
 | `vercelAiGateway.reportingTags` | `[]` | Tags recorded with each chat request, for example `["team:platform", "tool:vscode"]`, so you can filter or group the extension's spend by tag. |
 | `vercelAiGateway.reportingUser` | `""` | User ID recorded with each chat request, for example your username, so a team sharing one key can group or filter the extension's spend per person. |
+| `vercelAiGateway.quotaEntity` | `""` | Entity ID the gateway tracks and enforces quota against for each chat request, for example a team member or project name. |
 
 - `reportingTags`: entries are trimmed, and empty, repeated and over 64 character tags are dropped, with only the first 10 kept, since the gateway refuses a request outside those limits. Only read from user settings, so a workspace cannot add charges.
 - `reportingUser`: the value is trimmed, and an empty one or one over 256 characters is not sent, since the gateway refuses a longer value. Only read from user settings, so a workspace cannot add charges or attribute your spend to someone else.
+- `quotaEntity`: see the AI SDK's [Quota Entity ID](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway) gateway option. The value is trimmed and an empty one is not sent. When that entity's quota is used up, the gateway refuses requests with HTTP 402, which the chat error reports as a used up spend budget. Only read from user settings, so a workspace cannot charge your requests to another entity's quota.
 
 ## Troubleshooting
 

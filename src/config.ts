@@ -23,6 +23,8 @@ export function getConfig() {
 		reportingTags: reportingTags(config.inspect<unknown>("reportingTags")?.globalValue),
 		// The gateway bills each user ID too, and a cloned repo must not attribute the user's spend to someone else.
 		reportingUser: reportingUser(config.inspect<unknown>("reportingUser")?.globalValue),
+		// A cloned repo must not charge the user's requests to another quota or fail them against a spent one.
+		quotaEntity: quotaEntity(config.inspect<unknown>("quotaEntity")?.globalValue),
 		// A fallback can bill a pricier model, so a cloned repo must not pick one for the user.
 		fallbackModels: modelIds(config.inspect<unknown>("fallbackModels")?.globalValue),
 		// A pinned region can cost more and fails requests it cannot serve, so a cloned repo must not set one.
@@ -130,6 +132,12 @@ function reportingUser(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	const user = value.trim();
 	return user.length > 0 && user.length <= MAX_REPORTING_USER_LENGTH ? user : undefined;
+}
+
+function quotaEntity(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const entity = value.trim();
+	return entity.length > 0 ? entity : undefined;
 }
 
 // The gateway answers 400 to a format outside this pattern, which would fail every chat request.
