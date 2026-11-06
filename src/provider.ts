@@ -369,7 +369,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	}
 
 	async provideTokenCount(
-		_model: LanguageModelChatInformation,
+		model: LanguageModelChatInformation,
 		text: string | LanguageModelChatMessage,
 		_token: CancellationToken,
 	): Promise<number> {
@@ -377,11 +377,21 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			return Math.ceil(text.length / 4);
 		}
 
-		const tally = { characters: 0, images: 0 };
+		const tally: Tally = {
+			characters: 0,
+			images: 0,
+			pdfPages: 0,
+			pdfInput: this.modelsClient.acceptsPdf(model.id),
+		};
 		for (const part of text.content) {
 			tallyPart(part, tally);
 		}
-		return Math.ceil(tally.characters / 4) + tally.images * IMAGE_TOKENS + MESSAGE_OVERHEAD_TOKENS;
+		return (
+			Math.ceil(tally.characters / 4) +
+			tally.images * IMAGE_TOKENS +
+			tally.pdfPages * PDF_PAGE_TOKENS +
+			MESSAGE_OVERHEAD_TOKENS
+		);
 	}
 
 	private buildToolSet(
@@ -1077,13 +1087,29 @@ const MESSAGE_OVERHEAD_TOKENS = 4;
 // Image cost depends on resolution and provider; this sits near the top of the common range so a
 // prompt with images is overestimated rather than overflowing the context window.
 const IMAGE_TOKENS = 1600;
+// Anthropic's PDF docs put a page at 1,500 to 3,000 text tokens plus the page as an image.
+const PDF_PAGE_TOKENS = 3000 + IMAGE_TOKENS;
+
+interface Tally {
+	characters: number;
+	images: number;
+	pdfPages: number;
+	/** Whether PDF data parts are sent as files, so their pages count. */
+	pdfInput: boolean;
+}
+
+/** Page objects in the PDF's bytes, at least one; pages inside compressed object streams are missed. */
+function pdfPageCount(data: Uint8Array): number {
+	const source = new TextDecoder("latin1").decode(data);
+	return Math.max(1, source.match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0);
+}
 
 /**
  * Adds the characters and images a message part sends to the model, for token estimates. Tool
  * results carry the bulk of an agent's prompt (file contents, terminal output), so leaving them out
  * makes VS Code budget its prompt against a count far below what the gateway receives.
  */
-function tallyPart(part: unknown, tally: { characters: number; images: number }): void {
+function tallyPart(part: unknown, tally: Tally): void {
 	if (typeof part !== "object" || part === null || isThinkingPart(part)) return;
 	if (isTextPart(part)) {
 		tally.characters += part.value.length;
@@ -1094,6 +1120,8 @@ function tallyPart(part: unknown, tally: { characters: number; images: number })
 	} else if (part instanceof LanguageModelDataPart) {
 		if (sendableImageType(part.mimeType)) {
 			tally.images += 1;
+		} else if (tally.pdfInput && isPdf(part.mimeType)) {
+			tally.pdfPages += pdfPageCount(part.data);
 		} else if (isTextualMimeType(part.mimeType)) {
 			tally.characters += new TextDecoder().decode(part.data).length;
 		}

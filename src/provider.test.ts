@@ -2435,7 +2435,7 @@ describe("instruction extraction", () => {
 });
 
 describe("provideTokenCount", () => {
-	const model = {} as never;
+	const model = { id: "openai/gpt-4o" } as never;
 	const token = {} as never;
 	const overhead = 4;
 	const imageTokens = 1600;
@@ -2505,6 +2505,24 @@ describe("provideTokenCount", () => {
 		expect(
 			await count([textOnly, new hoisted.MockLanguageModelThinkingPart("r".repeat(400))]),
 		).toBe(textOnlyCount);
+	});
+
+	it("counts each PDF page for a model the gateway lists as taking PDF input", async () => {
+		const pdfPageTokens = 3000 + imageTokens;
+		const pdf = (body: string) =>
+			new hoisted.MockLanguageModelDataPart(new TextEncoder().encode(body), "application/pdf");
+		const twoPages = pdf(
+			"%PDF-1.4 1 0 obj <</Type /Pages /Count 2>> 2 0 obj <</Type/Page>> 3 0 obj <</Type /Page /Parent 1 0 R>>",
+		);
+		const result = new hoisted.MockLanguageModelToolResultPart("call_1", [
+			pdf("%PDF-1.7 compressed"),
+		]);
+
+		expect(await count([textOnly, twoPages, result])).toBe(textOnlyCount);
+		expect(hoisted.mockAcceptsPdf).toHaveBeenLastCalledWith("openai/gpt-4o");
+
+		hoisted.mockAcceptsPdf.mockReturnValueOnce(true);
+		expect(await count([textOnly, twoPages, result])).toBe(textOnlyCount + 3 * pdfPageTokens);
 	});
 
 	it("ignores binary and cache control data parts", async () => {
