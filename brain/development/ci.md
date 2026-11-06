@@ -34,7 +34,7 @@ sferarc/hq's `update-dependencies.yml` opens the weekly `chore(deps)` pull reque
 
 ## Branch rules on `main`
 
-Read from the GitHub API on 2026-10-08 (rulesets `main-default` and `force-push`): changes through pull requests, merged by squash or rebase; required status check `Check`; linear history; no force pushes; no deletion.
+Read from the GitHub API on 2026-11-06 (rulesets `main-default` and `force-push`): changes through pull requests, merged by squash or rebase; required status checks `Check` (this workflow), `Approved stack` and `No Claude attribution` (both jobs of `hq-stack.yml`); linear history; no force pushes; no deletion. "Allow auto-merge" is on, which the release workflow uses for the version pull request ([[release]]).
 
 ## Related
 

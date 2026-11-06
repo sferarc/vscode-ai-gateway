@@ -1,5 +1,7 @@
 # Agents merge the Version Packages pull request
 
+Superseded on 2026-11-06 by [[2026-11-06-version-packages-auto-lands]]: the release workflow arms auto-merge on the version pull request and the required checks are its only gate. The text below is the record of what was decided before.
+
 Recorded 2026-10-21 in #51. Basis: the owner's standing delegation of merges in this organization (2026-10-19) under green required checks and a clean independent review. No comment on #51 records the owner deciding this case separately; the earlier hold (86a41ac, 6597887) was lifted by 67baba6 without a stated reason.
 
 ## Decision

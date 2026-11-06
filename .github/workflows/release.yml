@@ -71,7 +71,7 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # The version PR only carries what `changeset version` generated, so the required Check is the whole review.
+      # The version PR only carries what `changeset version` generated, so the required checks are the whole review.
       - name: Enable auto-merge on the version PR
         if: steps.changesets.outputs.pr-number
         env:
