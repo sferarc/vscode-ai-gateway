@@ -56,7 +56,7 @@
 	"capabilities": {
 		"untrustedWorkspaces": {
 			"supported": "limited",
-			"description": "In Restricted Mode, workspace values of the timeout, provider sort and provider order settings are ignored; user settings still apply.",
+			"description": "%untrustedWorkspaces.description%",
 			"restrictedConfigurations": [
 				"vercelAiGateway.timeout",
 				"vercelAiGateway.providerSort",
@@ -68,24 +68,24 @@
 		"authentication": [
 			{
 				"id": "vercelAiGateway",
-				"label": "Vercel AI Gateway"
+				"label": "%authentication.label%"
 			}
 		],
 		"languageModelChatProviders": [
 			{
 				"vendor": "vercelAiGateway",
-				"displayName": "Vercel AI Gateway",
+				"displayName": "%chatProvider.displayName%",
 				"icon": "$(triangle-up)"
 			}
 		],
 		"languageModelTools": [
 			{
 				"name": "vercelAiGateway_status",
-				"displayName": "Vercel AI Gateway Status",
+				"displayName": "%statusTool.displayName%",
 				"toolReferenceName": "gatewayStatus",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(triangle-up)",
-				"userDescription": "Credit balance and this month's spend of the active Vercel AI Gateway session, the cost of the last chat request, and the price, context window and capabilities of gateway models.",
+				"userDescription": "%statusTool.userDescription%",
 				"modelDescription": "Reads the Vercel AI Gateway credit balance left and used for the user's active session, its spend since the first of the month with the models it was spent on, the cost, serving provider and token counts of the last chat request that completed through this extension, and for each gateway model id passed in modelIds, its price per million input and output tokens and, when the gateway lists them, per million cache read and cache write tokens, its context window, and whether it supports tool calling, image input and reasoning. Use it before a long or expensive task, to compare the cost of gateway models, or to pick one that can call tools or read images, such as anthropic/claude-sonnet-4.5 against openai/gpt-5. To find model ids, pass search, such as claude or gpt: it lists up to 20 chat models whose id or name contains it, with the same details. It only reads and makes no chat request. Without modelIds or search it returns the balance, the spend, the last request's cost and how many chat models are available. Ids it does not know are reported as not listed. When the user is not signed in, or the gateway cannot be reached, it returns the step the user should take instead.",
 				"tags": [
 					"vercel-ai-gateway",
@@ -115,35 +115,35 @@
 		"commands": [
 			{
 				"command": "vercelAiGateway.manage",
-				"title": "Manage Authentication",
-				"category": "Vercel AI Gateway"
+				"title": "%command.manage.title%",
+				"category": "%command.category%"
 			},
 			{
 				"command": "vercelAiGateway.checkConnection",
-				"title": "Check Connection",
-				"category": "Vercel AI Gateway"
+				"title": "%command.checkConnection.title%",
+				"category": "%command.category%"
 			},
 			{
 				"command": "vercelAiGateway.showLogs",
-				"title": "Show Logs",
-				"category": "Vercel AI Gateway"
+				"title": "%command.showLogs.title%",
+				"category": "%command.category%"
 			},
 			{
 				"command": "vercelAiGateway.manageProviderKeys",
-				"title": "Manage Provider Keys",
-				"category": "Vercel AI Gateway"
+				"title": "%command.manageProviderKeys.title%",
+				"category": "%command.category%"
 			}
 		],
 		"walkthroughs": [
 			{
 				"id": "getStarted",
-				"title": "Get started with Vercel AI Gateway",
-				"description": "Sign in with an AI Gateway key or Vercel OIDC and chat with a gateway model.",
+				"title": "%walkthrough.getStarted.title%",
+				"description": "%walkthrough.getStarted.description%",
 				"steps": [
 					{
 						"id": "getKey",
-						"title": "Get an AI Gateway API key",
-						"description": "Create a key that starts with vck_ in your Vercel dashboard. Skip this if the Vercel CLI is logged in and you will sign in with Vercel OIDC.\n[Open AI Gateway authentication](https://vercel.com/docs/ai-gateway/authentication-and-byok)",
+						"title": "%walkthrough.getStarted.getKey.title%",
+						"description": "%walkthrough.getStarted.getKey.description%",
 						"media": {
 							"markdown": "media/walkthrough/get-key.md"
 						},
@@ -154,8 +154,8 @@
 					},
 					{
 						"id": "signIn",
-						"title": "Sign in",
-						"description": "Add your key, or sign in with Vercel OIDC. The step completes once a session exists.\n[Manage Authentication](command:vercelAiGateway.manage)",
+						"title": "%walkthrough.getStarted.signIn.title%",
+						"description": "%walkthrough.getStarted.signIn.description%",
 						"media": {
 							"markdown": "media/walkthrough/sign-in.md"
 						},
@@ -165,8 +165,8 @@
 					},
 					{
 						"id": "openChat",
-						"title": "Open chat and pick a gateway model",
-						"description": "Open the chat view and choose a model listed under Vercel AI Gateway in the model picker.\n[Open Chat](command:workbench.action.chat.open)",
+						"title": "%walkthrough.getStarted.openChat.title%",
+						"description": "%walkthrough.getStarted.openChat.description%",
 						"media": {
 							"markdown": "media/walkthrough/open-chat.md"
 						},
@@ -178,30 +178,30 @@
 			}
 		],
 		"configuration": {
-			"title": "Vercel AI Gateway",
+			"title": "%configuration.title%",
 			"properties": {
 				"vercelAiGateway.endpoint": {
 					"type": "string",
 					"scope": "machine",
 					"default": "https://ai-gateway.vercel.sh",
-					"description": "AI Gateway endpoint URL. Change for self-hosted or regional deployments. Only read from user settings, since requests to it carry your credentials."
+					"description": "%config.endpoint.description%"
 				},
 				"vercelAiGateway.timeout": {
 					"type": "number",
 					"default": 30000,
-					"description": "Maximum time in milliseconds to wait for the model to start or continue responding, and for the model list to load.",
+					"description": "%config.timeout.description%",
 					"minimum": 5000,
 					"maximum": 300000
 				},
 				"vercelAiGateway.disallowPromptTraining": {
 					"type": "boolean",
 					"default": false,
-					"description": "Route chat requests only to providers that do not train on prompts. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Not enforced for requests that use your own provider keys (BYOK)."
+					"description": "%config.disallowPromptTraining.description%"
 				},
 				"vercelAiGateway.zeroDataRetention": {
 					"type": "boolean",
 					"default": false,
-					"description": "Route chat requests only to providers with zero data retention agreements with Vercel. Needs a Vercel Pro or Enterprise team. A model with no such provider fails with an error instead of falling back. Turning it on in user or workspace settings is enough; a workspace cannot turn it off. Your own provider keys (BYOK) are skipped unless marked as ZDR in the AI Gateway dashboard."
+					"description": "%config.zeroDataRetention.description%"
 				},
 				"vercelAiGateway.providerSort": {
 					"type": "string",
@@ -212,13 +212,13 @@
 						"tps"
 					],
 					"enumDescriptions": [
-						"Use the gateway's own provider ranking, based on recent uptime and latency.",
-						"Try the provider with the lowest estimated cost first.",
-						"Try the provider with the lowest median time to first token first.",
-						"Try the provider with the highest median tokens per second first."
+						"%config.providerSort.enum.default%",
+						"%config.providerSort.enum.cost%",
+						"%config.providerSort.enum.ttft%",
+						"%config.providerSort.enum.tps%"
 					],
 					"default": "default",
-					"description": "Order in which the gateway tries the providers that serve a chat model. The gateway falls back through the rest in that order and tries unhealthy providers last; no provider is excluded."
+					"description": "%config.providerSort.description%"
 				},
 				"vercelAiGateway.providerOrder": {
 					"type": "array",
@@ -226,7 +226,7 @@
 						"type": "string"
 					},
 					"default": [],
-					"description": "Provider slugs the gateway tries first for a chat model, in this order, such as bedrock or anthropic. The gateway falls back to the other providers afterwards, in its own ranking or the providerSort order; no provider is excluded. Later turns of a conversation try the provider that holds its prompt cache first unless vercelAiGateway.sessionAffinity is off."
+					"description": "%config.providerOrder.description%"
 				},
 				"vercelAiGateway.providerOnly": {
 					"type": "array",
@@ -235,7 +235,7 @@
 					},
 					"scope": "application",
 					"default": [],
-					"description": "Provider slugs a chat request may use, such as anthropic. The gateway never falls back outside the list, so a model none of them serve fails. Only read from user settings."
+					"description": "%config.providerOnly.description%"
 				},
 				"vercelAiGateway.reportingTags": {
 					"type": "array",
@@ -247,20 +247,20 @@
 					"maxItems": 10,
 					"scope": "application",
 					"default": [],
-					"description": "Tags recorded with each chat request in the gateway's usage reports, such as team:platform, so you can filter or group the extension's spend. The gateway bills each tag on a request as a reporting write. Up to 10 tags of 64 characters; others are dropped. Only read from user settings."
+					"description": "%config.reportingTags.description%"
 				},
 				"vercelAiGateway.reportingUser": {
 					"type": "string",
 					"maxLength": 256,
 					"scope": "application",
 					"default": "",
-					"description": "User ID recorded with each chat request in the gateway's usage reports, such as your username, so a team sharing a key can split the extension's spend per person. The gateway bills it as a reporting write. Up to 256 characters; a longer value is not sent. Only read from user settings."
+					"description": "%config.reportingUser.description%"
 				},
 				"vercelAiGateway.quotaEntity": {
 					"type": "string",
 					"scope": "application",
 					"default": "",
-					"description": "Entity ID the gateway tracks and enforces quota against for each chat request, such as a team member or project name. Leave empty to send none. Only read from user settings."
+					"description": "%config.quotaEntity.description%"
 				},
 				"vercelAiGateway.fallbackModels": {
 					"type": "array",
@@ -269,7 +269,7 @@
 					},
 					"scope": "application",
 					"default": [],
-					"description": "Model ids the gateway tries in this order when every provider of the chosen chat model fails, such as anthropic/claude-sonnet-4.5. The answer and its cost then come from the fallback model. Only read from user settings."
+					"description": "%config.fallbackModels.description%"
 				},
 				"vercelAiGateway.inferenceRegion": {
 					"type": "string",
@@ -281,15 +281,15 @@
 						"jp"
 					],
 					"enumDescriptions": [
-						"Let the gateway run inference in any region, based on availability and latency.",
-						"Run inference and store any provider data in a US data center.",
-						"Run inference and store any provider data in an EU data center.",
-						"Run inference and store any provider data in an Australian data center.",
-						"Run inference and store any provider data in a Japanese data center."
+						"%config.inferenceRegion.enum.global%",
+						"%config.inferenceRegion.enum.us%",
+						"%config.inferenceRegion.enum.eu%",
+						"%config.inferenceRegion.enum.au%",
+						"%config.inferenceRegion.enum.jp%"
 					],
 					"scope": "application",
 					"default": "global",
-					"description": "Region where the provider runs inference on chat requests and stores any data it keeps. A pinned region can cost more, and a model with no provider in that region fails with an error instead of running elsewhere. Only read from user settings."
+					"description": "%config.inferenceRegion.description%"
 				},
 				"vercelAiGateway.excludeQuantizations": {
 					"type": "array",
@@ -299,7 +299,7 @@
 					},
 					"scope": "application",
 					"default": [],
-					"description": "Weight formats, such as fp8 or int4, that a provider must not serve a chat model in. The gateway skips providers that report a listed format and keeps those that report none; a model whose every provider is excluded fails with an error. Only read from user settings."
+					"description": "%config.excludeQuantizations.description%"
 				},
 				"vercelAiGateway.requiredCapabilities": {
 					"type": "array",
@@ -314,18 +314,18 @@
 							"vision"
 						],
 						"enumDescriptions": [
-							"Free inference.",
-							"Automatic prompt caching.",
-							"Reasoning.",
-							"Output constrained to a JSON schema.",
-							"Tool calling.",
-							"Image input."
+							"%config.requiredCapabilities.items.enum.free%",
+							"%config.requiredCapabilities.items.enum.implicit-caching%",
+							"%config.requiredCapabilities.items.enum.reasoning%",
+							"%config.requiredCapabilities.items.enum.structured-output%",
+							"%config.requiredCapabilities.items.enum.tool-use%",
+							"%config.requiredCapabilities.items.enum.vision%"
 						]
 					},
 					"uniqueItems": true,
 					"scope": "application",
 					"default": [],
-					"description": "Capabilities the provider's model must have for the gateway to route a chat request to it. A model with no provider that has every listed capability fails with an error. Only read from user settings."
+					"description": "%config.requiredCapabilities.description%"
 				},
 				"vercelAiGateway.serviceTier": {
 					"type": "string",
@@ -335,13 +335,13 @@
 						"priority"
 					],
 					"enumDescriptions": [
-						"Use the provider's standard processing tier.",
-						"Ask for the lower cost tier, which can respond more slowly.",
-						"Ask for the faster, more available tier, which costs more."
+						"%config.serviceTier.enum.default%",
+						"%config.serviceTier.enum.flex%",
+						"%config.serviceTier.enum.priority%"
 					],
 					"scope": "application",
 					"default": "default",
-					"description": "Processing tier the gateway asks for on chat requests. Only OpenAI, Google AI Studio, Google Vertex AI and SpaceXAI models offer tiers, and a provider may still serve the standard tier; the gateway bills the tier actually served. Only read from user settings."
+					"description": "%config.serviceTier.description%"
 				},
 				"vercelAiGateway.reasoningEffort": {
 					"type": "string",
@@ -356,24 +356,24 @@
 						"max"
 					],
 					"enumDescriptions": [
-						"Leave reasoning to the provider's default.",
-						"Turn reasoning off where the model allows it.",
-						"Reason as little as the model allows.",
-						"Reason briefly.",
-						"Reason with a balanced effort.",
-						"Reason thoroughly.",
-						"Reason more than high.",
-						"Reason as much as the model allows, which uses the most output tokens."
+						"%config.reasoningEffort.enum.provider-default%",
+						"%config.reasoningEffort.enum.none%",
+						"%config.reasoningEffort.enum.minimal%",
+						"%config.reasoningEffort.enum.low%",
+						"%config.reasoningEffort.enum.medium%",
+						"%config.reasoningEffort.enum.high%",
+						"%config.reasoningEffort.enum.xhigh%",
+						"%config.reasoningEffort.enum.max%"
 					],
 					"scope": "application",
 					"default": "provider-default",
-					"description": "How much a chat model reasons before it answers. Each provider maps the level to its own reasoning control, and models without configurable reasoning ignore it. More reasoning uses more output tokens, which are billed, and takes longer. Only read from user settings."
+					"description": "%config.reasoningEffort.description%"
 				},
 				"vercelAiGateway.sessionAffinity": {
 					"type": "boolean",
 					"scope": "application",
 					"default": true,
-					"description": "Lets the gateway send later turns of a conversation to the provider that holds its prompt cache, ahead of providerOrder and providerSort. Turn it off to keep that order exactly; later turns may then hit a cold cache and bill the full prompt again. Only read from user settings."
+					"description": "%config.sessionAffinity.description%"
 				},
 				"vercelAiGateway.byokProviderTimeouts": {
 					"type": "object",
@@ -384,13 +384,13 @@
 						"minimum": 1000,
 						"maximum": 789000
 					},
-					"description": "Milliseconds the gateway waits for a provider reached with your team's own keys (BYOK) to start answering before it falls back to the next provider, per provider slug, such as anthropic or bedrock. Values are kept between 1000 and 789000. A provider that does not cancel the stream may still bill the timed out request. Only read from user settings."
+					"description": "%config.byokProviderTimeouts.description%"
 				},
 				"vercelAiGateway.webSearch": {
 					"type": "boolean",
 					"scope": "application",
 					"default": false,
-					"description": "Lets chat models that call tools search the web with the gateway's Perplexity search tool. The gateway runs each search, bills it to your gateway credits and sends the query to Perplexity. Not offered when a request requires a tool call. Only read from user settings."
+					"description": "%config.webSearch.description%"
 				}
 			}
 		}

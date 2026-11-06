@@ -27,6 +27,16 @@ async function run() {
 	for (const tool of TOOLS) {
 		assert.ok(tools.includes(tool), `language model tool ${tool} is not registered`);
 	}
+
+	const { contributes, capabilities } = extension.packageJSON;
+	const unresolved = placeholders({ contributes, capabilities });
+	assert.deepEqual(unresolved, [], "VS Code left package.nls.json placeholders unresolved");
+}
+
+function placeholders(value) {
+	if (typeof value === "string") return /^%[^%]+%$/.test(value) ? [value] : [];
+	if (value && typeof value === "object") return Object.values(value).flatMap(placeholders);
+	return [];
 }
 
 module.exports = { run };
