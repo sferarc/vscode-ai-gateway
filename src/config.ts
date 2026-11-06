@@ -41,6 +41,10 @@ export function getConfig() {
 		reasoningEffort: reasoningEffort(config.inspect<unknown>("reasoningEffort")?.globalValue),
 		// Turning it off can send later turns to a cold prompt cache, so a cloned repo must not do it for the user.
 		sessionAffinity: config.inspect<unknown>("sessionAffinity")?.globalValue !== false,
+		// A short wait moves requests off the team's own keys onto gateway credits, so a cloned repo must not set one.
+		byokProviderTimeouts: byokProviderTimeouts(
+			config.inspect<unknown>("byokProviderTimeouts")?.globalValue,
+		),
 	};
 }
 
@@ -88,6 +92,21 @@ function providerSlugs(value: unknown): string[] | undefined {
 		.map((entry) => entry.trim().toLowerCase())
 		.filter(Boolean);
 	return slugs.length > 0 ? [...new Set(slugs)] : undefined;
+}
+
+// The gateway's documented limits for a BYOK provider timeout, in milliseconds.
+const MIN_BYOK_TIMEOUT_MS = 1000;
+const MAX_BYOK_TIMEOUT_MS = 789000;
+
+function byokProviderTimeouts(value: unknown): Record<string, number> | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	const timeouts: Record<string, number> = {};
+	for (const [key, ms] of Object.entries(value)) {
+		const slug = key.trim().toLowerCase();
+		if (!slug || typeof ms !== "number" || !Number.isFinite(ms)) continue;
+		timeouts[slug] = Math.min(Math.max(Math.round(ms), MIN_BYOK_TIMEOUT_MS), MAX_BYOK_TIMEOUT_MS);
+	}
+	return Object.keys(timeouts).length > 0 ? timeouts : undefined;
 }
 
 // The gateway answers 400 to more than 10 tags or one outside 1 to 64 characters, which would fail every chat request.

@@ -352,6 +352,17 @@
 					"scope": "application",
 					"default": true,
 					"description": "Lets the gateway send later turns of a conversation to the provider that holds its prompt cache, ahead of providerOrder and providerSort. Turn it off to keep that order exactly; later turns may then hit a cold cache and bill the full prompt again. Only read from user settings."
+				},
+				"vercelAiGateway.byokProviderTimeouts": {
+					"type": "object",
+					"scope": "application",
+					"default": {},
+					"additionalProperties": {
+						"type": "number",
+						"minimum": 1000,
+						"maximum": 789000
+					},
+					"description": "Milliseconds the gateway waits for a provider reached with your team's own keys (BYOK) to start answering before it falls back to the next provider, per provider slug, such as anthropic or bedrock. Values are kept between 1000 and 789000. A provider that does not cancel the stream may still bill the timed out request. Only read from user settings."
 				}
 			}
 		}

@@ -992,6 +992,15 @@ describe("provideLanguageModelChatResponse", () => {
 		});
 	});
 
+	it("sends BYOK provider timeouts to the gateway", async () => {
+		const options = await requestOptions({}, {}, undefined, {
+			byokProviderTimeouts: { anthropic: 10000 },
+		});
+		expect(options.providerOptions).toEqual({
+			gateway: { providerTimeouts: { byok: { anthropic: 10000 } } },
+		});
+	});
+
 	it("leaves session affinity to the gateway by default", async () => {
 		expect(
 			(await requestOptions({}, {}, undefined, { sessionAffinity: true })).providerOptions,
