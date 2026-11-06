@@ -56,3 +56,7 @@ jobs:
       # and only the release would otherwise find out.
       - name: Package extension
         run: pnpm package
+
+      # High or critical advisories in what the VSIX bundles; accepted ones are in pnpm-workspace.yaml auditConfig.
+      - name: Runtime advisories
+        run: pnpm audit --prod --audit-level high
