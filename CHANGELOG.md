@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.11.2
+
+### Patch Changes
+
+- 8bf9c33: Add the `vercelAiGateway.quotaEntity` setting: an entity ID sent with each chat request as the gateway's `quotaEntityId`, so the gateway tracks and enforces quota against that entity. It is read from user settings only.
+
 ## 0.11.1
 
 ### Patch Changes
