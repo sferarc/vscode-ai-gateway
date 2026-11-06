@@ -183,7 +183,7 @@ describe("checkConnection", () => {
 		expect(result.error).toBeUndefined();
 	});
 
-	it("does not ask for the balance when the model list fails", async () => {
+	it("does not ask for the balance or the spend when the model list fails", async () => {
 		const fetchMock = mockFetch(async () => ({
 			ok: false,
 			status: 401,
@@ -204,6 +204,98 @@ describe("checkConnection", () => {
 		expect(result.ok).toBe(false);
 		expect(result.session).toBeUndefined();
 		expect(result.error).toMatch(/No active session/);
+	});
+});
+
+describe("month spend in the check", () => {
+	const report = [
+		{ model: "openai/gpt-5", total_cost: 0.75, request_count: 10 },
+		{ model: "anthropic/claude-sonnet-4.5", total_cost: 2.5, request_count: 40 },
+	];
+
+	function routeReport(answer: () => Promise<unknown>) {
+		return mockFetch(async (url?: unknown) => {
+			if (String(url).includes("/v1/report?")) return answer();
+			if (String(url).endsWith("/v1/credits")) return { ok: false, status: 404 };
+			return { ok: true, status: 200, json: async () => ({ data: [{ id: "a" }] }) };
+		});
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-11-05T10:00:00Z"));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+	});
+
+	it("reads the spend since the first of the month by model", async () => {
+		const fetchMock = routeReport(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({ results: report }),
+		}));
+
+		const result = await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			`${DEFAULT_BASE_URL}/v1/report?start_date=2026-11-01&end_date=2026-11-05&group_by=model`,
+			expect.objectContaining({ headers: { Authorization: `Bearer ${TOKEN}` } }),
+		);
+		expect(result).toMatchObject({
+			ok: true,
+			spend: {
+				since: "2026-11-01",
+				totalCost: 3.25,
+				requestCount: 50,
+				topModels: [
+					{ model: "anthropic/claude-sonnet-4.5", totalCost: 2.5 },
+					{ model: "openai/gpt-5", totalCost: 0.75 },
+				],
+			},
+		});
+	});
+
+	it.each([
+		["a refused request", async () => ({ ok: false, status: 403 })],
+		["a body without results", async () => ({ ok: true, status: 200, json: async () => ({}) })],
+		[
+			"a network failure",
+			async () => {
+				throw new TypeError("fetch failed");
+			},
+		],
+	])("still passes without a spend after %s", async (_, answer) => {
+		routeReport(answer);
+
+		const result = await checkConnection(apiKeySession, DEFAULT_BASE_URL, 1000);
+
+		expect(result).toMatchObject({ ok: true, modelCount: 1 });
+		expect(result.spend).toBeUndefined();
+		expect(result.error).toBeUndefined();
+	});
+
+	it("shows and logs the spend line without the token", async () => {
+		routeReport(async () => ({ ok: true, status: 200, json: async () => ({ results: report }) }));
+
+		await runConnectionCheck(async () => apiKeySession);
+
+		const line =
+			"Spend this month (since 2026-11-01 UTC): $3.25 over 50 requests. Most spent on: anthropic/claude-sonnet-4.5 $2.50, openai/gpt-5 $0.75";
+		expect(showInformationMessage).toHaveBeenCalledWith(expect.stringContaining(line), "Show Logs");
+		expect(logInfo).toHaveBeenCalledWith(expect.stringContaining(line));
+		expect(everythingShown()).not.toContain(TOKEN);
+	});
+
+	it("leaves the spend line out when the report is unreadable", async () => {
+		routeReport(async () => ({ ok: false, status: 500 }));
+
+		await runConnectionCheck(async () => apiKeySession);
+
+		expect(everythingShown()).not.toContain("Spend this month");
 	});
 });
 

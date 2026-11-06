@@ -21,11 +21,28 @@ interface ConnectionCheckResult {
 	modelCount?: number;
 	chatModelCount?: number;
 	credits?: { balance: string; totalUsed: string };
+	spend?: MonthSpend;
 	error?: string;
+}
+
+export interface MonthSpend {
+	since: string;
+	totalCost: number;
+	requestCount?: number;
+	topModels: { model: string; totalCost: number }[];
 }
 
 const SHOW_LOGS = "Show Logs";
 const CREDITS_ENDPOINT = "/v1/credits";
+const REPORT_ENDPOINT = "/v1/report";
+const TOP_SPEND_MODELS = 3;
+
+const SPEND_FORMAT = new Intl.NumberFormat("en-US", {
+	style: "currency",
+	currency: "USD",
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 4,
+});
 
 /**
  * Sends its own request so the result never comes from the models cache.
@@ -84,7 +101,10 @@ export async function checkConnection(
 		result.error = extractErrorMessage(error);
 		return result;
 	}
-	result.credits = await fetchCredits(session.accessToken, endpoint, timeoutMs);
+	[result.credits, result.spend] = await Promise.all([
+		fetchCredits(session.accessToken, endpoint, timeoutMs),
+		fetchMonthSpend(session.accessToken, endpoint, timeoutMs),
+	]);
 	return result;
 }
 
@@ -117,6 +137,66 @@ export async function fetchCredits(
 	}
 }
 
+/** Spend from the first of the month (UTC) to today by model; undefined when unreadable, so it never fails the caller. */
+export async function fetchMonthSpend(
+	accessToken: string,
+	endpoint: string,
+	timeoutMs: number,
+): Promise<MonthSpend | undefined> {
+	const today = new Date().toISOString().slice(0, 10);
+	const since = `${today.slice(0, 8)}01`;
+	const query = new URLSearchParams({ start_date: since, end_date: today, group_by: "model" });
+	try {
+		const response = await fetch(`${endpoint}${REPORT_ENDPOINT}?${query}`, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+			signal: AbortSignal.timeout(timeoutMs),
+		});
+		if (!response.ok) {
+			logger.info(`Spend report not available: HTTP ${response.status}`);
+			return undefined;
+		}
+		const body = (await response.json()) as { results?: unknown } | null;
+		if (!Array.isArray(body?.results)) {
+			logger.info("Spend report not available: the response has no results");
+			return undefined;
+		}
+		return summariseSpend(since, body.results);
+	} catch (error) {
+		logger.info(`Spend report not available: ${extractErrorMessage(error)}`);
+		return undefined;
+	}
+}
+
+function summariseSpend(since: string, rows: unknown[]): MonthSpend {
+	let totalCost = 0;
+	let requestCount: number | undefined;
+	const byModel: MonthSpend["topModels"] = [];
+	for (const row of rows) {
+		if (typeof row !== "object" || row === null) continue;
+		const { model, total_cost, request_count } = row as Record<string, unknown>;
+		if (typeof total_cost !== "number" || !Number.isFinite(total_cost)) continue;
+		totalCost += total_cost;
+		if (typeof request_count === "number" && Number.isFinite(request_count)) {
+			requestCount = (requestCount ?? 0) + request_count;
+		}
+		if (typeof model === "string" && model && total_cost > 0) {
+			byModel.push({ model, totalCost: total_cost });
+		}
+	}
+	byModel.sort((a, b) => b.totalCost - a.totalCost);
+	return { since, totalCost, requestCount, topModels: byModel.slice(0, TOP_SPEND_MODELS) };
+}
+
+export function describeMonthSpend(spend: MonthSpend): string {
+	const header = `Spend this month (since ${spend.since} UTC): ${SPEND_FORMAT.format(spend.totalCost)}`;
+	const requests = spend.requestCount === undefined ? "" : ` over ${spend.requestCount} requests`;
+	if (spend.topModels.length === 0) return `${header}${requests}.`;
+	const top = spend.topModels
+		.map(({ model, totalCost }) => `${model} ${SPEND_FORMAT.format(totalCost)}`)
+		.join(", ");
+	return `${header}${requests}. Most spent on: ${top}.`;
+}
+
 function creditAmount(value: unknown): string | undefined {
 	if (typeof value === "number" && Number.isFinite(value)) return String(value);
 	return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -142,6 +222,9 @@ function formatConnectionCheck(result: ConnectionCheckResult): string[] {
 	}
 	if (result.credits) {
 		lines.push(`Credits: ${result.credits.balance} left, ${result.credits.totalUsed} used`);
+	}
+	if (result.spend) {
+		lines.push(describeMonthSpend(result.spend));
 	}
 	if (result.error) {
 		lines.push(`Error: ${result.error}`);
