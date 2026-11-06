@@ -1047,9 +1047,11 @@ describe("provideLanguageModelChatResponse", () => {
 	});
 
 	it("sends the user's stored provider keys as request-scoped BYOK credentials", async () => {
-		const byok = { anthropic: [{ apiKey: "sk-ant" }] as [{ apiKey: string }] };
-		const options = await requestOptions({}, {}, undefined, {}, { credentials: async () => byok });
+		const byok = { openai: [{ apiKey: "sk-openai" }] as [{ apiKey: string }] };
+		const credentials = vi.fn(async () => byok);
+		const options = await requestOptions({}, {}, undefined, {}, { credentials });
 		expect(options.providerOptions).toEqual({ gateway: { byok } });
+		expect(credentials).toHaveBeenCalledWith("openai/gpt-4o");
 	});
 
 	it("sends no BYOK credentials when no provider key is stored", async () => {

@@ -30,10 +30,15 @@ export class ProviderKeyStore {
 		return Object.keys(await this.read()).sort();
 	}
 
-	async credentials(): Promise<ByokCredentials | undefined> {
+	/**
+	 * A request carrying `byok` makes the gateway ignore every dashboard key, for all providers, so
+	 * the keys go out only when the requested model's provider (its id prefix) has one stored.
+	 */
+	async credentials(modelId: string): Promise<ByokCredentials | undefined> {
 		const keys = await this.read();
+		const provider = modelId.split("/", 1)[0] ?? "";
+		if (!Object.hasOwn(keys, provider)) return undefined;
 		const slugs = Object.keys(keys);
-		if (slugs.length === 0) return undefined;
 		return Object.fromEntries(
 			slugs.map((slug) => [slug, [{ apiKey: keys[slug] as string }]]),
 		) as ByokCredentials;
@@ -123,6 +128,6 @@ export async function manageProviderKeys(store: ProviderKeyStore): Promise<void>
 	await store.set(slug, apiKey);
 	logger.info(`Stored a ${slug} provider key`);
 	window.showInformationMessage(
-		`Chat requests now send your ${slug} key to the gateway, which uses it instead of the team's ${slug} keys.`,
+		`Requests for ${slug} models now send your stored provider keys to the gateway, which then ignores all of the team's dashboard keys for those requests.`,
 	);
 }

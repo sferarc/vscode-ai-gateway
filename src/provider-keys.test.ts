@@ -28,6 +28,7 @@ import { initializeLogger } from "./logger";
 import { manageProviderKeys, ProviderKeyStore } from "./provider-keys";
 
 const SECRET_KEY = "vercelAiGateway.providerKeys";
+const CLAUDE = "anthropic/claude-sonnet-4.5";
 
 function createSecrets() {
 	const values = new Map<string, string>();
@@ -57,7 +58,7 @@ beforeEach(() => {
 describe("ProviderKeyStore", () => {
 	it("returns no credentials when no key is stored", async () => {
 		const store = new ProviderKeyStore(createSecrets().secrets);
-		expect(await store.credentials()).toBeUndefined();
+		expect(await store.credentials(CLAUDE)).toBeUndefined();
 		expect(await store.providers()).toEqual([]);
 	});
 
@@ -67,7 +68,27 @@ describe("ProviderKeyStore", () => {
 		await store.set("anthropic", "sk-ant");
 
 		expect(await store.providers()).toEqual(["anthropic", "openai"]);
-		expect(await store.credentials()).toEqual({
+		expect(await store.credentials(CLAUDE)).toEqual({
+			anthropic: [{ apiKey: "sk-ant" }],
+			openai: [{ apiKey: "sk-openai" }],
+		});
+	});
+
+	it("sends no keys for a model whose provider has none stored, so the team's dashboard keys still apply", async () => {
+		const store = new ProviderKeyStore(createSecrets().secrets);
+		await store.set("anthropic", "sk-ant");
+
+		expect(await store.credentials("openai/gpt-5")).toBeUndefined();
+		expect(await store.credentials("anthropic")).toEqual({ anthropic: [{ apiKey: "sk-ant" }] });
+		expect(await store.credentials("toString/model")).toBeUndefined();
+	});
+
+	it("sends every stored key when the model's provider has one, since fallbacks share the request", async () => {
+		const store = new ProviderKeyStore(createSecrets().secrets);
+		await store.set("anthropic", "sk-ant");
+		await store.set("openai", "sk-openai");
+
+		expect(await store.credentials("openai/gpt-5")).toEqual({
 			anthropic: [{ apiKey: "sk-ant" }],
 			openai: [{ apiKey: "sk-openai" }],
 		});
@@ -78,11 +99,11 @@ describe("ProviderKeyStore", () => {
 		const store = new ProviderKeyStore(secrets);
 		await store.set("anthropic", "old");
 		await store.set("anthropic", "new");
-		expect(await store.credentials()).toEqual({ anthropic: [{ apiKey: "new" }] });
+		expect(await store.credentials(CLAUDE)).toEqual({ anthropic: [{ apiKey: "new" }] });
 
 		await store.remove("anthropic");
 		expect(values.has(SECRET_KEY)).toBe(false);
-		expect(await store.credentials()).toBeUndefined();
+		expect(await store.credentials(CLAUDE)).toBeUndefined();
 	});
 
 	it("ignores an unreadable secret without logging its contents", async () => {
@@ -90,7 +111,7 @@ describe("ProviderKeyStore", () => {
 		values.set(SECRET_KEY, '{"anthropic": "sk-ant-secret"');
 		const store = new ProviderKeyStore(secrets);
 
-		expect(await store.credentials()).toBeUndefined();
+		expect(await store.credentials(CLAUDE)).toBeUndefined();
 		expect(loggedText()).toContain("unreadable");
 		expect(loggedText()).not.toContain("sk-ant-secret");
 	});
@@ -102,7 +123,7 @@ describe("ProviderKeyStore", () => {
 			JSON.stringify({ anthropic: "sk", "Bad Slug": "x", openai: "", xai: 1 }),
 		);
 
-		expect(await new ProviderKeyStore(secrets).credentials()).toEqual({
+		expect(await new ProviderKeyStore(secrets).credentials(CLAUDE)).toEqual({
 			anthropic: [{ apiKey: "sk" }],
 		});
 	});
@@ -116,7 +137,7 @@ describe("manageProviderKeys", () => {
 
 		await manageProviderKeys(store);
 
-		expect(await store.credentials()).toEqual({ anthropic: [{ apiKey: "sk-ant-123" }] });
+		expect(await store.credentials(CLAUDE)).toEqual({ anthropic: [{ apiKey: "sk-ant-123" }] });
 		expect(hoisted.showInputBox.mock.calls[1]?.[0]).toMatchObject({ password: true });
 		expect(loggedText()).toContain("anthropic");
 		expect(loggedText()).not.toContain("sk-ant-123");
@@ -160,6 +181,6 @@ describe("manageProviderKeys", () => {
 
 		await manageProviderKeys(store);
 
-		expect(await store.credentials()).toBeUndefined();
+		expect(await store.credentials(CLAUDE)).toBeUndefined();
 	});
 });

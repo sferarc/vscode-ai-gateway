@@ -300,7 +300,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					serviceTier: config.serviceTier,
 					sessionAffinity: config.sessionAffinity,
 					byokProviderTimeouts: config.byokProviderTimeouts,
-					byok: await this.byokCredentials(),
+					byok: await this.byokCredentials(model.id),
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -431,6 +431,16 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		return error.name === "AbortError" || error.name === "TimeoutError";
 	}
 
+	// Without the keys the gateway still serves the request, with the team's credentials.
+	private async byokCredentials(modelId: string): Promise<ByokCredentials | undefined> {
+		try {
+			return await this.providerKeys?.credentials(modelId);
+		} catch (error) {
+			logger.error("Failed to read the stored provider keys", extractErrorMessage(error));
+			return undefined;
+		}
+	}
+
 	/**
 	 * Reads the token from our own authentication provider instead of `authentication.getSession`.
 	 * Sessions created through the provider interface never go through the consumer code path that
@@ -438,16 +448,6 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	 * though this extension owns them. `authentication.getSession` is only used as a fallback to
 	 * start the sign-in flow when there is no session at all.
 	 */
-	// Without the keys the gateway still serves the request, with the team's credentials.
-	private async byokCredentials(): Promise<ByokCredentials | undefined> {
-		try {
-			return await this.providerKeys?.credentials();
-		} catch (error) {
-			logger.error("Failed to read the stored provider keys", extractErrorMessage(error));
-			return undefined;
-		}
-	}
-
 	private async getApiKey(silent: boolean): Promise<string | undefined> {
 		try {
 			const session = await this.getActiveSession?.();
