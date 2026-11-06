@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.12.0
+
+### Minor Changes
+
+- 970b9d3: The Vercel AI Gateway Status tool now lists each model's cache read and cache write prices per million tokens when the gateway lists them, so an agent comparing models for a long session sees what most of its input tokens will cost.
+
 ## 0.11.2
 
 ### Patch Changes
