@@ -1,5 +1,12 @@
 # vscode-extension-vercel-ai
 
+## 0.11.0
+
+### Minor Changes
+
+- 3da5670: The Vercel AI Gateway Status tool now says whether each model it lists supports tool calling, image input and reasoning, so an agent can pick a model that can run tools or read images.
+- bb5bf8e: The Vercel AI Gateway Status tool now reports the session's spend since the first of the month and the three models it went to most, so an agent can see what a task has cost so far.
+
 ## 0.10.0
 
 ### Minor Changes
