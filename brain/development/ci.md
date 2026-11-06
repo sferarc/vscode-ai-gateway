@@ -14,8 +14,17 @@
 8. `pnpm build`
 9. `xvfb-run --auto-servernum pnpm test:e2e`, the extension host smoke test ([[testing]]). It runs after the build because it loads `out/extension.js`.
 10. `pnpm package`. vsce refuses to package when `@types/vscode` is newer than `engines.vscode`, and without this step only the release would find out ([[decisions/2026-07-28-types-vscode-literal]]).
+11. `pnpm audit --prod --audit-level high` (#238), below.
 
-`pnpm check` (`package.json`) runs steps 3 to 10 locally (without `xvfb-run`, since a desktop has a display) in the same order and stops at the first failure. Change both together.
+`pnpm check` (`package.json`) runs steps 3 to 10 locally (without `xvfb-run`, since a desktop has a display) in the same order and stops at the first failure. Change both together. Step 11 stays out of `pnpm check`: its result depends on the advisory database, not on the code.
+
+## Runtime advisories
+
+The last `Check` step fails on a high or critical advisory in `dependencies` (`ai` and `@ai-sdk/gateway` and what they pull in). `pnpm build` inlines that tree into `out/extension.js` and the VSIX ships it, so an advisory there blocks every pull request and release until it is bumped or accepted. Dev dependencies and moderate or lower advisories do not fail it. Dependabot security updates stay off; dependency bumps keep coming from HQ's updater (sferarc/hq#989).
+
+Accepted advisories go in `auditConfig.ignoreGhsas` in `pnpm-workspace.yaml`, one GHSA per line with a comment giving the reason and the condition that ends the exception. pnpm reads that list itself, so the CI step passes no `--ignore`. The list was empty when the step landed, since `pnpm audit --prod` found no advisories on 2026-11-06.
+
+Checked on pnpm 12.14.0 on 2026-11-06 against a scratch lockfile holding `lodash@4.17.20`: the step exited 1 on its two high advisories with `ignoreGhsas: []`, and 0 once both were listed, with two moderate advisories still reported.
 
 Actions are pinned to full commit SHAs with the version in a trailing comment, which the sferarc organisation requires. Update both together.
 
