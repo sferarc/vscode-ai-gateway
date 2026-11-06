@@ -784,6 +784,44 @@ describe("getConfig sessionAffinity", () => {
 	});
 });
 
+describe("getConfig webSearch", () => {
+	function search(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) => (key === "webSearch" ? { key, ...scopes } : undefined)),
+		};
+	}
+
+	it("turns web search on when the user sets true", () => {
+		getConfiguration.mockReturnValue(search({ globalValue: true }));
+
+		expect(getConfig().webSearch).toBe(true);
+	});
+
+	it.each([[false], [undefined], ["true"], [1], [null]])("keeps web search off for %o", (value) => {
+		getConfiguration.mockReturnValue(search({ globalValue: value }));
+
+		expect(getConfig().webSearch).toBe(false);
+	});
+
+	it("ignores true set in workspace settings", () => {
+		getConfiguration.mockReturnValue(search({ workspaceValue: true }));
+
+		expect(getConfig().webSearch).toBe(false);
+	});
+
+	it("declares an application scoped boolean that is off by default", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.webSearch"],
+		).toMatchObject({
+			type: "boolean",
+			scope: "application",
+			default: false,
+		});
+	});
+});
+
 describe("getConfig byokProviderTimeouts", () => {
 	function timeouts(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
 		return {

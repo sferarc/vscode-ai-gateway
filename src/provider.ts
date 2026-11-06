@@ -52,6 +52,8 @@ type StreamChunk = TextStreamPart<ToolSet>;
 
 const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
+const WEB_SEARCH_TOOL = "perplexity_search";
+
 const OUTPUT_LIMIT_NOTE =
 	"\n\n*The answer was cut off because it reached the model's output token limit.*";
 
@@ -269,6 +271,15 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			});
 
 			const tools = this.buildToolSet(options.tools);
+			// A required tool call must reach VS Code, so the search cannot stand in for it.
+			if (
+				config.webSearch &&
+				model.capabilities.toolCalling &&
+				options.toolMode !== LanguageModelChatToolMode.Required &&
+				!(WEB_SEARCH_TOOL in tools)
+			) {
+				tools[WEB_SEARCH_TOOL] = gateway.tools.perplexitySearch();
+			}
 			const toolChoice = this.getToolChoice(options.toolMode, tools);
 
 			const { messages, instructions } = convertMessages(chatMessages, {
@@ -512,6 +523,11 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				return true;
 
 			case "tool-call": {
+				// The gateway runs its own tools, so VS Code must not try to run one it does not have.
+				if (chunk.providerExecuted) {
+					logger.debug(`Gateway tool call: ${chunk.toolName} (${chunk.toolCallId})`);
+					return false;
+				}
 				// Unparsable input arrives as the raw string; VS Code needs an object and answers the call itself.
 				const input = isPlainObject(chunk.input) ? chunk.input : {};
 				if (chunk.invalid) {
