@@ -45,6 +45,7 @@ import { describeGatewayError } from "./errors";
 import type { LastChatRequestStore } from "./last-request";
 import { extractErrorMessage, logger } from "./logger";
 import { ModelsClient, ModelsFetchError } from "./models";
+import type { ByokCredentials, ProviderKeyStore } from "./provider-keys";
 
 type StreamChunk = TextStreamPart<ToolSet>;
 
@@ -165,11 +166,13 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	 * whichever one VS Code happens to prefer.
 	 * @param modelsClient Shared with the status tool, so both read one model list cache.
 	 * @param lastRequest Shared with the status tool, which reports the last completed request's cost.
+	 * @param providerKeys The user's own provider keys, sent as request-scoped BYOK credentials.
 	 */
 	constructor(
 		private readonly getActiveSession?: () => Promise<ActiveSession | null>,
 		private readonly modelsClient = new ModelsClient(),
 		private readonly lastRequest?: LastChatRequestStore,
+		private readonly providerKeys?: Pick<ProviderKeyStore, "credentials">,
 	) {
 		this.sessionChangeSubscription = authentication.onDidChangeSessions((event) => {
 			if (event.provider.id !== VERCEL_AI_AUTH_PROVIDER_ID) return;
@@ -297,6 +300,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					serviceTier: config.serviceTier,
 					sessionAffinity: config.sessionAffinity,
 					byokProviderTimeouts: config.byokProviderTimeouts,
+					byok: await this.byokCredentials(model.id),
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -425,6 +429,16 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	private isAbortError(error: unknown): boolean {
 		if (!(error instanceof Error)) return false;
 		return error.name === "AbortError" || error.name === "TimeoutError";
+	}
+
+	// Without the keys the gateway still serves the request, with the team's credentials.
+	private async byokCredentials(modelId: string): Promise<ByokCredentials | undefined> {
+		try {
+			return await this.providerKeys?.credentials(modelId);
+		} catch (error) {
+			logger.error("Failed to read the stored provider keys", extractErrorMessage(error));
+			return undefined;
+		}
 	}
 
 	/**
@@ -923,6 +937,7 @@ function gatewayOptions(options: {
 	serviceTier: ServiceTier | undefined;
 	sessionAffinity: boolean;
 	byokProviderTimeouts: Record<string, number> | undefined;
+	byok: ByokCredentials | undefined;
 }):
 	| {
 			gateway: {
@@ -941,6 +956,7 @@ function gatewayOptions(options: {
 				serviceTier?: ServiceTier;
 				sessionAffinity?: false;
 				providerTimeouts?: { byok: Record<string, number> };
+				byok?: ByokCredentials;
 			};
 	  }
 	| undefined {
@@ -960,6 +976,7 @@ function gatewayOptions(options: {
 		serviceTier,
 		sessionAffinity,
 		byokProviderTimeouts,
+		byok,
 	} = options;
 	// A list holding only the requested model has nothing to fall back to.
 	const models = options.models?.length ? options.models : undefined;
@@ -979,7 +996,8 @@ function gatewayOptions(options: {
 		!requiredCapabilities &&
 		!serviceTier &&
 		sessionAffinity &&
-		!byokProviderTimeouts
+		!byokProviderTimeouts &&
+		!byok
 	) {
 		return undefined;
 	}
@@ -1005,6 +1023,7 @@ function gatewayOptions(options: {
 			...(serviceTier && { serviceTier }),
 			...(!sessionAffinity && { sessionAffinity: false }),
 			...(byokProviderTimeouts && { providerTimeouts: { byok: byokProviderTimeouts } }),
+			...(byok && { byok }),
 		},
 	};
 }
