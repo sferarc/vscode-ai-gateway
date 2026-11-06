@@ -34,7 +34,7 @@ The `brain/` directory is an Obsidian vault: persistent notes on how the extensi
 
 - Run `pnpm check` before opening a pull request. It runs the steps of CI's `Check` job apart from its advisory audit, in the same order (`brain/development/ci.md`), and that job is required.
 - Keep `@types/vscode` equal to the `engines.vscode` floor; raising one means raising both (`brain/decisions/2026-07-28-types-vscode-literal.md`).
-- Credentials live only in `SecretStorage` (`src/auth.ts`). Never log a key or token.
+- Credentials live only in `SecretStorage` (`src/auth.ts`, `src/provider-keys.ts`). Never log a key or token.
 - Add a changeset (`pnpm changeset`) for a change users should see.
 - No em or en dashes in prose. Commit subjects in the imperative, with a conventional prefix.
 - Never publish by hand, bump the version, set `RELEASE_ENABLED` or tag (one owner-approved exception, done 2026-10-22: `brain/decisions/2026-10-22-backfill-release-tags.md`): the "Version Packages" pull request, opened by `changesets/action`, is the only version bump, and merging it publishes to the Marketplace and the workflow then tags `v<version>` (no manual `vsce publish` or `pnpm release`). The release workflow arms auto-merge on that pull request, so it lands once the required checks (`Check`, `Approved stack`, `No Claude attribution`) pass; they are its only gate and nobody reviews or merges it by hand. Open VSX is not published to (`brain/development/release.md`, `brain/decisions/2026-11-06-version-packages-auto-lands.md`).

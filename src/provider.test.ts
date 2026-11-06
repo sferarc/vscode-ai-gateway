@@ -607,6 +607,7 @@ describe("provideLanguageModelChatResponse", () => {
 		modelOptions?: Record<string, unknown>,
 		content: unknown[] = [new hoisted.MockLanguageModelTextPart("Hello")],
 		userSettings: Record<string, unknown> = {},
+		providerKeys?: ConstructorParameters<typeof VercelAIChatModelProvider>[3],
 	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (key: string, d?: unknown) => (key in userSettings ? userSettings[key] : d),
@@ -622,7 +623,12 @@ describe("provideLanguageModelChatResponse", () => {
 		streamTextMock.mockClear();
 		streamTextMock.mockReturnValue({ fullStream: [{ type: "text-delta", text: "hi" }] } as never);
 
-		await createProvider().provideLanguageModelChatResponse(
+		await new VercelAIChatModelProvider(
+			undefined,
+			undefined,
+			undefined,
+			providerKeys,
+		).provideLanguageModelChatResponse(
 			{ id: "openai/gpt-4o", ...model } as never,
 			[{ role: 1, content }] as never,
 			{ modelOptions } as never,
@@ -1038,6 +1044,38 @@ describe("provideLanguageModelChatResponse", () => {
 		expect(options.providerOptions).toEqual({
 			gateway: { providerTimeouts: { byok: { anthropic: 10000 } } },
 		});
+	});
+
+	it("sends the user's stored provider keys as request-scoped BYOK credentials", async () => {
+		const byok = { anthropic: [{ apiKey: "sk-ant" }] as [{ apiKey: string }] };
+		const options = await requestOptions({}, {}, undefined, {}, { credentials: async () => byok });
+		expect(options.providerOptions).toEqual({ gateway: { byok } });
+	});
+
+	it("sends no BYOK credentials when no provider key is stored", async () => {
+		const options = await requestOptions(
+			{},
+			{},
+			undefined,
+			{},
+			{
+				credentials: async () => undefined,
+			},
+		);
+		expect(options.providerOptions).toBeUndefined();
+	});
+
+	it("still sends the request when the stored provider keys cannot be read", async () => {
+		const options = await requestOptions(
+			{},
+			{},
+			undefined,
+			{},
+			{
+				credentials: () => Promise.reject(new Error("keychain locked")),
+			},
+		);
+		expect(options.providerOptions).toBeUndefined();
 	});
 
 	it("leaves session affinity to the gateway by default", async () => {

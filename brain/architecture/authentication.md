@@ -1,6 +1,6 @@
 # Authentication
 
-`VercelAIAuthenticationProvider` in `src/auth.ts` registers the `vercelAiGateway` authentication provider with `supportsMultipleAccounts: true`. It is the only place credentials are stored, and the code a reviewer should read most carefully.
+`VercelAIAuthenticationProvider` in `src/auth.ts` registers the `vercelAiGateway` authentication provider with `supportsMultipleAccounts: true`. It stores the gateway credentials, and is the code a reviewer should read most carefully. The only other stored credentials are the user's own provider keys (Provider keys below).
 
 ## Storage
 
@@ -62,6 +62,10 @@ The chat provider reads the active session straight from this provider through t
 ## Manage command
 
 `vercelAiGateway.manage` opens a quick pick: add, switch ("Switch active session", only with more than one session), remove, cancel. With no stored session and no environment session it goes straight to add; remove is offered only when a session is stored.
+
+## Provider keys
+
+`ProviderKeyStore` in `src/provider-keys.ts` keeps the user's own provider API keys as one JSON object of provider slug to key in `SecretStorage` under `vercelAiGateway.providerKeys` (#259). The "Manage Provider Keys" command (`manageProviderKeys`) adds a key, asked for in a password input box, or removes one; the last removal deletes the secret. Slugs must be lower case letters, digits and hyphens, and `azure`, `bedrock` and `vertex` are refused, since Vercel's BYOK docs (checked 2026-11-06) give them credentials with more than an `apiKey`. Reading drops entries that are not a valid slug with a non-empty string key, and JSON that does not parse reads as no keys with a warning that never quotes the stored text. Writes are not serialised like the session array; two manage commands racing could lose one key. Log lines name the provider, never the key. How the keys reach chat requests is in [[chat-provider]]. Tests: `src/provider-keys.test.ts`.
 
 ## Tests
 

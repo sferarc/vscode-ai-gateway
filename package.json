@@ -116,6 +116,11 @@
 				"command": "vercelAiGateway.showLogs",
 				"title": "Show Logs",
 				"category": "Vercel AI Gateway"
+			},
+			{
+				"command": "vercelAiGateway.manageProviderKeys",
+				"title": "Manage Provider Keys",
+				"category": "Vercel AI Gateway"
 			}
 		],
 		"walkthroughs": [

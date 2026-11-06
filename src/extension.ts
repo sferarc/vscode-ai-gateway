@@ -6,6 +6,7 @@ import { LastChatRequestStore } from "./last-request";
 import { initializeLogger, logger } from "./logger";
 import { ModelsClient } from "./models";
 import { VercelAIChatModelProvider } from "./provider";
+import { manageProviderKeys, ProviderKeyStore } from "./provider-keys";
 import { StatusTool } from "./tools";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -20,7 +21,13 @@ export function activate(context: vscode.ExtensionContext) {
 	const getActiveSession = () => authProvider.getActiveSession();
 	const modelsClient = new ModelsClient();
 	const lastRequest = new LastChatRequestStore();
-	const provider = new VercelAIChatModelProvider(getActiveSession, modelsClient, lastRequest);
+	const providerKeys = new ProviderKeyStore(context.secrets);
+	const provider = new VercelAIChatModelProvider(
+		getActiveSession,
+		modelsClient,
+		lastRequest,
+		providerKeys,
+	);
 	context.subscriptions.push(provider);
 	const providerDisposable = vscode.lm.registerLanguageModelChatProvider(EXTENSION_ID, provider);
 	context.subscriptions.push(providerDisposable);
@@ -40,6 +47,9 @@ export function activate(context: vscode.ExtensionContext) {
 			runConnectionCheck(getActiveSession),
 		),
 		vscode.commands.registerCommand(`${EXTENSION_ID}.showLogs`, () => logger.show()),
+		vscode.commands.registerCommand(`${EXTENSION_ID}.manageProviderKeys`, () =>
+			manageProviderKeys(providerKeys),
+		),
 	);
 
 	logger.info("Vercel AI Gateway extension activated successfully");
