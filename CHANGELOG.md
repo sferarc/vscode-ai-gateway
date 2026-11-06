@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.18.2
+
+### Patch Changes
+
+- 590ca86: Send sign-in prompts, notifications, Check Connection results and chat error messages through VS Code's localization API and ship their English bundle, so locale files can translate them later. The English text is unchanged.
+
 ## 0.18.1
 
 ### Patch Changes
