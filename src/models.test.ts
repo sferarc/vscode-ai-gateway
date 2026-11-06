@@ -392,9 +392,30 @@ describe("ModelsClient", () => {
 			const client = new ModelsClient();
 			const [priced, tiered, cacheOnly, invalid, unpriced] = await client.getModels("test-key");
 
-			expect(client.priceOf("priced")).toEqual({ input: "$2.00", output: "$10.00" });
-			expect(client.priceOf("tiered")).toEqual({ input: "from $1.20", output: "$0.04" });
-			expect(client.priceOf("unpriced")).toEqual({ input: undefined, output: undefined });
+			expect(client.priceOf("priced")).toEqual({
+				input: "$2.00",
+				output: "$10.00",
+				cacheRead: "$0.10",
+				cacheWrite: undefined,
+			});
+			expect(client.priceOf("tiered")).toEqual({
+				input: "from $1.20",
+				output: "$0.04",
+				cacheRead: "from $0.12",
+				cacheWrite: undefined,
+			});
+			expect(client.priceOf("cache-only")).toEqual({
+				input: undefined,
+				output: undefined,
+				cacheRead: undefined,
+				cacheWrite: "$3.75",
+			});
+			expect(client.priceOf("unpriced")).toEqual({
+				input: undefined,
+				output: undefined,
+				cacheRead: undefined,
+				cacheWrite: undefined,
+			});
 			expect(client.priceOf("missing")).toBeUndefined();
 
 			expect(priced?.tooltip).toBe(

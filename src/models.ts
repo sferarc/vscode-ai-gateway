@@ -218,6 +218,8 @@ function perMillionTokens(perToken: unknown, tiers: unknown): string | undefined
 export interface ModelPrice {
 	input?: string;
 	output?: string;
+	cacheRead?: string;
+	cacheWrite?: string;
 }
 
 function modelPrice(model: Model): ModelPrice {
@@ -225,14 +227,13 @@ function modelPrice(model: Model): ModelPrice {
 	return {
 		input: perMillionTokens(pricing?.input, pricing?.input_tiers),
 		output: perMillionTokens(pricing?.output, pricing?.output_tiers),
+		cacheRead: perMillionTokens(pricing?.input_cache_read, pricing?.input_cache_read_tiers),
+		cacheWrite: perMillionTokens(pricing?.input_cache_write, pricing?.input_cache_write_tiers),
 	};
 }
 
 function describePricing(model: Model): string | undefined {
-	const { input, output } = modelPrice(model);
-	const pricing = model.pricing;
-	const cacheRead = perMillionTokens(pricing?.input_cache_read, pricing?.input_cache_read_tiers);
-	const cacheWrite = perMillionTokens(pricing?.input_cache_write, pricing?.input_cache_write_tiers);
+	const { input, output, cacheRead, cacheWrite } = modelPrice(model);
 	const parts = [
 		input && `${input} per million input tokens`,
 		output && `${output} per million output tokens`,
