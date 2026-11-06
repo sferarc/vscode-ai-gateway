@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.18.1
+
+### Patch Changes
+
+- 3992295: Move the command titles, setting descriptions and walkthrough text into package.nls.json so VS Code can show them translated.
+
 ## 0.18.0
 
 ### Minor Changes
