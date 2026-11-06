@@ -254,6 +254,10 @@ async function getVercelOidcToken(
 	}
 }
 
+function errorText(error: unknown): string {
+	return error instanceof Error ? error.message : vscode.l10n.t("Unknown error");
+}
+
 async function selectTeam(authToken: string): Promise<Team | null> {
 	try {
 		const teams = await fetchAllPages<Team>(authToken, vercelApiUrl("/v2/teams"), "teams");
@@ -265,8 +269,8 @@ async function selectTeam(authToken: string): Promise<Team | null> {
 			value: Team | null;
 		}> = [
 			{
-				label: "Personal Account",
-				description: "Use your personal Vercel account",
+				label: vscode.l10n.t("Personal Account"),
+				description: vscode.l10n.t("Use your personal Vercel account"),
 				value: null,
 			},
 		];
@@ -275,13 +279,13 @@ async function selectTeam(authToken: string): Promise<Team | null> {
 		for (const team of teams) {
 			options.push({
 				label: team.name || team.slug,
-				description: `Team: ${team.slug}`,
+				description: vscode.l10n.t("Team: {0}", team.slug),
 				value: { id: team.id, name: team.name, slug: team.slug },
 			});
 		}
 
 		const selected = await vscode.window.showQuickPick(options, {
-			placeHolder: "Select a team or personal account",
+			placeHolder: vscode.l10n.t("Select a team or personal account"),
 		});
 
 		if (!selected) {
@@ -293,9 +297,7 @@ async function selectTeam(authToken: string): Promise<Team | null> {
 		if (error instanceof VercelOidcTokenError || error instanceof AuthCancelledError) {
 			throw error;
 		}
-		throw new VercelOidcTokenError(
-			`Failed to load teams: ${error instanceof Error ? error.message : "Unknown error"}`,
-		);
+		throw new VercelOidcTokenError(vscode.l10n.t("Failed to load teams: {0}", errorText(error)));
 	}
 }
 
@@ -313,12 +315,12 @@ async function selectProject(
 
 		const options = projects.map((project) => ({
 			label: project.name,
-			description: `ID: ${project.id}`,
+			description: vscode.l10n.t("ID: {0}", project.id),
 			value: { id: project.id, name: project.name },
 		}));
 
 		const selected = await vscode.window.showQuickPick(options, {
-			placeHolder: "Select a project",
+			placeHolder: vscode.l10n.t("Select a project"),
 		});
 
 		if (!selected) {
@@ -330,16 +332,14 @@ async function selectProject(
 		if (error instanceof VercelOidcTokenError || error instanceof AuthCancelledError) {
 			throw error;
 		}
-		throw new VercelOidcTokenError(
-			`Failed to load projects: ${error instanceof Error ? error.message : "Unknown error"}`,
-		);
+		throw new VercelOidcTokenError(vscode.l10n.t("Failed to load projects: {0}", errorText(error)));
 	}
 }
 
 export async function createInteractiveOidcSession(): Promise<StoredOidcToken> {
 	const authToken = getVercelCliToken();
 	if (!authToken) {
-		throw new VercelOidcTokenError("Vercel CLI not logged in");
+		throw new VercelOidcTokenError(vscode.l10n.t("Vercel CLI not logged in"));
 	}
 
 	try {
@@ -352,7 +352,7 @@ export async function createInteractiveOidcSession(): Promise<StoredOidcToken> {
 		// Create OIDC token
 		const newToken = await getVercelOidcToken(authToken, project.id, team?.id);
 		if (!newToken) {
-			throw new VercelOidcTokenError("Failed to create OIDC token");
+			throw new VercelOidcTokenError(vscode.l10n.t("Failed to create OIDC token"));
 		}
 
 		return createStoredToken(newToken, project.id, project.name, team?.id, team?.name || undefined);
@@ -361,7 +361,7 @@ export async function createInteractiveOidcSession(): Promise<StoredOidcToken> {
 			throw error;
 		}
 		throw new VercelOidcTokenError(
-			`Failed to create interactive OIDC session: ${error instanceof Error ? error.message : "Unknown error"}`,
+			vscode.l10n.t("Failed to create interactive OIDC session: {0}", errorText(error)),
 		);
 	}
 }

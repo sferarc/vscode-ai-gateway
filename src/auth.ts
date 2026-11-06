@@ -9,11 +9,12 @@ import {
 	type Event,
 	EventEmitter,
 	type ExtensionContext,
+	l10n,
 	ProgressLocation,
 	window,
 } from "vscode";
 import { getConfig } from "./config";
-import { ERROR_MESSAGES, EXTENSION_ID, MODELS_ENDPOINT, SIGNED_IN_CONTEXT_KEY } from "./constants";
+import { EXTENSION_ID, MODELS_ENDPOINT, SIGNED_IN_CONTEXT_KEY } from "./constants";
 import { AuthCancelledError } from "./errors";
 import { extractErrorMessage, logger } from "./logger";
 import {
@@ -338,10 +339,10 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			return;
 		}
 		this.unreadableSessionsNotified = true;
-		const action = "Manage Authentication";
+		const action = l10n.t("Manage Authentication");
 		void Promise.resolve(
 			window.showWarningMessage(
-				"Some stored Vercel AI Gateway sessions could not be read and must be added again.",
+				l10n.t("Some stored Vercel AI Gateway sessions could not be read and must be added again."),
 				action,
 			),
 		).then((choice) => (choice === action ? this.manageAuthentication() : undefined));
@@ -385,8 +386,9 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 	private async createOidcSession(): Promise<AuthenticationSession> {
 		if (!checkVercelCliAvailable()) {
-			window.showErrorMessage(ERROR_MESSAGES.VERCEL_CLI_NOT_LOGGED_IN);
-			throw new Error(ERROR_MESSAGES.VERCEL_CLI_NOT_LOGGED_IN);
+			const message = l10n.t("Vercel CLI not logged in. Please run `vercel login` first.");
+			window.showErrorMessage(message);
+			throw new Error(message);
 		}
 
 		const storedToken = await createInteractiveOidcSession();
@@ -428,13 +430,16 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			removed: [],
 			changed: [],
 		});
-		window.showInformationMessage("Authentication successful!");
+		window.showInformationMessage(l10n.t("Authentication successful!"));
 	}
 
 	async removeSession(sessionId: string): Promise<void> {
 		if (sessionId === ENVIRONMENT_SESSION_ID) {
 			window.showInformationMessage(
-				`This session comes from the ${ENVIRONMENT_API_KEY_VARIABLE} environment variable. Unset it and reload the window to sign out.`,
+				l10n.t(
+					"This session comes from the {0} environment variable. Unset it and reload the window to sign out.",
+					ENVIRONMENT_API_KEY_VARIABLE,
+				),
 			);
 			return;
 		}
@@ -466,7 +471,9 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		const { removed, newActive } = result;
 		if (newActive) {
 			const methodLabel = this.getMethodLabel(newActive.method);
-			window.showInformationMessage(`Activated: ${newActive.account.label} ${methodLabel}`);
+			window.showInformationMessage(
+				l10n.t("Activated: {0} {1}", newActive.account.label, methodLabel),
+			);
 		}
 
 		const removedAuthSession: AuthenticationSession = {
@@ -480,13 +487,13 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 			removed: [removedAuthSession],
 			changed: [],
 		});
-		window.showInformationMessage("Session removed");
+		window.showInformationMessage(l10n.t("Session removed"));
 	}
 
 	private async promptForSessionName(): Promise<string | undefined> {
 		return window.showInputBox({
-			prompt: "Enter a name for this session",
-			placeHolder: "e.g., Personal, Work, Project Name",
+			prompt: l10n.t("Enter a name for this session"),
+			placeHolder: l10n.t("e.g., Personal, Work, Project Name"),
 			ignoreFocusOut: true,
 			validateInput: this.validateSessionName,
 		});
@@ -494,7 +501,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 	private async promptForApiKey(): Promise<string | undefined> {
 		return window.showInputBox({
-			prompt: "Enter your Vercel AI Gateway API key",
+			prompt: l10n.t("Enter your Vercel AI Gateway API key"),
 			password: true,
 			placeHolder: "vck_...",
 			ignoreFocusOut: true,
@@ -503,16 +510,16 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	}
 
 	private validateSessionName(value: string): string | null {
-		return !value?.trim() ? "Session name required" : null;
+		return !value?.trim() ? l10n.t("Session name required") : null;
 	}
 
 	private validateApiKey(value: string): string | null {
 		const key = value?.trim();
 		if (!key) {
-			return "API key required";
+			return l10n.t("API key required");
 		}
 		if (!key.startsWith("vck_")) {
-			return 'API key must start with "vck_"';
+			return l10n.t('API key must start with "vck_"');
 		}
 		return null;
 	}
@@ -523,9 +530,9 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 	private getMethodLabel(method: AuthenticationMethod): string {
 		if (method === "environment") {
-			return "[Environment]";
+			return l10n.t("[Environment]");
 		}
-		return method === "oidc" ? "[OIDC]" : "[API Key]";
+		return method === "oidc" ? l10n.t("[OIDC]") : l10n.t("[API Key]");
 	}
 
 	/**
@@ -562,7 +569,10 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		}
 		logger.warn(`The gateway rejected ${ENVIRONMENT_API_KEY_VARIABLE} (HTTP 401); ignoring it`);
 		window.showWarningMessage(
-			`The gateway rejected the API key in ${ENVIRONMENT_API_KEY_VARIABLE} (HTTP 401). Set a valid key and reload the window, or run Manage Authentication to add one.`,
+			l10n.t(
+				"The gateway rejected the API key in {0} (HTTP 401). Set a valid key and reload the window, or run Manage Authentication to add one.",
+				ENVIRONMENT_API_KEY_VARIABLE,
+			),
 		);
 		return false;
 	}
@@ -583,16 +593,17 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 				return;
 			}
 			logger.error("Error in manage authentication:", error);
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-			window.showErrorMessage(`Authentication management failed: ${errorMessage}`);
+			const errorMessage =
+				error instanceof Error ? error.message : l10n.t("Unknown error occurred");
+			window.showErrorMessage(l10n.t("Authentication management failed: {0}", errorMessage));
 		}
 	}
 
 	private async promptForAuthMethod(): Promise<AuthenticationMethod | undefined> {
 		const options = [
 			{
-				label: "API Key",
-				description: "Manual API key entry",
+				label: l10n.t("API Key"),
+				description: l10n.t("Manual API key entry"),
 				value: "api-key" as AuthenticationMethod,
 			},
 		];
@@ -600,14 +611,14 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		// Only show OIDC option if Vercel CLI is logged in
 		if (checkVercelCliAvailable()) {
 			options.push({
-				label: "Vercel OIDC",
-				description: "Use a Vercel OIDC project token",
+				label: l10n.t("Vercel OIDC"),
+				description: l10n.t("Use a Vercel OIDC project token"),
 				value: "oidc" as AuthenticationMethod,
 			});
 		}
 
 		const result = await window.showQuickPick(options, {
-			placeHolder: "Select authentication method",
+			placeHolder: l10n.t("Select authentication method"),
 		});
 		return result?.value;
 	}
@@ -617,27 +628,27 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		const methodLabel = activeSession ? this.getMethodLabel(activeSession.method) : "";
 		const activeSessionName = activeSession
 			? `${activeSession.account.label} ${methodLabel}`
-			: "None";
+			: l10n.t("None");
 
-		const options = [{ label: "Add new authentication", value: "add" }];
+		const options = [{ label: l10n.t("Add new authentication"), value: "add" }];
 		if (sessions.length > 1) {
-			options.push({ label: "Switch active session", value: "switch" });
+			options.push({ label: l10n.t("Switch active session"), value: "switch" });
 		}
 		// The environment session cannot be removed from here, only stored sessions.
 		if (sessions.length > 0) {
-			options.push({ label: "Remove session", value: "remove" });
+			options.push({ label: l10n.t("Remove session"), value: "remove" });
 		}
-		options.push({ label: "Cancel", value: "cancel" });
+		options.push({ label: l10n.t("Cancel"), value: "cancel" });
 
 		const result = await window.showQuickPick(options, {
-			placeHolder: `Active session: ${activeSessionName} - Choose an action`,
+			placeHolder: l10n.t("Active session: {0} - Choose an action", activeSessionName),
 		});
 		return result?.value;
 	}
 
 	private async executeAction(action: string | undefined, sessions: SessionData[]): Promise<void> {
 		if (!action || action === "cancel") {
-			window.showInformationMessage("Authentication management cancelled.");
+			window.showInformationMessage(l10n.t("Authentication management cancelled."));
 			return;
 		}
 
@@ -653,7 +664,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 					await this.handleRemoveSession(sessions);
 					break;
 				default:
-					window.showWarningMessage(`Unknown action: ${action}`);
+					window.showWarningMessage(l10n.t("Unknown action: {0}", action));
 			}
 		} catch (error) {
 			if (error instanceof AuthCancelledError) {
@@ -661,8 +672,9 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 				return;
 			}
 			logger.error(`Error executing action ${action}:`, error);
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-			window.showErrorMessage(`Failed to ${action} session: ${errorMessage}`);
+			const errorMessage =
+				error instanceof Error ? error.message : l10n.t("Unknown error occurred");
+			window.showErrorMessage(actionFailedMessage(action, errorMessage));
 		}
 	}
 
@@ -678,7 +690,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 				label: `${s.account.label} ${this.getMethodLabel(s.method)}`,
 				value: s.id,
 			})),
-			{ placeHolder: "Select session to remove" },
+			{ placeHolder: l10n.t("Select session to remove") },
 		);
 		if (selected) {
 			await this.removeSession(selected.value);
@@ -753,7 +765,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 	private async switchActiveSession(): Promise<void> {
 		const sessions = await this.getSessionsData();
 		if (sessions.length <= 1) {
-			window.showInformationMessage("You need at least 2 sessions to switch between them.");
+			window.showInformationMessage(l10n.t("You need at least 2 sessions to switch between them."));
 			return;
 		}
 
@@ -761,12 +773,12 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 
 		const options = sessions.map((s) => ({
 			label: `${s.account.label} ${this.getMethodLabel(s.method)}`,
-			description: s.id === activeSessionId ? "(currently active)" : "",
+			description: s.id === activeSessionId ? l10n.t("(currently active)") : "",
 			value: s.id,
 		}));
 
 		const selected = await window.showQuickPick(options, {
-			placeHolder: "Select session to activate",
+			placeHolder: l10n.t("Select session to activate"),
 		});
 
 		if (!selected) {
@@ -774,7 +786,7 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 		}
 
 		if (selected.value === activeSessionId) {
-			window.showInformationMessage("Session is already active.");
+			window.showInformationMessage(l10n.t("Session is already active."));
 			return;
 		}
 
@@ -796,7 +808,23 @@ export class VercelAIAuthenticationProvider implements AuthenticationProvider, D
 				changed: [authSession],
 			});
 		}
-		window.showInformationMessage(`Switched to: ${selectedSession?.account.label} ${methodLabel}`);
+		window.showInformationMessage(
+			l10n.t("Switched to: {0} {1}", String(selectedSession?.account.label), methodLabel),
+		);
+	}
+}
+
+// One message per action, since a translator cannot translate the action's internal value.
+function actionFailedMessage(action: string, errorMessage: string): string {
+	switch (action) {
+		case "add":
+			return l10n.t("Failed to add session: {0}", errorMessage);
+		case "switch":
+			return l10n.t("Failed to switch session: {0}", errorMessage);
+		case "remove":
+			return l10n.t("Failed to remove session: {0}", errorMessage);
+		default:
+			return l10n.t("Authentication management failed: {0}", errorMessage);
 	}
 }
 
@@ -805,13 +833,15 @@ async function verifyApiKey(apiKey: string): Promise<void> {
 	const status = await window.withProgress(
 		{
 			location: ProgressLocation.Notification,
-			title: "Checking the API key with Vercel AI Gateway",
+			title: l10n.t("Checking the API key with Vercel AI Gateway"),
 		},
 		() => fetchApiKeyStatus(apiKey, "Saving the API key unchecked"),
 	);
 	if (status === 401) {
 		throw new Error(
-			"The gateway rejected this API key (HTTP 401). Copy the key again from the AI Gateway dashboard, or create a new one, and add it again.",
+			l10n.t(
+				"The gateway rejected this API key (HTTP 401). Copy the key again from the AI Gateway dashboard, or create a new one, and add it again.",
+			),
 		);
 	}
 }

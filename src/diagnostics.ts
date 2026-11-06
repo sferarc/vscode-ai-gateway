@@ -32,7 +32,6 @@ export interface MonthSpend {
 	topModels: { model: string; totalCost: number }[];
 }
 
-const SHOW_LOGS = "Show Logs";
 const CREDITS_ENDPOINT = "/v1/credits";
 const REPORT_ENDPOINT = "/v1/report";
 const TOP_SPEND_MODELS = 3;
@@ -57,7 +56,10 @@ export async function checkConnection(
 		return {
 			ok: false,
 			endpoint,
-			error: "No active session. Run Vercel AI Gateway: Manage Authentication to add one.",
+			error: vscode.l10n.t(
+				"No active session. Run {0} to add one.",
+				vscode.l10n.t("Vercel AI Gateway: Manage Authentication"),
+			),
 		};
 	}
 
@@ -82,13 +84,15 @@ export async function checkConnection(
 		if (!response.ok) {
 			result.error =
 				response.status === 401 || response.status === 403
-					? "The gateway rejected the session's credentials. Sign in again or replace the API key."
-					: response.statusText || "The gateway returned an error";
+					? vscode.l10n.t(
+							"The gateway rejected the session's credentials. Sign in again or replace the API key.",
+						)
+					: response.statusText || vscode.l10n.t("The gateway returned an error");
 			return result;
 		}
 		const body = (await response.json()) as { data?: unknown };
 		if (!Array.isArray(body.data)) {
-			result.error = "The response has no model list";
+			result.error = vscode.l10n.t("The response has no model list");
 			return result;
 		}
 		result.modelCount = body.data.length;
@@ -188,13 +192,21 @@ function summariseSpend(since: string, rows: unknown[]): MonthSpend {
 }
 
 export function describeMonthSpend(spend: MonthSpend): string {
-	const header = `Spend this month (since ${spend.since} UTC): ${SPEND_FORMAT.format(spend.totalCost)}`;
-	const requests = spend.requestCount === undefined ? "" : ` over ${spend.requestCount} requests`;
-	if (spend.topModels.length === 0) return `${header}${requests}.`;
+	const total = SPEND_FORMAT.format(spend.totalCost);
+	const summary =
+		spend.requestCount === undefined
+			? vscode.l10n.t("Spend this month (since {0} UTC): {1}.", spend.since, total)
+			: vscode.l10n.t(
+					"Spend this month (since {0} UTC): {1} over {2} requests.",
+					spend.since,
+					total,
+					spend.requestCount,
+				);
+	if (spend.topModels.length === 0) return summary;
 	const top = spend.topModels
 		.map(({ model, totalCost }) => `${model} ${SPEND_FORMAT.format(totalCost)}`)
 		.join(", ");
-	return `${header}${requests}. Most spent on: ${top}.`;
+	return `${summary} ${vscode.l10n.t("Most spent on: {0}.", top)}`;
 }
 
 function creditAmount(value: unknown): string | undefined {
@@ -203,31 +215,45 @@ function creditAmount(value: unknown): string | undefined {
 }
 
 function formatConnectionCheck(result: ConnectionCheckResult): string[] {
-	const lines = [`Endpoint: ${result.endpoint}`];
+	const lines = [vscode.l10n.t("Endpoint: {0}", result.endpoint)];
 	if (result.session) {
-		lines.push(`Session: ${result.session.label} (${result.session.method})`);
+		lines.push(vscode.l10n.t("Session: {0} ({1})", result.session.label, result.session.method));
 		if (result.session.expiresAt !== undefined) {
-			lines.push(`OIDC token expires: ${new Date(result.session.expiresAt).toISOString()}`);
+			lines.push(
+				vscode.l10n.t("OIDC token expires: {0}", new Date(result.session.expiresAt).toISOString()),
+			);
 		}
 	}
 	if (result.status !== undefined) {
-		lines.push(`HTTP status: ${result.status}`);
+		lines.push(vscode.l10n.t("HTTP status: {0}", result.status));
 	}
 	if (result.latencyMs !== undefined) {
-		lines.push(`Latency: ${result.latencyMs}ms`);
+		lines.push(vscode.l10n.t("Latency: {0}ms", result.latencyMs));
 	}
 	if (result.modelCount !== undefined) {
 		// The picker shows chat models only, so the total alone overstates what the user can pick.
-		lines.push(`Chat models: ${result.chatModelCount ?? 0} of ${result.modelCount} listed`);
+		lines.push(
+			vscode.l10n.t(
+				"Chat models: {0} of {1} listed",
+				result.chatModelCount ?? 0,
+				result.modelCount,
+			),
+		);
 	}
 	if (result.credits) {
-		lines.push(`Credits: ${result.credits.balance} left, ${result.credits.totalUsed} used`);
+		lines.push(
+			vscode.l10n.t(
+				"Credits: {0} left, {1} used",
+				result.credits.balance,
+				result.credits.totalUsed,
+			),
+		);
 	}
 	if (result.spend) {
 		lines.push(describeMonthSpend(result.spend));
 	}
 	if (result.error) {
-		lines.push(`Error: ${result.error}`);
+		lines.push(vscode.l10n.t("Error: {0}", result.error));
 	}
 	return lines;
 }
@@ -243,20 +269,21 @@ export async function runConnectionCheck(
 		result = {
 			ok: false,
 			endpoint,
-			error: `Could not read the active session: ${extractErrorMessage(error)}`,
+			error: vscode.l10n.t("Could not read the active session: {0}", extractErrorMessage(error)),
 		};
 	}
 	const lines = formatConnectionCheck(result);
 	logger.info(`Check Connection ${result.ok ? "succeeded" : "failed"}: ${lines.join("; ")}`);
 
 	const heading = result.ok
-		? "Connected to Vercel AI Gateway."
-		: "Vercel AI Gateway connection check failed.";
+		? vscode.l10n.t("Connected to Vercel AI Gateway.")
+		: vscode.l10n.t("Vercel AI Gateway connection check failed.");
 	const message = `${heading} ${lines.map((line) => line.replace(/\.$/, "")).join(". ")}.`;
+	const showLogs = vscode.l10n.t("Show Logs");
 	const choice = result.ok
-		? await vscode.window.showInformationMessage(message, SHOW_LOGS)
-		: await vscode.window.showErrorMessage(message, SHOW_LOGS);
-	if (choice === SHOW_LOGS) {
+		? await vscode.window.showInformationMessage(message, showLogs)
+		: await vscode.window.showErrorMessage(message, showLogs);
+	if (choice === showLogs) {
 		logger.show();
 	}
 }

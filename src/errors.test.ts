@@ -12,7 +12,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { describeGatewayError } from "./errors";
 import { extractErrorMessage } from "./logger";
 
-vi.mock("vscode", () => ({}));
+vi.mock("vscode", () => ({
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
+}));
 
 function apiCallError(
 	statusCode: number,

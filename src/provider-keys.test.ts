@@ -9,6 +9,10 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 vi.mock("vscode", () => ({
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
 	window: {
 		showQuickPick: hoisted.showQuickPick,
 		showInputBox: hoisted.showInputBox,

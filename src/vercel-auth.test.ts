@@ -8,6 +8,10 @@ import { TOKEN_REFRESH_MARGIN, VERCEL_API_TIMEOUT_MS } from "./constants";
 vi.mock("node:fs", () => ({ existsSync: vi.fn(), readFileSync: vi.fn() }));
 vi.mock("node:os", () => ({ platform: vi.fn(), homedir: vi.fn() }));
 vi.mock("vscode", () => ({
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
 	window: { showQuickPick: vi.fn(), showInputBox: vi.fn(), showErrorMessage: vi.fn() },
 }));
 

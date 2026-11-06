@@ -1,4 +1,4 @@
-import { type SecretStorage, window } from "vscode";
+import { l10n, type SecretStorage, window } from "vscode";
 import { EXTENSION_ID } from "./constants";
 import { logger } from "./logger";
 
@@ -14,10 +14,13 @@ export type ByokCredentials = Record<string, [{ apiKey: string }]>;
 function validateProviderSlug(value: string): string | undefined {
 	const slug = value.trim();
 	if (!PROVIDER_SLUG_PATTERN.test(slug)) {
-		return "Enter a provider slug in lower case, such as anthropic or openai.";
+		return l10n.t("Enter a provider slug in lower case, such as anthropic or openai.");
 	}
 	if (MULTI_FIELD_PROVIDERS.has(slug)) {
-		return `${slug} credentials need more than an API key; add them in the Vercel dashboard instead.`;
+		return l10n.t(
+			"{0} credentials need more than an API key; add them in the Vercel dashboard instead.",
+			slug,
+		);
 	}
 	return undefined;
 }
@@ -82,32 +85,32 @@ export class ProviderKeyStore {
 	}
 }
 
-const ADD_ITEM = "$(add) Add a provider key";
-
 export async function manageProviderKeys(store: ProviderKeyStore): Promise<void> {
 	const providers = await store.providers();
 	const choice = await window.showQuickPick(
 		[
-			{ label: ADD_ITEM, slug: undefined },
+			{ label: `$(add) ${l10n.t("Add a provider key")}`, slug: undefined },
 			...providers.map((slug) => ({
-				label: `$(trash) Remove the ${slug} key`,
+				label: `$(trash) ${l10n.t("Remove the {0} key", slug)}`,
 				slug,
 			})),
 		],
-		{ placeHolder: "Provider API keys sent to the gateway as your own (BYOK) credentials" },
+		{
+			placeHolder: l10n.t("Provider API keys sent to the gateway as your own (BYOK) credentials"),
+		},
 	);
 	if (!choice) return;
 
 	if (choice.slug) {
 		await store.remove(choice.slug);
 		logger.info(`Removed the ${choice.slug} provider key`);
-		window.showInformationMessage(`Removed the ${choice.slug} provider key.`);
+		window.showInformationMessage(l10n.t("Removed the {0} provider key.", choice.slug));
 		return;
 	}
 
 	const slug = (
 		await window.showInputBox({
-			prompt: "Provider slug, as in the gateway's model ids",
+			prompt: l10n.t("Provider slug, as in the gateway's model ids"),
 			placeHolder: "anthropic",
 			ignoreFocusOut: true,
 			validateInput: validateProviderSlug,
@@ -117,10 +120,11 @@ export async function manageProviderKeys(store: ProviderKeyStore): Promise<void>
 
 	const apiKey = (
 		await window.showInputBox({
-			prompt: `API key for ${slug}`,
+			prompt: l10n.t("API key for {0}", slug),
 			password: true,
 			ignoreFocusOut: true,
-			validateInput: (value) => (value.trim() ? undefined : "Enter the provider's API key."),
+			validateInput: (value) =>
+				value.trim() ? undefined : l10n.t("Enter the provider's API key."),
 		})
 	)?.trim();
 	if (!apiKey) return;
@@ -128,6 +132,9 @@ export async function manageProviderKeys(store: ProviderKeyStore): Promise<void>
 	await store.set(slug, apiKey);
 	logger.info(`Stored a ${slug} provider key`);
 	window.showInformationMessage(
-		`Requests for ${slug} models now send your stored provider keys to the gateway, which then ignores all of the team's dashboard keys for those requests.`,
+		l10n.t(
+			"Requests for {0} models now send your stored provider keys to the gateway, which then ignores all of the team's dashboard keys for those requests.",
+			slug,
+		),
 	);
 }

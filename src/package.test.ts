@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getL10nJson } from "@vscode/l10n-dev";
 import { listFiles, PackageManager } from "@vscode/vsce";
 import { describe, expect, it } from "vitest";
 import { EXTENSION_ID, SIGNED_IN_CONTEXT_KEY, STATUS_TOOL_NAME } from "./constants";
@@ -24,6 +25,14 @@ describe("VSIX contents", () => {
 		expect(files).toContain("package.nls.json");
 	});
 
+	it("packages the runtime strings bundle VS Code localizes", async () => {
+		const files = await listFiles({ cwd: root, packageManager: PackageManager.None });
+		const pkg = await readManifest();
+
+		expect(pkg.l10n).toBe("./l10n");
+		expect(files).toContain("l10n/bundle.l10n.json");
+	});
+
 	it("packages the walkthrough media", async () => {
 		const files = await listFiles({ cwd: root, packageManager: PackageManager.None });
 		const pkg = await readManifest();
@@ -37,6 +46,7 @@ describe("VSIX contents", () => {
 });
 
 interface Manifest {
+	l10n?: string;
 	engines: { vscode: string };
 	keywords: string[];
 	pricing?: string;
@@ -139,6 +149,41 @@ function userFacingStrings(pkg: Fields): [string, unknown][] {
 	add("untrustedWorkspaces.description", trust?.description);
 	return out;
 }
+
+// The extension's own sources; tests define a vscode.l10n.t stand-in but never call it.
+async function readSources(): Promise<{ path: string; contents: string }[]> {
+	const names = await readdir(join(root, "src"), { recursive: true });
+	const sources = names.filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"));
+	return Promise.all(
+		sources.map(async (name) => ({
+			path: name,
+			contents: await readFile(join(root, "src", name), "utf8"),
+		})),
+	);
+}
+
+describe("runtime strings", () => {
+	it("keeps l10n/bundle.l10n.json in step with the vscode.l10n.t calls (run pnpm l10n:export)", async () => {
+		const sources = await readSources();
+		const exported = await getL10nJson(
+			sources.map(({ contents }) => ({ contents, extension: ".ts" })),
+		);
+		const bundle = JSON.parse(await readFile(join(root, "l10n", "bundle.l10n.json"), "utf8"));
+
+		expect(Object.keys(exported).length).toBeGreaterThan(0);
+		expect(bundle).toEqual(exported);
+	});
+
+	// The exporter skips a message built by concatenation or a template, which then never gets translated.
+	it("passes every vscode.l10n.t message as a single string literal", async () => {
+		const literal = /l10n\.t\(\s*(?:"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')\s*[,)]/g;
+		for (const { path, contents } of await readSources()) {
+			const calls = contents.match(/l10n\.t\(/g)?.length ?? 0;
+			const literals = contents.match(literal)?.length ?? 0;
+			expect(literals, path).toBe(calls);
+		}
+	});
+});
 
 describe("manifest", () => {
 	it("pins @types/vscode to the engines.vscode floor", async () => {
