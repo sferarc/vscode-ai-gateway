@@ -749,3 +749,70 @@ describe("getConfig sessionAffinity", () => {
 		).toMatchObject({ type: "boolean", scope: "application", default: true });
 	});
 });
+
+describe("getConfig byokProviderTimeouts", () => {
+	function timeouts(scopes: { globalValue?: unknown; workspaceValue?: unknown }) {
+		return {
+			get: vi.fn((_: string, d: unknown) => d),
+			inspect: vi.fn((key: string) =>
+				key === "byokProviderTimeouts" ? { key, ...scopes } : undefined,
+			),
+		};
+	}
+
+	it("reads the user's timeouts per provider slug", () => {
+		getConfiguration.mockReturnValue(
+			timeouts({ globalValue: { anthropic: 10000, bedrock: 15000 } }),
+		);
+
+		expect(getConfig().byokProviderTimeouts).toEqual({ anthropic: 10000, bedrock: 15000 });
+	});
+
+	it("lowercases and trims slugs, rounds and clamps values and drops the rest", () => {
+		getConfiguration.mockReturnValue(
+			timeouts({
+				globalValue: {
+					" OpenAI ": 2500.4,
+					anthropic: 10,
+					vertex: 10_000_000,
+					bedrock: "5000",
+					groq: Number.NaN,
+					"  ": 5000,
+				},
+			}),
+		);
+
+		expect(getConfig().byokProviderTimeouts).toEqual({
+			openai: 2500,
+			anthropic: 1000,
+			vertex: 789000,
+		});
+	});
+
+	it.each([[undefined], [{}], [[5000]], ["anthropic"], [null], [{ anthropic: "fast" }]])(
+		"sends no timeouts for %o",
+		(value) => {
+			getConfiguration.mockReturnValue(timeouts({ globalValue: value }));
+
+			expect(getConfig().byokProviderTimeouts).toBeUndefined();
+		},
+	);
+
+	it("ignores timeouts set in workspace settings", () => {
+		getConfiguration.mockReturnValue(timeouts({ workspaceValue: { anthropic: 1000 } }));
+
+		expect(getConfig().byokProviderTimeouts).toBeUndefined();
+	});
+
+	it("declares an application scoped object of bounded numbers", () => {
+		const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+		expect(
+			manifest.contributes.configuration.properties["vercelAiGateway.byokProviderTimeouts"],
+		).toMatchObject({
+			type: "object",
+			scope: "application",
+			default: {},
+			additionalProperties: { type: "number", minimum: 1000, maximum: 789000 },
+		});
+	});
+});

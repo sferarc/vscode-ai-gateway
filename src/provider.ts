@@ -289,6 +289,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 					requiredCapabilities: config.requiredCapabilities,
 					serviceTier: config.serviceTier,
 					sessionAffinity: config.sessionAffinity,
+					byokProviderTimeouts: config.byokProviderTimeouts,
 				}),
 				abortSignal: abortController.signal,
 				timeout: { firstChunkMs: config.timeout, chunkMs: config.timeout },
@@ -883,6 +884,7 @@ function gatewayOptions(options: {
 	requiredCapabilities: ModelCapability[] | undefined;
 	serviceTier: ServiceTier | undefined;
 	sessionAffinity: boolean;
+	byokProviderTimeouts: Record<string, number> | undefined;
 }):
 	| {
 			gateway: {
@@ -899,6 +901,7 @@ function gatewayOptions(options: {
 				has?: (ModelCapability | `!quantization:${string}`)[];
 				serviceTier?: ServiceTier;
 				sessionAffinity?: false;
+				providerTimeouts?: { byok: Record<string, number> };
 			};
 	  }
 	| undefined {
@@ -916,6 +919,7 @@ function gatewayOptions(options: {
 		requiredCapabilities,
 		serviceTier,
 		sessionAffinity,
+		byokProviderTimeouts,
 	} = options;
 	// A list holding only the requested model has nothing to fall back to.
 	const models = options.models?.length ? options.models : undefined;
@@ -933,7 +937,8 @@ function gatewayOptions(options: {
 		!excludeQuantizations &&
 		!requiredCapabilities &&
 		!serviceTier &&
-		sessionAffinity
+		sessionAffinity &&
+		!byokProviderTimeouts
 	) {
 		return undefined;
 	}
@@ -957,6 +962,7 @@ function gatewayOptions(options: {
 			}),
 			...(serviceTier && { serviceTier }),
 			...(!sessionAffinity && { sessionAffinity: false }),
+			...(byokProviderTimeouts && { providerTimeouts: { byok: byokProviderTimeouts } }),
 		},
 	};
 }
