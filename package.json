@@ -3,7 +3,7 @@
 	"private": true,
 	"displayName": "Vercel AI Gateway",
 	"description": "Use Vercel AI Gateway models in VS Code chat with your gateway API key or Vercel OIDC. Community extension, not made by Vercel.",
-	"version": "0.17.0",
+	"version": "0.18.0",
 	"publisher": "SferaDev",
 	"license": "MIT",
 	"icon": "images/icon.png",
