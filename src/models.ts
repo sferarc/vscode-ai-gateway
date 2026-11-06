@@ -129,6 +129,14 @@ function detectImageInput(model: Model, tags: string[]): boolean {
 	return hasTag(tags, IMAGE_INPUT_TAGS);
 }
 
+function detectPdfInput(model: Model): boolean {
+	const inputModalities = model.modalities?.input;
+	if (inputModalities) {
+		return inputModalities.includes("pdf");
+	}
+	return (model.tags ?? []).some((tag) => tag.toLowerCase() === "file-input");
+}
+
 function detectToolCalling(model: Model, tags: string[]): boolean {
 	const supportedParameters = model.supported_parameters;
 	if (supportedParameters) {
@@ -264,11 +272,17 @@ export class ModelsClient {
 	private inflightFetch?: { apiKey: string; promise: Promise<LanguageModelChatInformation[]> };
 	private generation = 0;
 	private temperatureUnsupported = new Set<string>();
+	private pdfInput = new Set<string>();
 	private prices = new Map<string, ModelPrice>();
 
 	/** False only for a model the last fetched list marked as taking no temperature. */
 	acceptsTemperature(modelId: string): boolean {
 		return !this.temperatureUnsupported.has(modelId);
+	}
+
+	/** True only for a model the last fetched list names as taking PDF input. */
+	acceptsPdf(modelId: string): boolean {
+		return this.pdfInput.has(modelId);
 	}
 
 	/** The price the last fetched list gives for a chat model, or undefined for a model it did not list. */
@@ -346,6 +360,7 @@ export class ModelsClient {
 		this.temperatureUnsupported = new Set(
 			data.filter((model) => !acceptsTemperature(model)).map((model) => model.id),
 		);
+		this.pdfInput = new Set(data.filter(detectPdfInput).map((model) => model.id));
 		this.prices = new Map(data.filter(isChatModel).map((model) => [model.id, modelPrice(model)]));
 
 		logger.info(`Models fetched in ${Date.now() - startTime}ms, count: ${models.length}`);

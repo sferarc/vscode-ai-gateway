@@ -1,5 +1,6 @@
 import { createGatewayProvider } from "@ai-sdk/gateway";
 import {
+	type FilePart,
 	type FinishReason,
 	type ImagePart,
 	jsonSchema,
@@ -266,7 +267,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			const tools = this.buildToolSet(options.tools);
 			const toolChoice = this.getToolChoice(options.toolMode, tools);
 
-			const { messages, instructions } = convertMessages(chatMessages);
+			const { messages, instructions } = convertMessages(chatMessages, {
+				pdfInput: this.modelsClient.acceptsPdf(model.id),
+			});
 
 			const response = streamText({
 				model: gateway(model.id),
@@ -652,8 +655,16 @@ interface ConvertedMessages {
 	instructions: string | undefined;
 }
 
+interface ConvertOptions {
+	/** Send PDF data parts as files; only for a model the gateway lists as taking PDF input. */
+	pdfInput?: boolean;
+}
+
 /** @internal Exported as the seam that message conversion tests drive directly. */
-export function convertMessages(messages: readonly LanguageModelChatMessage[]): ConvertedMessages {
+export function convertMessages(
+	messages: readonly LanguageModelChatMessage[],
+	options: ConvertOptions = {},
+): ConvertedMessages {
 	const toolNameMap: Record<string, string> = {};
 	for (const msg of messages) {
 		for (const part of msg.content) {
@@ -664,7 +675,9 @@ export function convertMessages(messages: readonly LanguageModelChatMessage[]): 
 	}
 
 	const result = answerUnansweredToolCalls(
-		messages.flatMap((msg) => convertSingleMessage(msg, toolNameMap)).filter(isValidMessage),
+		messages
+			.flatMap((msg) => convertSingleMessage(msg, toolNameMap, options))
+			.filter(isValidMessage),
 	);
 
 	return extractInstructions(result);
@@ -719,7 +732,7 @@ function answerUnansweredToolCalls(messages: ModelMessage[]): ModelMessage[] {
 	return result;
 }
 
-type ContentPart = TextPart | ImagePart | ToolCallPart;
+type ContentPart = TextPart | ImagePart | FilePart | ToolCallPart;
 type ToolResultOutput = ToolResultPart["output"];
 type ToolResultContent = Extract<ToolResultOutput, { type: "content" }>["value"];
 
@@ -731,6 +744,7 @@ type ToolResultContent = Extract<ToolResultOutput, { type: "content" }>["value"]
 function convertSingleMessage(
 	msg: LanguageModelChatMessage,
 	toolNameMap: Record<string, string>,
+	options: ConvertOptions,
 ): ModelMessage[] {
 	const role = msg.role === LanguageModelChatMessageRole.User ? "user" : "assistant";
 	const parts: ContentPart[] = [];
@@ -750,6 +764,12 @@ function convertSingleMessage(
 			if (imageType) {
 				const base64 = Buffer.from(part.data).toString("base64");
 				parts.push({ type: "image", image: `data:${imageType};base64,${base64}` });
+			} else if (options.pdfInput && isPdf(part.mimeType)) {
+				parts.push({
+					type: "file",
+					mediaType: PDF_MIME_TYPE,
+					data: { type: "data", data: part.data },
+				});
 			} else if (isTextualMimeType(part.mimeType)) {
 				parts.push({ type: "text", text: new TextDecoder().decode(part.data) });
 			} else {
@@ -766,7 +786,7 @@ function convertSingleMessage(
 			if (role === "assistant") parts.push(call);
 			else toolCalls.push(call);
 		} else if (part instanceof LanguageModelToolResultPart) {
-			toolResults.push(convertToolResult(part, toolNameMap));
+			toolResults.push(convertToolResult(part, toolNameMap, options));
 		}
 	}
 
@@ -801,7 +821,7 @@ function createMessage(role: "user" | "assistant", parts: ContentPart[]): ModelM
 			content.push(part);
 			continue;
 		}
-		const text = part.type === "text" ? part.text : "[Image]";
+		const text = part.type === "text" ? part.text : part.type === "image" ? "[Image]" : "[File]";
 		if (last?.type === "text") last.text += text;
 		else if (text.length > 0) content.push({ type: "text", text });
 	}
@@ -819,6 +839,7 @@ function isTextPart(part: object): part is { value: string } {
 function convertToolResult(
 	part: LanguageModelToolResultPart,
 	toolNameMap: Record<string, string>,
+	options: ConvertOptions,
 ): ToolResultPart {
 	const toolName = toolNameMap[part.callId] ?? "unknown_tool";
 	if (toolName === "unknown_tool") {
@@ -828,12 +849,15 @@ function convertToolResult(
 		type: "tool-result",
 		toolCallId: part.callId,
 		toolName,
-		output: convertToolResultOutput(part.content),
+		output: convertToolResultOutput(part.content, options),
 	};
 }
 
 /** Every result part yields some output, so a tool call is never left without a matching result. */
-function convertToolResultOutput(content: readonly unknown[]): ToolResultOutput {
+function convertToolResultOutput(
+	content: readonly unknown[],
+	options: ConvertOptions,
+): ToolResultOutput {
 	const items: ToolResultContent = [];
 	const appendText = (text: string) => {
 		const last = items.at(-1);
@@ -853,6 +877,12 @@ function convertToolResultOutput(content: readonly unknown[]): ToolResultOutput 
 				items.push({
 					type: "file",
 					mediaType: imageType,
+					data: { type: "data", data: part.data },
+				});
+			} else if (options.pdfInput && isPdf(part.mimeType)) {
+				items.push({
+					type: "file",
+					mediaType: PDF_MIME_TYPE,
 					data: { type: "data", data: part.data },
 				});
 			} else if (isTextualMimeType(part.mimeType)) {
@@ -1015,6 +1045,12 @@ const SENDABLE_IMAGE_TYPES: ReadonlyMap<string, string> = new Map([
 /** The media type to send an image data part as, or undefined when providers would reject it. */
 function sendableImageType(mimeType: string): string | undefined {
 	return SENDABLE_IMAGE_TYPES.get(mimeType.toLowerCase());
+}
+
+const PDF_MIME_TYPE = "application/pdf";
+
+function isPdf(mimeType: string): boolean {
+	return mimeType.toLowerCase() === PDF_MIME_TYPE;
 }
 
 // Role and message framing tokens that providers add around every message.
