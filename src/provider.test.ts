@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelChatMessage } from "vscode";
 import { ERROR_MESSAGES } from "./constants";
@@ -2523,6 +2524,39 @@ describe("provideTokenCount", () => {
 
 		hoisted.mockAcceptsPdf.mockReturnValueOnce(true);
 		expect(await count([textOnly, twoPages, result])).toBe(textOnlyCount + 3 * pdfPageTokens);
+	});
+
+	it("counts the PDF pages kept in compressed object streams", async () => {
+		const pdfPageTokens = 3000 + imageTokens;
+		const pages =
+			"<</Type /Page /Parent 1 0 R>> <</Type/Page>> <</Type /Pages /Count 3>> <</Type /Page>>";
+		const objectStream = (body: Uint8Array, filter = "/Filter /FlateDecode") => [
+			new TextEncoder().encode(
+				`5 0 obj <</Type /ObjStm /N 4 /First 20 ${filter} /Length ${body.length}>> stream\r\n`,
+			),
+			body,
+			new TextEncoder().encode("\r\nendstream endobj "),
+		];
+		const pdf = (...chunks: Uint8Array[][]) => {
+			const parts = [new TextEncoder().encode("%PDF-1.5 "), ...chunks.flat()];
+			const bytes = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+			let offset = 0;
+			for (const part of parts) {
+				bytes.set(part, offset);
+				offset += part.length;
+			}
+			return new hoisted.MockLanguageModelDataPart(bytes, "application/pdf");
+		};
+		const compressed = deflateSync(pages);
+		const threePages = pdf(objectStream(compressed));
+		const corrupt = pdf(objectStream(new Uint8Array([1, 2, 3, 4])));
+		const unfiltered = pdf(objectStream(new TextEncoder().encode("plain"), ""));
+
+		for (let call = 0; call < 4; call++) hoisted.mockAcceptsPdf.mockReturnValueOnce(true);
+		expect(await count([textOnly, threePages])).toBe(textOnlyCount + 3 * pdfPageTokens);
+		expect(await count([textOnly, threePages])).toBe(textOnlyCount + 3 * pdfPageTokens);
+		expect(await count([textOnly, corrupt])).toBe(textOnlyCount + pdfPageTokens);
+		expect(await count([textOnly, unfiltered])).toBe(textOnlyCount + pdfPageTokens);
 	});
 
 	it("ignores binary and cache control data parts", async () => {

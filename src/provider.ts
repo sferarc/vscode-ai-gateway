@@ -1,3 +1,4 @@
+import { inflateSync, constants as zlibConstants } from "node:zlib";
 import { createGatewayProvider } from "@ai-sdk/gateway";
 import {
 	type FilePart,
@@ -1098,10 +1099,47 @@ interface Tally {
 	pdfInput: boolean;
 }
 
-/** Page objects in the PDF's bytes, at least one; pages inside compressed object streams are missed. */
+const PDF_PAGE_OBJECT = /\/Type\s*\/Page(?![A-Za-z])/g;
+// The dictionary between an object's "obj" and its "stream" keyword, and where the stream starts.
+const PDF_STREAM_HEADER = /\bobj\b((?:(?!\bobj\b|\bstream\b)[\s\S])*?)\bstream\r?\n/g;
+// Bounds what one object stream may inflate to, so a crafted PDF cannot exhaust memory.
+const MAX_OBJECT_STREAM_BYTES = 16 * 1024 * 1024;
+const pdfPageCache = new WeakMap<Uint8Array, number>();
+
+/**
+ * Page objects in the PDF, at least one: those in its plain bytes plus those in FlateDecode object
+ * streams, where PDF 1.5 writers such as pdfTeX keep every page. Cached per data part, since VS
+ * Code counts the same messages again on each turn.
+ */
 function pdfPageCount(data: Uint8Array): number {
+	const cached = pdfPageCache.get(data);
+	if (cached !== undefined) return cached;
+	// latin1 maps each byte to one character, so string offsets are byte offsets.
 	const source = new TextDecoder("latin1").decode(data);
-	return Math.max(1, source.match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0);
+	let pages = source.match(PDF_PAGE_OBJECT)?.length ?? 0;
+	for (const header of source.matchAll(PDF_STREAM_HEADER)) {
+		const dictionary = header[1] ?? "";
+		if (!/\/Type\s*\/ObjStm\b/.test(dictionary) || !/\/FlateDecode\b/.test(dictionary)) continue;
+		const start = header.index + header[0].length;
+		const end = source.indexOf("endstream", start);
+		if (end < 0) continue;
+		pages += objectStreamPageCount(data.subarray(start, end));
+	}
+	const count = Math.max(1, pages);
+	pdfPageCache.set(data, count);
+	return count;
+}
+
+function objectStreamPageCount(compressed: Uint8Array): number {
+	try {
+		const inflated = inflateSync(compressed, {
+			finishFlush: zlibConstants.Z_SYNC_FLUSH,
+			maxOutputLength: MAX_OBJECT_STREAM_BYTES,
+		});
+		return inflated.toString("latin1").match(PDF_PAGE_OBJECT)?.length ?? 0;
+	} catch {
+		return 0;
+	}
 }
 
 /**
