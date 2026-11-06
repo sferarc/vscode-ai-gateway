@@ -240,6 +240,12 @@
 					"default": "",
 					"description": "User ID recorded with each chat request in the gateway's usage reports, such as your username, so a team sharing a key can split the extension's spend per person. The gateway bills it as a reporting write. Up to 256 characters; a longer value is not sent. Only read from user settings."
 				},
+				"vercelAiGateway.quotaEntity": {
+					"type": "string",
+					"scope": "application",
+					"default": "",
+					"description": "Entity ID the gateway tracks and enforces quota against for each chat request, such as a team member or project name. Leave empty to send none. Only read from user settings."
+				},
 				"vercelAiGateway.fallbackModels": {
 					"type": "array",
 					"items": {
