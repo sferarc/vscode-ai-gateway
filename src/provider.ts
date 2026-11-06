@@ -41,7 +41,7 @@ import {
 	type ProviderSort,
 	type ServiceTier,
 } from "./config";
-import { ERROR_MESSAGES, EXTENSION_ID } from "./constants";
+import { EXTENSION_ID } from "./constants";
 import { describeGatewayError } from "./errors";
 import type { LastChatRequestStore } from "./last-request";
 import { extractErrorMessage, logger } from "./logger";
@@ -54,17 +54,25 @@ const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
 const WEB_SEARCH_TOOL = "perplexity_search";
 
-const OUTPUT_LIMIT_NOTE =
-	"\n\n*The answer was cut off because it reached the model's output token limit.*";
-
-const CONTENT_FILTER_NOTE =
-	"\n\n*The model provider's content filter stopped this answer. Rephrase the request or try another model.*";
-
 // Finish reasons that end an answer early with no error part of their own.
-const FINISH_NOTES: Partial<Record<FinishReason, string>> = {
-	length: OUTPUT_LIMIT_NOTE,
-	"content-filter": CONTENT_FILTER_NOTE,
-};
+function finishNote(reason: FinishReason): string | undefined {
+	switch (reason) {
+		case "length":
+			return vscode.l10n.t(
+				"The answer was cut off because it reached the model's output token limit.",
+			);
+		case "content-filter":
+			return vscode.l10n.t(
+				"The model provider's content filter stopped this answer. Rephrase the request or try another model.",
+			);
+		default:
+			return undefined;
+	}
+}
+
+function errorText(message: string): string {
+	return `\n\n**${vscode.l10n.t("Error:")}** ${message}\n\n`;
+}
 
 /** The part of an authentication session the chat provider needs to talk to the gateway. */
 interface ActiveSession {
@@ -213,7 +221,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			logger.info(`Loaded ${models.length} models from Vercel AI Gateway`);
 			return models;
 		} catch (error) {
-			logger.error(ERROR_MESSAGES.MODELS_FETCH_FAILED, error);
+			logger.error("Failed to fetch models from Vercel AI Gateway", error);
 			if (!options.silent) {
 				this.showModelsFetchError(error).catch((notifyError: unknown) =>
 					logger.error("Failed to show the model list error", notifyError),
@@ -224,13 +232,16 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	}
 
 	private async showModelsFetchError(error: unknown): Promise<void> {
-		const showLogs = "Show Logs";
-		const manageAuth = "Manage Authentication";
+		const showLogs = vscode.l10n.t("Show Logs");
+		const manageAuth = vscode.l10n.t("Manage Authentication");
 		const status = error instanceof ModelsFetchError ? error.status : undefined;
 		const actions = status === 401 || status === 403 ? [manageAuth, showLogs] : [showLogs];
 
 		const choice = await window.showErrorMessage(
-			`${ERROR_MESSAGES.MODELS_FETCH_FAILED}: ${extractErrorMessage(error)}`,
+			vscode.l10n.t(
+				"Failed to fetch models from Vercel AI Gateway: {0}",
+				extractErrorMessage(error),
+			),
 			...actions,
 		);
 		if (choice === showLogs) {
@@ -257,7 +268,12 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		try {
 			const apiKey = await this.getApiKey(false);
 			if (!apiKey) {
-				throw new Error(ERROR_MESSAGES.NOT_SIGNED_IN);
+				throw new Error(
+					vscode.l10n.t(
+						'Not signed in to Vercel AI Gateway. Run "{0}" to add an API key or sign in with Vercel OIDC, then send the message again.',
+						vscode.l10n.t("Vercel AI Gateway: Manage Authentication"),
+					),
+				);
 			}
 
 			const config = getConfig();
@@ -346,7 +362,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			if (!responseSent) {
 				logger.error("Stream completed with no content");
 				progress.report(
-					new LanguageModelTextPart("\n\n**Error:** No response received from model.\n\n"),
+					new LanguageModelTextPart(errorText(vscode.l10n.t("No response received from model."))),
 				);
 			}
 
@@ -443,9 +459,12 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 	private reportTimeout(progress: Progress<LanguageModelResponsePart>, partial: boolean): void {
 		const ms = getConfig().timeout;
 		const message = partial
-			? `Request timed out: the model sent nothing for ${ms} ms, so the answer above is incomplete.`
-			: `Request timed out after ${ms} ms with no output from the model.`;
-		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${message}\n\n`));
+			? vscode.l10n.t(
+					"Request timed out: the model sent nothing for {0} ms, so the answer above is incomplete.",
+					ms,
+				)
+			: vscode.l10n.t("Request timed out after {0} ms with no output from the model.", ms);
+		progress.report(new LanguageModelTextPart(errorText(message)));
 	}
 
 	private isAbortError(error: unknown): boolean {
@@ -492,7 +511,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			}
 			if (!silent) {
 				logger.error("Failed to get authentication session:", error);
-				window.showErrorMessage(ERROR_MESSAGES.AUTH_FAILED);
+				window.showErrorMessage(
+					vscode.l10n.t("Failed to authenticate with Vercel AI Gateway. Please try again."),
+				);
 			}
 			return undefined;
 		}
@@ -552,9 +573,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 				if (chunk.finishReason === "error") {
 					return this.reportFinishError(chunk.rawFinishReason, progress, request);
 				}
-				const note = FINISH_NOTES[chunk.finishReason];
+				const note = finishNote(chunk.finishReason);
 				if (!note) return false;
-				progress.report(new LanguageModelTextPart(note));
+				progress.report(new LanguageModelTextPart(`\n\n*${note}*`));
 				return true;
 			}
 
@@ -593,7 +614,9 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 			items.push(`${items.length + 1}. ${label ? `[${label}](<${href}>)` : `<${href}>`}`);
 		}
 		if (items.length === 0) return false;
-		progress.report(new LanguageModelTextPart(`\n\n**Sources**\n\n${items.join("\n")}\n`));
+		progress.report(
+			new LanguageModelTextPart(`\n\n**${vscode.l10n.t("Sources")}**\n\n${items.join("\n")}\n`),
+		);
 		return true;
 	}
 
@@ -608,12 +631,15 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		logger.error(
 			`Chat request ended with finish reason error: model=${request?.modelId ?? "unknown"} generation=${request?.generationId ?? "none"} reason=${reason || "none"}`,
 		);
-		const named = reason ? ` (${escapeMarkdown(reason)})` : "";
-		progress.report(
-			new LanguageModelTextPart(
-				`\n\n**Error:** The model provider ended the answer with an error${named}, so it is missing or incomplete. Try again or pick another model.\n\n`,
-			),
-		);
+		const message = reason
+			? vscode.l10n.t(
+					"The model provider ended the answer with an error ({0}), so it is missing or incomplete. Try again or pick another model.",
+					escapeMarkdown(reason),
+				)
+			: vscode.l10n.t(
+					"The model provider ended the answer with an error, so it is missing or incomplete. Try again or pick another model.",
+				);
+		progress.report(new LanguageModelTextPart(errorText(message)));
 		return true;
 	}
 
@@ -683,7 +709,7 @@ export class VercelAIChatModelProvider implements LanguageModelChatProvider, vsc
 		logger.error(`Chat request failed: ${fields.join(" ")}: ${userMessage}`);
 		if (request) request.errorReported = true;
 		if (error instanceof Error && error.stack) logger.debug(error.stack);
-		progress.report(new LanguageModelTextPart(`\n\n**Error:** ${userMessage}\n\n`));
+		progress.report(new LanguageModelTextPart(errorText(userMessage)));
 	}
 }
 

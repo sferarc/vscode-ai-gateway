@@ -1,9 +1,12 @@
 import { deflateSync } from "node:zlib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelChatMessage } from "vscode";
-import { ERROR_MESSAGES } from "./constants";
 import { AuthCancelledError } from "./errors";
 import { convertMessages, VercelAIChatModelProvider } from "./provider";
+
+const AUTH_FAILED = "Failed to authenticate with Vercel AI Gateway. Please try again.";
+const NOT_SIGNED_IN =
+	'Not signed in to Vercel AI Gateway. Run "Vercel AI Gateway: Manage Authentication" to add an API key or sign in with Vercel OIDC, then send the message again.';
 
 const hoisted = vi.hoisted(() => {
 	class MockEventEmitter {
@@ -69,6 +72,10 @@ const hoisted = vi.hoisted(() => {
 
 vi.mock("vscode", () => ({
 	EventEmitter: hoisted.MockEventEmitter,
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
 	authentication: { getSession: vi.fn(), onDidChangeSessions: vi.fn(() => ({ dispose: vi.fn() })) },
 	commands: { executeCommand: vi.fn() },
 	window: {
@@ -350,7 +357,7 @@ describe("active session", () => {
 				"Failed to get authentication session:",
 				expect.objectContaining({ message: "SecretStorage unavailable" }),
 			);
-			expect(t.showErrorMessage).toHaveBeenCalledWith(ERROR_MESSAGES.AUTH_FAILED);
+			expect(t.showErrorMessage).toHaveBeenCalledWith(AUTH_FAILED);
 		});
 
 		it("shows no error toast when the user declines the sign-in prompt", async () => {
@@ -403,7 +410,7 @@ describe("active session", () => {
 				"Failed to get authentication session:",
 				expect.any(Error),
 			);
-			expect(t.showErrorMessage).toHaveBeenCalledWith(ERROR_MESSAGES.AUTH_FAILED);
+			expect(t.showErrorMessage).toHaveBeenCalledWith(AUTH_FAILED);
 		});
 
 		it("returns no models without a toast when sign-in resolves no session", async () => {
@@ -439,7 +446,7 @@ describe("active session", () => {
 
 			const output = await chat(t.provider);
 
-			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.NOT_SIGNED_IN}`);
+			expect(output).toContain(`**Error:** ${NOT_SIGNED_IN}`);
 			expect(output).toContain('Run "Vercel AI Gateway: Manage Authentication"');
 			expect(output).not.toContain("API key not found");
 			expect(t.gateway).not.toHaveBeenCalled();
@@ -453,7 +460,7 @@ describe("active session", () => {
 
 			const output = await chat(t.provider);
 
-			expect(output).toContain(`**Error:** ${ERROR_MESSAGES.NOT_SIGNED_IN}`);
+			expect(output).toContain(`**Error:** ${NOT_SIGNED_IN}`);
 			expect(t.gateway).not.toHaveBeenCalled();
 			expect(t.stream).not.toHaveBeenCalled();
 			expect(t.showErrorMessage).not.toHaveBeenCalled();

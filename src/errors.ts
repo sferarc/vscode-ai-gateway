@@ -6,10 +6,10 @@ import {
 	GatewayModelNotFoundError,
 } from "@ai-sdk/gateway";
 import { APICallError, RetryError } from "ai";
+import { l10n } from "vscode";
 import { EXTENSION_ID } from "./constants";
 import { extractErrorMessage } from "./logger";
 
-const MANAGE_AUTH_COMMAND = "Vercel AI Gateway: Manage Authentication";
 const ENDPOINT_SETTING = `${EXTENSION_ID}.endpoint`;
 const PROMPT_TRAINING_SETTING = `${EXTENSION_ID}.disallowPromptTraining`;
 const ZERO_DATA_RETENTION_SETTING = `${EXTENSION_ID}.zeroDataRetention`;
@@ -73,11 +73,19 @@ export function describeGatewayError(
 		modelNotFound,
 		generationId: gateway?.generationId,
 		userMessage: unreachable
-			? `Could not reach the gateway; no HTTP response came back. Check the network connection and the "${ENDPOINT_SETTING}" setting, then try again. Details: ${apiCall.message}`
+			? l10n.t(
+					'Could not reach the gateway; no HTTP response came back. Check the network connection and the "{0}" setting, then try again. Details: {1}',
+					ENDPOINT_SETTING,
+					apiCall.message,
+				)
 			: modelNotFound
-				? `The gateway does not offer this model (HTTP ${statusCode}). The model list is being refreshed; pick another model. Details: ${detail}`
+				? l10n.t(
+						"The gateway does not offer this model (HTTP {0}). The model list is being refreshed; pick another model. Details: {1}",
+						String(statusCode),
+						detail,
+					)
 				: noProviders !== undefined
-					? `${noProvidersMessage(request.providerOnly)}${regionHint}${quantizationHint(request.excludeQuantizations)}${capabilityHint(request.requiredCapabilities)} Details: ${noProviders || detail}`
+					? `${noProvidersMessage(request.providerOnly)}${regionHint}${quantizationHint(request.excludeQuantizations)}${capabilityHint(request.requiredCapabilities)} ${l10n.t("Details: {0}", noProviders || detail)}`
 					: GatewayForbiddenError.isInstance(failure)
 						? policyMessage(statusCode, failure.ruleId, detail)
 						: userMessageFor(statusCode, detail, retryAfterMs(apiCall), regionHint),
@@ -85,25 +93,46 @@ export function describeGatewayError(
 }
 
 function noProvidersMessage(providerOnly: readonly string[] | undefined): string {
-	const dataPolicy = `turn off the "${PROMPT_TRAINING_SETTING}" or "${ZERO_DATA_RETENTION_SETTING}" setting if it is on`;
 	if (!providerOnly?.length) {
-		return `No provider of this model meets the request's data policy (HTTP 400). Pick another model, or ${dataPolicy}.`;
+		return l10n.t(
+			'No provider of this model meets the request\'s data policy (HTTP 400). Pick another model, or turn off the "{0}" or "{1}" setting if it is on.',
+			PROMPT_TRAINING_SETTING,
+			ZERO_DATA_RETENTION_SETTING,
+		);
 	}
-	return `No provider of this model is in the "${PROVIDER_ONLY_SETTING}" setting (${providerOnly.join(", ")}) and meets the request's data policy (HTTP 400). Pick another model, add a provider that serves it to "${PROVIDER_ONLY_SETTING}", or ${dataPolicy}.`;
+	return l10n.t(
+		'No provider of this model is in the "{0}" setting ({1}) and meets the request\'s data policy (HTTP 400). Pick another model, add a provider that serves it to "{0}", or turn off the "{2}" or "{3}" setting if it is on.',
+		PROVIDER_ONLY_SETTING,
+		providerOnly.join(", "),
+		PROMPT_TRAINING_SETTING,
+		ZERO_DATA_RETENTION_SETTING,
+	);
 }
 
 function quantizationHint(formats: readonly string[] | undefined): string {
 	if (!formats?.length) return "";
-	return ` The "${EXCLUDE_QUANTIZATIONS_SETTING}" setting skips providers serving ${formats.join(", ")} weights, which may leave this model none; remove a format from it.`;
+	return ` ${l10n.t(
+		'The "{0}" setting skips providers serving {1} weights, which may leave this model none; remove a format from it.',
+		EXCLUDE_QUANTIZATIONS_SETTING,
+		formats.join(", "),
+	)}`;
 }
 
 function capabilityHint(capabilities: readonly string[] | undefined): string {
 	if (!capabilities?.length) return "";
-	return ` The "${REQUIRED_CAPABILITIES_SETTING}" setting keeps only providers with ${capabilities.join(", ")}, which may leave this model none; remove a capability from it.`;
+	return ` ${l10n.t(
+		'The "{0}" setting keeps only providers with {1}, which may leave this model none; remove a capability from it.',
+		REQUIRED_CAPABILITIES_SETTING,
+		capabilities.join(", "),
+	)}`;
 }
 
 function regionMessage(region: string): string {
-	return `The "${INFERENCE_REGION_SETTING}" setting pins inference to the ${region} region, and this model may have no provider there; set it to "global" or another region.`;
+	return l10n.t(
+		'The "{0}" setting pins inference to the {1} region, and this model may have no provider there; set it to "global" or another region.',
+		INFERENCE_REGION_SETTING,
+		region,
+	);
 }
 
 // A forbidden error is a gateway rule refusing the request, so signing in again would not help.
@@ -112,10 +141,20 @@ function policyMessage(
 	ruleId: string | undefined,
 	detail: string,
 ): string {
-	const status = [`HTTP ${statusCode ?? "unknown"}`, ruleId ? `rule ${ruleId}` : undefined]
-		.filter(Boolean)
-		.join(", ");
-	return `A gateway rule refused this request (${status}); the credentials are fine. Check the team's AI Gateway rules or pick another model. Details: ${detail}`;
+	const status = statusCode === undefined ? l10n.t("unknown") : String(statusCode);
+	if (ruleId) {
+		return l10n.t(
+			"A gateway rule refused this request (HTTP {0}, rule {1}); the credentials are fine. Check the team's AI Gateway rules or pick another model. Details: {2}",
+			status,
+			ruleId,
+			detail,
+		);
+	}
+	return l10n.t(
+		"A gateway rule refused this request (HTTP {0}); the credentials are fine. Check the team's AI Gateway rules or pick another model. Details: {1}",
+		status,
+		detail,
+	);
 }
 
 // The SDK replaces the gateway's message with setup steps for its apiKey option and AI_GATEWAY_API_KEY, which this extension does not read.
@@ -188,8 +227,8 @@ function retryAfterMs(apiCall: APICallError | undefined): number | undefined {
 
 function formatWait(ms: number): string {
 	const seconds = Math.ceil(ms / 1000);
-	if (seconds < 120) return seconds === 1 ? "1 second" : `${seconds} seconds`;
-	return `${Math.ceil(seconds / 60)} minutes`;
+	if (seconds < 120) return seconds === 1 ? l10n.t("1 second") : l10n.t("{0} seconds", seconds);
+	return l10n.t("{0} minutes", Math.ceil(seconds / 60));
 }
 
 function userMessageFor(
@@ -199,22 +238,40 @@ function userMessageFor(
 	regionHint: string,
 ): string {
 	if (statusCode === 400) {
-		return `The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less.${regionHint} Details: ${detail}`;
+		return `${l10n.t("The gateway or the model provider rejected the request as invalid (HTTP 400). If the details say the prompt is too long, start a new chat or attach less.")}${regionHint} ${l10n.t("Details: {0}", detail)}`;
 	}
 	if (statusCode === 401 || statusCode === 403) {
-		return `The gateway rejected the credentials (HTTP ${statusCode}). Run "${MANAGE_AUTH_COMMAND}" to sign in again or replace the API key. Details: ${detail}`;
+		return l10n.t(
+			'The gateway rejected the credentials (HTTP {0}). Run "{1}" to sign in again or replace the API key. Details: {2}',
+			statusCode,
+			l10n.t("Vercel AI Gateway: Manage Authentication"),
+			detail,
+		);
 	}
 	if (statusCode === 402) {
-		return `A gateway spend budget is used up (HTTP 402), so the gateway refuses requests until the budget resets or is raised. Ask whoever manages the team's AI Gateway budgets, or wait for the reset. Details: ${detail}`;
+		return l10n.t(
+			"A gateway spend budget is used up (HTTP 402), so the gateway refuses requests until the budget resets or is raised. Ask whoever manages the team's AI Gateway budgets, or wait for the reset. Details: {0}",
+			detail,
+		);
 	}
 	if (statusCode === 429) {
-		const wait = retryAfter
-			? `It asks to wait ${formatWait(retryAfter)} before trying again.`
-			: "Wait a moment and try again.";
-		return `The gateway rate limited this request (HTTP 429). ${wait} Details: ${detail}`;
+		return retryAfter
+			? l10n.t(
+					"The gateway rate limited this request (HTTP 429). It asks to wait {0} before trying again. Details: {1}",
+					formatWait(retryAfter),
+					detail,
+				)
+			: l10n.t(
+					"The gateway rate limited this request (HTTP 429). Wait a moment and try again. Details: {0}",
+					detail,
+				);
 	}
 	if (statusCode !== undefined && statusCode >= 500) {
-		return `The gateway or the model provider failed (HTTP ${statusCode}). This is usually temporary, so try again. Details: ${detail}`;
+		return l10n.t(
+			"The gateway or the model provider failed (HTTP {0}). This is usually temporary, so try again. Details: {1}",
+			statusCode,
+			detail,
+		);
 	}
 	return detail;
 }

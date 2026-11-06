@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 
 vi.mock("vscode", () => ({
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
 	workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn((_, d) => d), inspect: vi.fn() })) },
 	LanguageModelTextPart: class {
 		constructor(readonly value: string) {}

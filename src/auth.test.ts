@@ -14,6 +14,10 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("vscode", () => ({
 	EventEmitter: hoisted.MockEventEmitter,
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
 	ProgressLocation: { Notification: 15 },
 	authentication: { registerAuthenticationProvider: vi.fn(() => ({ dispose: vi.fn() })) },
 	commands: { executeCommand: hoisted.mockExecuteCommand },

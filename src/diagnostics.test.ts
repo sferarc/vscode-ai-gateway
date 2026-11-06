@@ -8,6 +8,10 @@ const { showInformationMessage, showErrorMessage, logInfo, logShow } = vi.hoiste
 }));
 
 vi.mock("vscode", () => ({
+	l10n: {
+		t: (message: string, ...args: unknown[]) =>
+			message.replace(/\{(\d+)\}/g, (_match, index: string) => String(args[Number(index)])),
+	},
 	workspace: { getConfiguration: vi.fn(() => ({ get: vi.fn((_, d) => d), inspect: vi.fn() })) },
 	window: { showInformationMessage, showErrorMessage },
 }));
