@@ -47,6 +47,8 @@ export function getConfig() {
 		byokProviderTimeouts: byokProviderTimeouts(
 			config.inspect<unknown>("byokProviderTimeouts")?.globalValue,
 		),
+		// Each search bills the user's credits and sends the query to Perplexity, so a cloned repo must not turn it on.
+		webSearch: config.inspect<unknown>("webSearch")?.globalValue === true,
 	};
 }
 

@@ -91,7 +91,11 @@ vi.mock("vscode", () => ({
 vi.mock("./auth", () => ({ VERCEL_AI_AUTH_PROVIDER_ID: "vercelAiGateway" }));
 vi.mock("@ai-sdk/gateway", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@ai-sdk/gateway")>()),
-	createGatewayProvider: vi.fn(() => () => ({})),
+	createGatewayProvider: vi.fn(() =>
+		Object.assign(() => ({}), {
+			tools: { perplexitySearch: () => ({ type: "provider", id: "gateway.perplexity_search" }) },
+		}),
+	),
 }));
 vi.mock("ai", async (importOriginal) => ({
 	...(await importOriginal<typeof import("ai")>()),
@@ -609,6 +613,7 @@ describe("provideLanguageModelChatResponse", () => {
 		content: unknown[] = [new hoisted.MockLanguageModelTextPart("Hello")],
 		userSettings: Record<string, unknown> = {},
 		providerKeys?: ConstructorParameters<typeof VercelAIChatModelProvider>[3],
+		requestExtras: Record<string, unknown> = {},
 	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (key: string, d?: unknown) => (key in userSettings ? userSettings[key] : d),
@@ -632,7 +637,7 @@ describe("provideLanguageModelChatResponse", () => {
 		).provideLanguageModelChatResponse(
 			{ id: "openai/gpt-4o", ...model } as never,
 			[{ role: 1, content }] as never,
-			{ modelOptions } as never,
+			{ modelOptions, ...requestExtras } as never,
 			{ report: vi.fn() },
 			{ onCancellationRequested: vi.fn(() => ({ dispose: vi.fn() })) } as never,
 		);
@@ -1086,6 +1091,78 @@ describe("provideLanguageModelChatResponse", () => {
 			(await requestOptions({}, {}, undefined, { sessionAffinity: true })).providerOptions,
 		).toBeUndefined();
 		expect((await requestOptions({})).providerOptions).toBeUndefined();
+	});
+
+	describe("web search", () => {
+		const toolModel = { capabilities: { toolCalling: true } };
+		const searchTool = { type: "provider", id: "gateway.perplexity_search" };
+
+		it("offers the gateway's Perplexity search tool to a model that calls tools", async () => {
+			const options = await requestOptions(toolModel, {}, undefined, { webSearch: true });
+			expect(options.tools).toEqual({ perplexity_search: searchTool });
+			expect(options.toolChoice).toBe("auto");
+		});
+
+		it("adds the search tool next to VS Code's tools", async () => {
+			const options = await requestOptions(
+				toolModel,
+				{},
+				undefined,
+				{ webSearch: true },
+				undefined,
+				{
+					tools: [{ name: "read_file", description: "Read", inputSchema: { type: "object" } }],
+				},
+			);
+			expect(Object.keys(options.tools ?? {})).toEqual(["read_file", "perplexity_search"]);
+		});
+
+		it("keeps a VS Code tool that has the search tool's name", async () => {
+			const options = await requestOptions(
+				toolModel,
+				{},
+				undefined,
+				{ webSearch: true },
+				undefined,
+				{
+					tools: [
+						{ name: "perplexity_search", description: "Mine", inputSchema: { type: "object" } },
+					],
+				},
+			);
+			expect(options.tools?.perplexity_search).toMatchObject({ description: "Mine" });
+		});
+
+		it("sends no search tool when the setting is off", async () => {
+			expect((await requestOptions(toolModel)).tools).toBeUndefined();
+		});
+
+		it("sends no search tool to a model that does not call tools", async () => {
+			const options = await requestOptions(
+				{ capabilities: { toolCalling: false } },
+				{},
+				undefined,
+				{ webSearch: true },
+			);
+			expect(options.tools).toBeUndefined();
+			expect(options.toolChoice).toBe("none");
+		});
+
+		it("sends no search tool when the request requires a tool call", async () => {
+			const options = await requestOptions(
+				toolModel,
+				{},
+				undefined,
+				{ webSearch: true },
+				undefined,
+				{
+					toolMode: "required",
+					tools: [{ name: "read_file", description: "Read", inputSchema: { type: "object" } }],
+				},
+			);
+			expect(Object.keys(options.tools ?? {})).toEqual(["read_file"]);
+			expect(options.toolChoice).toBe("required");
+		});
 	});
 
 	it("asks the model for the chosen reasoning effort", async () => {
@@ -1872,6 +1949,23 @@ describe("handleStreamChunk", () => {
 		const reported = progress.report.mock.calls[0]?.[0];
 		expect(reported).toBeInstanceOf(hoisted.MockLanguageModelToolCallPart);
 		expect(reported.input).toEqual({ query: "test" });
+	});
+
+	it("keeps a tool call the gateway runs itself out of VS Code's tool loop", () => {
+		const provider = createProvider();
+		const progress = { report: vi.fn() };
+		const result = provider.handleStreamChunk(
+			{
+				type: "tool-call",
+				toolCallId: "c1",
+				toolName: "perplexity_search",
+				providerExecuted: true,
+				input: { query: "vitest 4 release notes" },
+			} as any,
+			progress,
+		);
+		expect(result).toBe(false);
+		expect(progress.report).not.toHaveBeenCalled();
 	});
 
 	it("reports provider-executed tool errors as errors", () => {

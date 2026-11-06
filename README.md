@@ -19,6 +19,7 @@ The same steps open as the **Get started with Vercel AI Gateway** walkthrough on
 - **Streaming responses**, including reasoning output where the model provides it.
 - **Cited sources.** When a search model cites web pages, they are listed as numbered links under the answer.
 - **Tool calling** with VS Code's tools.
+- **Web search, opt in.** With `vercelAiGateway.webSearch` on, models that call tools can search the web through the gateway's Perplexity search tool.
 - **PDF input.** A PDF in a message or a tool result is sent as a file to models the gateway lists as taking PDF input; other models get a placeholder saying the content is unsupported.
 - **Prompt caching.** When VS Code marks cache breakpoints in a request, the gateway is asked to cache the prompt for models that support it.
 
@@ -139,6 +140,16 @@ How much a chat model thinks before it answers.
 | `vercelAiGateway.reasoningEffort` | `provider-default` | Reasoning level asked of each chat model: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`. `provider-default` leaves the provider's own default. |
 
 - `reasoningEffort`: each provider maps the level to its own control, such as OpenAI's reasoning effort or an Anthropic thinking budget, and a model whose provider has no matching tier gets the closest one. Models without configurable reasoning ignore it. More reasoning uses more output tokens, which are billed, takes longer and can reach the model's output limit, and a long silent thinking phase can run past `vercelAiGateway.timeout`. Only read from user settings, so a workspace cannot raise your spend.
+
+### Web search
+
+Let chat models look things up on the web.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `vercelAiGateway.webSearch` | `false` | Offers the gateway's Perplexity search tool to chat models that call tools, so they can search the web before they answer. |
+
+- `webSearch`: see the AI SDK's [Gateway Tools](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway) section. The gateway runs each search, bills it to your gateway credits and sends the search query to Perplexity, so leave it off when your prompts must stay with the model provider. The model decides when to search. A tool of the same name from VS Code is kept instead, and the search is not offered when a request requires a tool call. Only read from user settings, so a workspace cannot turn it on.
 
 ### Spend reporting
 

@@ -374,6 +374,12 @@
 						"maximum": 789000
 					},
 					"description": "Milliseconds the gateway waits for a provider reached with your team's own keys (BYOK) to start answering before it falls back to the next provider, per provider slug, such as anthropic or bedrock. Values are kept between 1000 and 789000. A provider that does not cancel the stream may still bill the timed out request. Only read from user settings."
+				},
+				"vercelAiGateway.webSearch": {
+					"type": "boolean",
+					"scope": "application",
+					"default": false,
+					"description": "Lets chat models that call tools search the web with the gateway's Perplexity search tool. The gateway runs each search, bills it to your gateway credits and sends the query to Perplexity. Not offered when a request requires a tool call. Only read from user settings."
 				}
 			}
 		}
