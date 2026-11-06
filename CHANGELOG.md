@@ -1,5 +1,11 @@
 # vscode-extension-vercel-ai
 
+## 0.16.1
+
+### Patch Changes
+
+- 99fecb4: Count the pages of a PDF sent to a model that takes PDF input in token estimates, so VS Code no longer budgets a prompt with a PDF as if the file were free.
+
 ## 0.16.0
 
 ### Minor Changes
