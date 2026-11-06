@@ -53,6 +53,17 @@
 	"activationEvents": [
 		"onLanguageModelChatProvider:vercelAiGateway"
 	],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": "limited",
+			"description": "In Restricted Mode, workspace values of the timeout, provider sort and provider order settings are ignored; user settings still apply.",
+			"restrictedConfigurations": [
+				"vercelAiGateway.timeout",
+				"vercelAiGateway.providerSort",
+				"vercelAiGateway.providerOrder"
+			]
+		}
+	},
 	"contributes": {
 		"authentication": [
 			{

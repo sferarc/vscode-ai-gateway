@@ -170,6 +170,7 @@ Label the extension's chat requests in AI Gateway's [usage reports](https://verc
 - **Logs.** Run **Vercel AI Gateway: Show Logs**, or open the Output panel and select the **Vercel AI Gateway** channel. Model fetches, chat requests and errors are logged there.
 - **Check your setup.** Run **Vercel AI Gateway: Check Connection**. A 401 or 403 means the gateway rejected the key or token; no status means the endpoint could not be reached.
 - **No models in the model picker.** Either there is no active session (sign in with Manage Authentication) or fetching the model list failed; the failure is logged in the output channel. Check that `vercelAiGateway.endpoint` points at a reachable gateway.
+- **Untrusted folders (Restricted Mode).** The extension stays enabled, but VS Code ignores workspace values of `vercelAiGateway.timeout`, `vercelAiGateway.providerSort` and `vercelAiGateway.providerOrder` until you trust the folder. Your user settings still apply.
 - **Vercel OIDC is not offered.** The Vercel CLI is not logged in. Run `vercel login` and try again.
 - **Spend budget used up (HTTP 402).** A budget on the team, project, API key or team member has reached its limit, and the gateway refuses requests until it resets or is raised. The error names which budget, its spend and its limit.
 - **Request rejected as invalid (HTTP 400).** The gateway or the model provider refused the request; the error shows its reason. When the reason is a prompt too long for the model, start a new chat or attach fewer files.

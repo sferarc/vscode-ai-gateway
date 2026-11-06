@@ -38,6 +38,13 @@ interface Manifest {
 	bugs: { url: string };
 	devDependencies: Record<string, string>;
 	activationEvents: string[];
+	capabilities: {
+		untrustedWorkspaces: {
+			supported: boolean | "limited";
+			description?: string;
+			restrictedConfigurations?: string[];
+		};
+	};
 	contributes: {
 		commands: { command: string }[];
 		languageModelTools: {
@@ -135,6 +142,21 @@ describe("manifest", () => {
 		const pkg = await readManifest();
 
 		expect(pkg.activationEvents).toEqual([`onLanguageModelChatProvider:${EXTENSION_ID}`]);
+	});
+
+	it("stays enabled in Restricted Mode and restricts every setting a workspace can set", async () => {
+		const pkg = await readManifest();
+		const config = await readFile(join(root, "src/config.ts"), "utf8");
+		// Settings read through inspect(...).globalValue already ignore workspace values.
+		const workspaceReadable = [...config.matchAll(/config\.get(?:<[^>]*>)?\(\s*"(\w+)"/g)].map(
+			(match) => `${EXTENSION_ID}.${match[1]}`,
+		);
+		const trust = pkg.capabilities.untrustedWorkspaces;
+
+		expect(workspaceReadable.length).toBeGreaterThan(0);
+		expect(trust.supported).toBe("limited");
+		expect(trust.description).toBeTruthy();
+		expect([...(trust.restrictedConfigurations ?? [])].sort()).toEqual(workspaceReadable.sort());
 	});
 
 	it("sends Marketplace questions to the issue tracker and keeps at most 30 unique keywords", async () => {
