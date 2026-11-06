@@ -1270,6 +1270,7 @@ describe("provideLanguageModelChatResponse", () => {
 	async function respondWithStream(
 		fullStream: unknown[],
 		userSettings: Record<string, unknown> = {},
+		provider = createProvider(),
 	) {
 		hoisted.mockGetConfiguration.mockReturnValue({
 			get: (key: string, d?: unknown) => (key in userSettings ? userSettings[key] : d),
@@ -1282,7 +1283,7 @@ describe("provideLanguageModelChatResponse", () => {
 		vi.mocked(streamText).mockReturnValue({ fullStream } as never);
 
 		const report = vi.fn();
-		await createProvider().provideLanguageModelChatResponse(
+		await provider.provideLanguageModelChatResponse(
 			{ id: "perplexity/sonar" } as never,
 			[{ role: 1, content: [new hoisted.MockLanguageModelTextPart("Hello")] }] as never,
 			{} as never,
@@ -1351,6 +1352,62 @@ describe("provideLanguageModelChatResponse", () => {
 			/^Chat request completed: model=perplexity\/sonar generation=gen_01abc inputTokens=1200 cacheReadTokens=1000 cacheWriteTokens=0 outputTokens=80 reasoningTokens=30 elapsedMs=\d+$/,
 		);
 		logInfo.mockRestore();
+	});
+
+	it("records the last completed request's generation id for the status tool", async () => {
+		const { LastChatRequestStore } = await import("./last-request");
+		const lastRequest = new LastChatRequestStore();
+		const provider = new VercelAIChatModelProvider(undefined, undefined, lastRequest);
+		await respondWithStream(
+			[
+				{
+					type: "text-delta",
+					text: "Answer",
+					providerMetadata: { gateway: { generationId: "gen_01abc" } },
+				},
+				{ type: "finish", finishReason: "stop" },
+			],
+			{},
+			provider,
+		);
+
+		expect(lastRequest.get()).toEqual({ generationId: "gen_01abc", model: "perplexity/sonar" });
+	});
+
+	it("keeps the previous record when a request carries no generation id", async () => {
+		const { LastChatRequestStore } = await import("./last-request");
+		const lastRequest = new LastChatRequestStore();
+		lastRequest.record({ generationId: "gen_00old", model: "openai/gpt-5" });
+		const provider = new VercelAIChatModelProvider(undefined, undefined, lastRequest);
+
+		await respondWithStream([{ type: "text-delta", text: "Answer" }], {}, provider);
+
+		expect(lastRequest.get()).toEqual({ generationId: "gen_00old", model: "openai/gpt-5" });
+	});
+
+	it("records a stream that reported an error part, since the gateway may still bill it", async () => {
+		const { GatewayInternalServerError } = await import("@ai-sdk/gateway");
+		const { LastChatRequestStore } = await import("./last-request");
+		const { logger } = await import("./logger");
+		const logError = vi.spyOn(logger, "error").mockImplementation(() => {});
+		const lastRequest = new LastChatRequestStore();
+		const provider = new VercelAIChatModelProvider(undefined, undefined, lastRequest);
+
+		await respondWithStream(
+			[
+				{
+					type: "text-delta",
+					text: "Partial",
+					providerMetadata: { gateway: { generationId: "gen_02def" } },
+				},
+				{ type: "error", error: new GatewayInternalServerError() },
+			],
+			{},
+			provider,
+		);
+
+		expect(lastRequest.get()).toEqual({ generationId: "gen_02def", model: "perplexity/sonar" });
+		logError.mockRestore();
 	});
 
 	it("logs the service tier the provider served next to the requested one", async () => {
