@@ -18,6 +18,12 @@ describe("VSIX contents", () => {
 		expect(files.filter((file) => file.startsWith("brain/"))).toEqual([]);
 	});
 
+	it("packages the manifest strings VS Code localizes", async () => {
+		const files = await listFiles({ cwd: root, packageManager: PackageManager.None });
+
+		expect(files).toContain("package.nls.json");
+	});
+
 	it("packages the walkthrough media", async () => {
 		const files = await listFiles({ cwd: root, packageManager: PackageManager.None });
 		const pkg = await readManifest();
@@ -67,6 +73,71 @@ interface Manifest {
 
 async function readManifest(): Promise<Manifest> {
 	return JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+}
+
+async function readNls(): Promise<Record<string, string>> {
+	return JSON.parse(await readFile(join(root, "package.nls.json"), "utf8"));
+}
+
+function localize(nls: Record<string, string>, value: string): string {
+	const key = /^%([^%]+)%$/.exec(value)?.[1];
+	return key === undefined ? value : (nls[key] ?? value);
+}
+
+function placeholderKeys(value: unknown): string[] {
+	if (typeof value === "string")
+		return [/^%([^%]+)%$/.exec(value)?.[1]].filter((k) => k !== undefined);
+	if (value && typeof value === "object") return Object.values(value).flatMap(placeholderKeys);
+	return [];
+}
+
+type Fields = Record<string, unknown>;
+
+// The strings a user reads in VS Code; displayName and description stay literal for the Marketplace listing.
+function userFacingStrings(pkg: Fields): [string, unknown][] {
+	const contributes = pkg.contributes as Fields;
+	const list = (key: string) => (contributes[key] as Fields[] | undefined) ?? [];
+	const configuration = (contributes.configuration as Fields | undefined) ?? {};
+	const out: [string, unknown][] = [];
+	const add = (path: string, value: unknown) => {
+		if (value !== undefined) out.push([path, value]);
+	};
+	const each = (path: string, values: unknown) => {
+		for (const [i, value] of ((values as unknown[] | undefined) ?? []).entries())
+			add(`${path}[${i}]`, value);
+	};
+	for (const [i, a] of list("authentication").entries()) add(`authentication[${i}].label`, a.label);
+	for (const [i, p] of list("languageModelChatProviders").entries()) {
+		add(`languageModelChatProviders[${i}].displayName`, p.displayName);
+	}
+	for (const [i, t] of list("languageModelTools").entries()) {
+		add(`languageModelTools[${i}].displayName`, t.displayName);
+		add(`languageModelTools[${i}].userDescription`, t.userDescription);
+	}
+	for (const [i, c] of list("commands").entries()) {
+		add(`commands[${i}].title`, c.title);
+		add(`commands[${i}].category`, c.category);
+	}
+	for (const [i, w] of list("walkthroughs").entries()) {
+		add(`walkthroughs[${i}].title`, w.title);
+		add(`walkthroughs[${i}].description`, w.description);
+		for (const [j, s] of ((w.steps as Fields[] | undefined) ?? []).entries()) {
+			add(`walkthroughs[${i}].steps[${j}].title`, s.title);
+			add(`walkthroughs[${i}].steps[${j}].description`, s.description);
+		}
+	}
+	add("configuration.title", configuration.title);
+	const properties = (configuration.properties as Record<string, Fields> | undefined) ?? {};
+	for (const [id, prop] of Object.entries(properties)) {
+		add(`${id}.description`, prop.description);
+		add(`${id}.markdownDescription`, prop.markdownDescription);
+		each(`${id}.enumDescriptions`, prop.enumDescriptions);
+		each(`${id}.markdownEnumDescriptions`, prop.markdownEnumDescriptions);
+		each(`${id}.items.enumDescriptions`, (prop.items as Fields | undefined)?.enumDescriptions);
+	}
+	const trust = (pkg.capabilities as Record<string, Fields> | undefined)?.untrustedWorkspaces;
+	add("untrustedWorkspaces.description", trust?.description);
+	return out;
 }
 
 describe("manifest", () => {
@@ -122,6 +193,7 @@ describe("manifest", () => {
 
 	it("walks through getting a key, signing in and opening chat", async () => {
 		const pkg = await readManifest();
+		const nls = await readNls();
 		const steps = pkg.contributes.walkthroughs[0]?.steps ?? [];
 		const commands = pkg.contributes.commands.map((c) => c.command);
 
@@ -129,13 +201,44 @@ describe("manifest", () => {
 		expect(steps[1]?.completionEvents).toEqual([`onContext:${SIGNED_IN_CONTEXT_KEY}`]);
 		expect(steps[0]?.completionEvents).toContain(`onContext:${SIGNED_IN_CONTEXT_KEY}`);
 		for (const step of steps) {
-			for (const [, command] of step.description.matchAll(/\(command:([\w.]+)\)/g)) {
+			for (const [, command] of localize(nls, step.description).matchAll(/\(command:([\w.]+)\)/g)) {
 				if (command?.startsWith(`${EXTENSION_ID}.`)) {
 					expect(commands).toContain(command);
 				}
 			}
 		}
-		expect(steps[1]?.description).toContain(`(command:${EXTENSION_ID}.manage)`);
+		expect(localize(nls, steps[1]?.description ?? "")).toContain(
+			`(command:${EXTENSION_ID}.manage)`,
+		);
+	});
+
+	it("takes every string a user reads from package.nls.json", async () => {
+		const pkg = (await readManifest()) as unknown as Fields;
+		const nls = await readNls();
+		const strings = userFacingStrings(pkg);
+		const literal = strings.filter(
+			([, value]) => typeof value !== "string" || !/^%[^%]+%$/.test(value),
+		);
+
+		expect(strings.length).toBeGreaterThan(0);
+		expect(literal).toEqual([]);
+		for (const [path, value] of strings) {
+			expect(nls[placeholderKeys(value)[0] ?? ""], path).toEqual(expect.stringMatching(/\S/));
+		}
+	});
+
+	it("defines every package.nls.json key the manifest uses and no other", async () => {
+		const used = new Set(placeholderKeys(await readManifest()));
+		const defined = Object.keys(await readNls());
+
+		expect(defined.sort()).toEqual([...used].sort());
+	});
+
+	it("keeps the Marketplace name and short description literal", async () => {
+		const pkg = (await readManifest()) as unknown as Fields;
+
+		expect(pkg.displayName).not.toMatch(/%/);
+		expect(pkg.description).not.toMatch(/%/);
 	});
 
 	it("activates only on the contributed chat provider", async () => {
@@ -155,7 +258,7 @@ describe("manifest", () => {
 
 		expect(workspaceReadable.length).toBeGreaterThan(0);
 		expect(trust.supported).toBe("limited");
-		expect(trust.description).toBeTruthy();
+		expect(localize(await readNls(), trust.description ?? "")).toBeTruthy();
 		expect([...(trust.restrictedConfigurations ?? [])].sort()).toEqual(workspaceReadable.sort());
 	});
 

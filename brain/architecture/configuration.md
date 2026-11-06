@@ -1,6 +1,6 @@
 # Configuration
 
-The settings, declared in `package.json` `contributes.configuration` and read by `getConfig()` in `src/config.ts` on every call, so a change applies to the next request without a reload:
+The settings, declared in `package.json` `contributes.configuration` (their descriptions are `%config.<setting>.description%` keys whose English text is in `package.nls.json`, [[activation]]) and read by `getConfig()` in `src/config.ts` on every call, so a change applies to the next request without a reload:
 
 | Setting | Default | Used by |
 | --- | --- | --- |
