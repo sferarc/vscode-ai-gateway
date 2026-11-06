@@ -67,6 +67,18 @@ describe("release workflow", () => {
 		expect(source).not.toContain("outputs.hasChangesets");
 	});
 
+	it("arms squash auto-merge on the version PR from the kebab-case pr-number output", async () => {
+		const source = await readFile(workflow, "utf8");
+		const arm = step(source, "Enable auto-merge on the version PR");
+
+		expect(arm).toContain("if: steps.changesets.outputs.pr-number");
+		expect(arm).toMatch(/GH_TOKEN: \$\{\{ steps\.app\.outputs\.token \}\}/);
+		expect(arm).toMatch(
+			/gh pr merge --squash --auto "\$\{\{ steps\.changesets\.outputs\.pr-number \}\}"/,
+		);
+		expect(source).not.toContain("outputs.pullRequestNumber");
+	});
+
 	it("skips versioning and tagging when the run's commit is no longer the branch head", async () => {
 		const source = await readFile(workflow, "utf8");
 		const check = step(source, "Skip when the branch has moved on");
